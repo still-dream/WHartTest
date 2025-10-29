@@ -140,6 +140,91 @@ const chatHeaderRef = ref<{ refreshPrompts: () => Promise<void> } | null>(null);
 // 终止控制器
 let abortController = new AbortController();
 
+// 定时刷新控制
+let historyRefreshTimer: number | null = null;
+const isAutoRefreshing = ref(false); // 是否正在自动刷新
+
+// 静默加载历史记录(不显示loading状态)
+const loadChatHistorySilently = async () => {
+  const storedSessionId = getSessionIdFromStorage();
+  if (!storedSessionId || !projectStore.currentProjectId) return;
+
+  try {
+    const response = await getChatHistory(storedSessionId, projectStore.currentProjectId);
+
+    if (response.status === 'success') {
+      const currentMessageCount = messages.value.length;
+      const historyMessageCount = response.data.history.filter(h => h.type !== 'system').length;
+      
+      // 只有当历史记录数量增加时才更新(说明有新消息)
+      if (historyMessageCount > currentMessageCount) {
+        console.log(`📥 检测到新消息: ${historyMessageCount - currentMessageCount}条`);
+        
+        // 清空当前消息列表
+        messages.value = [];
+
+        // 重新加载所有消息
+        response.data.history.forEach(historyItem => {
+          if (historyItem.type === 'system') {
+            return;
+          }
+
+          const message: ChatMessage = {
+            content: historyItem.content,
+            isUser: historyItem.type === 'human',
+            time: formatHistoryTime(historyItem.timestamp),
+            messageType: historyItem.type
+          };
+
+          if (historyItem.type === 'tool') {
+            message.isExpanded = false;
+          }
+
+          messages.value.push(message);
+        });
+      }
+    }
+  } catch (error) {
+    console.error('静默刷新历史记录失败:', error);
+    // 静默失败,不显示错误提示
+  }
+};
+
+// 停止自动刷新
+const stopAutoRefresh = () => {
+  if (historyRefreshTimer) {
+    clearInterval(historyRefreshTimer);
+    historyRefreshTimer = null;
+  }
+  isAutoRefreshing.value = false;
+};
+
+// 智能定时刷新历史记录(仅在非流式状态下)
+const startAutoRefresh = () => {
+  // 如果已经在刷新,先停止
+  stopAutoRefresh();
+  
+  historyRefreshTimer = window.setInterval(async () => {
+    // 只在以下条件下刷新:
+    // 1. 有会话ID
+    // 2. 不在流式输出中(没有活跃流或流已完成)
+    // 3. 不在加载状态
+    if (sessionId.value && !isLoading.value) {
+      const stream = activeStreams.value[sessionId.value];
+      const isStreaming = stream && !stream.isComplete;
+      
+      if (!isStreaming) {
+        console.log('🔄 自动刷新历史记录...');
+        isAutoRefreshing.value = true;
+        await loadChatHistorySilently();
+        isAutoRefreshing.value = false;
+      } else {
+        console.log('⏸️ 跳过刷新(流式输出进行中)');
+      }
+    }
+  }, 3000); // 每3秒检查一次
+};
+
 // 在本地存储中保存会话ID
 const saveSessionId = (id: string) => {
   localStorage.setItem('langgraph_session_id', id);
@@ -1178,6 +1263,17 @@ watch(
   { deep: true }
 );
 
+// 监听会话ID变化,控制自动刷新
+watch(() => sessionId.value, (newSessionId) => {
+  if (newSessionId) {
+    // 有会话时启动自动刷新
+    startAutoRefresh();
+  } else {
+    // 无会话时停止自动刷新
+    stopAutoRefresh();
+  }
+});
+
 watch([useKnowledgeBase, selectedKnowledgeBaseId, similarityThreshold, topK], () => {
   saveKnowledgeBaseSettings();
 }, { deep: true });
@@ -1192,6 +1288,11 @@ onMounted(async () => {
 
   // 尝试加载当前会话的历史记录（只加载消息，不更新会话列表）
   await loadChatHistory();
+  
+  // 启动自动刷新(如果有会话)
+  if (sessionId.value) {
+    startAutoRefresh();
+  }
 
   // 加载当前LLM配置
   await loadCurrentLlmConfig();
@@ -1229,6 +1330,8 @@ onActivated(async () => {
 onUnmounted(() => {
   // 组件卸载时，终止任何正在进行的流式请求
   abortController.abort();
+  // 停止自动刷新
+  stopAutoRefresh();
 });
 </script>
 
