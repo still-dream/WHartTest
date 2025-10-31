@@ -137,11 +137,11 @@ docker-compose logs -f mcp
 
 ### 访问服务
 
-- 前端: http://localhost
-- 后端 API: http://localhost:8000/api/
-- Django Admin: http://localhost:8000/admin/
-- MCP Tools: http://localhost:8006
-- MS MCP API: http://localhost:8007
+- 前端: `http://localhost`
+- 后端 API: `http://localhost:8000/api/`
+- Django Admin: `http://localhost:8000/admin/`
+- MCP Tools: `http://localhost:8006`
+- MS MCP API: `http://localhost:8007`
 
 ## 私有镜像认证
 

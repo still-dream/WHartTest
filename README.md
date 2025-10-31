@@ -15,7 +15,7 @@ WHartTest 是一个基于 Django REST Framework 构建的AI驱动测试自动化
 #### 使用预构建镜像（无需本地构建）
 ```bash
 # 1. 克隆仓库
-git clone https://github.com/MG-Duan/WHartTest.git
+git clone https://github.com/MGdaasLab/WHartTest.git
 cd WHartTest
 
 # 2. 配置环境变量
