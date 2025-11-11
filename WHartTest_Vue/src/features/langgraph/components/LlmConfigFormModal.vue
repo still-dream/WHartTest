@@ -34,10 +34,33 @@
         </a-select>
       </a-form-item>
       <a-form-item field="name" label="模型名称" required>
-        <a-input v-model="formData.name" placeholder="请输入模型名称" />
+        <a-auto-complete
+          v-model="formData.name"
+          :data="modelOptions"
+          :loading="loadingModels"
+          placeholder="请输入或选择模型名称"
+          allow-clear
+          @focus="handleModelInputFocus"
+        >
+          <template #suffix>
+            <a-button
+              type="text"
+              size="mini"
+              :loading="loadingModels"
+              @click="fetchAvailableModels"
+            >
+              <icon-refresh v-if="!loadingModels" />
+            </a-button>
+          </template>
+        </a-auto-complete>
+        <template #extra>
+          <div class="text-xs text-gray-500">
+            可直接输入或点击刷新按钮从 API 获取模型列表
+          </div>
+        </template>
       </a-form-item>
       <a-form-item field="api_url" label="API URL" required>
-        <a-input v-model="formData.api_url" placeholder="请输入 API URL" />
+        <a-input v-model="formData.api_url" placeholder="例如: https://api.openai.com/v1" />
       </a-form-item>
       <a-form-item field="api_key" label="API Key" :required="!isEditing">
         <a-input-password
@@ -88,10 +111,14 @@ import {
   Switch as ASwitch,
   Select as ASelect,
   Option as AOption,
+  AutoComplete as AAutoComplete,
+  Button as AButton,
   Message,
   type FormInstance,
   type FieldRule,
 } from '@arco-design/web-vue';
+import { IconRefresh } from '@arco-design/web-vue/es/icon';
+import axios from 'axios';
 import type { LlmConfig, CreateLlmConfigRequest, PartialUpdateLlmConfigRequest } from '@/features/langgraph/types/llmConfig';
 import { getProviders, type ProviderOption } from '@/features/langgraph/services/llmConfigService';
 
@@ -115,6 +142,8 @@ const emit = defineEmits<{
 const formRef = ref<FormInstance | null>(null);
 const providerOptions = ref<ProviderOption[]>([]);
 const loadingProviders = ref(false);
+const modelOptions = ref<string[]>([]);
+const loadingModels = ref(false);
 const defaultFormData: CreateLlmConfigRequest = {
   config_name: '',
   provider: '',
@@ -239,12 +268,81 @@ const loadProviders = async () => {
   try {
     const response = await getProviders();
     if (response.status === 'success' && response.data) {
-      providerOptions.value = response.data.choices;
+      // 对供应商列表排序,将 OpenAI Compatible 放在第一位
+      const providers = response.data.choices;
+      const compatibleIndex = providers.findIndex(p => p.value === 'openai_compatible');
+      
+      if (compatibleIndex > -1) {
+        const [compatible] = providers.splice(compatibleIndex, 1);
+        providerOptions.value = [compatible, ...providers];
+      } else {
+        providerOptions.value = providers;
+      }
     }
   } catch (error) {
     console.error('Failed to load providers:', error);
   } finally {
     loadingProviders.value = false;
+  }
+};
+
+// 从 API 获取可用模型列表
+const fetchAvailableModels = async () => {
+  if (!formData.value.api_url) {
+    Message.warning('请先填写 API URL');
+    return;
+  }
+
+  if (!formData.value.api_key) {
+    Message.warning('请先填写 API Key');
+    return;
+  }
+
+  loadingModels.value = true;
+  try {
+    // 构造 models API 端点
+    const apiUrl = formData.value.api_url.replace(/\/$/, ''); // 移除末尾斜杠
+    const modelsEndpoint = `${apiUrl}/models`;
+
+    const response = await axios.get(modelsEndpoint, {
+      headers: {
+        'Authorization': `Bearer ${formData.value.api_key}`,
+        'Content-Type': 'application/json',
+      },
+      timeout: 10000, // 10秒超时
+    });
+
+    // OpenAI API 格式: { data: [{ id: 'model-name' }] }
+    if (response.data && response.data.data) {
+      const models = response.data.data.map((model: any) => model.id);
+      modelOptions.value = models;
+      if (models.length > 0) {
+        Message.success(`成功获取 ${models.length} 个模型`);
+      } else {
+        Message.warning('未找到可用模型');
+      }
+    } else {
+      Message.warning('API 返回格式不符合预期');
+      modelOptions.value = [];
+    }
+  } catch (error: any) {
+    console.error('获取模型列表失败:', error);
+    const errorMsg = error.response?.data?.error?.message 
+      || error.response?.statusText 
+      || error.message 
+      || '获取模型列表失败';
+    Message.error(`获取模型列表失败: ${errorMsg}`);
+    modelOptions.value = [];
+  } finally {
+    loadingModels.value = false;
+  }
+};
+
+// 处理模型输入框聚焦
+const handleModelInputFocus = () => {
+  // 如果有 API URL 和 API Key,且模型列表为空,自动获取
+  if (formData.value.api_url && formData.value.api_key && modelOptions.value.length === 0) {
+    fetchAvailableModels();
   }
 };
 
