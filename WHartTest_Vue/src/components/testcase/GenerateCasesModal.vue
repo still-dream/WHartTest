@@ -69,10 +69,11 @@
       <a-form-item
         label="关联知识库"
         field="knowledgeBaseId"
+        :rules="formState.useKnowledgeBase ? [{ required: true, message: '启用知识库后必须选择一个知识库' }] : []"
       >
         <a-select
           v-model="formState.knowledgeBaseId"
-          placeholder="可选，用于提供额外业务知识"
+          placeholder="请选择知识库"
           :loading="isKbLoading"
           :disabled="!formState.useKnowledgeBase"
           allow-clear
@@ -155,6 +156,12 @@ const handleCancel = () => {
 const handleOk = () => {
   if (!formState.requirementDocumentId || !formState.requirementModuleId || !formState.testCaseModuleId || !formState.promptId) {
     Message.error('请填写所有必填项');
+    return;
+  }
+  
+  // 如果启用了知识库，必须选择知识库ID
+  if (formState.useKnowledgeBase && !formState.knowledgeBaseId) {
+    Message.error('启用知识库后必须选择一个知识库');
     return;
   }
   

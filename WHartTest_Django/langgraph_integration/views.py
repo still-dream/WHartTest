@@ -223,18 +223,58 @@ def get_effective_system_prompt(user, prompt_id=None):
         return None, 'none'
 
 
-async def get_effective_system_prompt_async(user, prompt_id=None):
+async def _format_project_credentials(project):
+    """
+    格式化项目凭据信息为文本
+    
+    Args:
+        project: 项目对象
+    
+    Returns:
+        str: 格式化后的凭据信息文本
+    """
+    try:
+        from projects.models import ProjectCredential
+        
+        # 获取项目的所有凭据
+        credentials = await sync_to_async(list)(
+            ProjectCredential.objects.filter(project=project).all()
+        )
+        
+        if not credentials:
+            return "当前项目未配置登录信息。\n"
+        
+        # 格式化凭据信息
+        credentials_text = "**当前项目已配置以下登录信息**：\n"
+        for cred in credentials:
+            role = cred.user_role or "未指定角色"
+            url = cred.system_url or "未指定URL"
+            username = cred.username or "未指定用户名"
+            password = cred.password or "未指定密码"
+            credentials_text += f"- **{role}**：系统地址: {url} / 用户名: {username} / 密码: {password}\n"
+        
+        credentials_text += "\n"
+        return credentials_text
+    
+    except Exception as e:
+        logger.error(f"Format project credentials error: {e}")
+        return ""
+
+
+async def get_effective_system_prompt_async(user, prompt_id=None, project=None):
     """
     获取有效的系统提示词（异步版本）
     优先级：用户指定的提示词 > 用户默认提示词 > 全局LLM配置的system_prompt
+    如果提示词中包含{credentials_info}占位符，且提供了project参数，将自动注入项目凭据信息
 
     Args:
         user: 当前用户
         prompt_id: 指定的提示词ID（可选）
+        project: 项目对象（可选），用于注入凭据信息
 
     Returns:
         tuple: (prompt_content, prompt_source)
-        prompt_content: 提示词内容
+        prompt_content: 提示词内容（已注入凭据信息）
         prompt_source: 提示词来源 ('user_specified', 'user_default', 'global', 'none')
     """
     try:
@@ -246,7 +286,12 @@ async def get_effective_system_prompt_async(user, prompt_id=None):
                     user=user,
                     is_active=True
                 )
-                return user_prompt.content, 'user_specified'
+                prompt_content = user_prompt.content
+                # 注入凭据信息
+                if project and '{credentials_info}' in prompt_content:
+                    credentials_text = await _format_project_credentials(project)
+                    prompt_content = prompt_content.replace('{credentials_info}', credentials_text)
+                return prompt_content, 'user_specified'
             except UserPrompt.DoesNotExist:
                 logger.warning(f"Specified prompt {prompt_id} not found for user {user.id}")
 
@@ -258,7 +303,12 @@ async def get_effective_system_prompt_async(user, prompt_id=None):
                 is_active=True
             )
             if default_prompt:
-                return default_prompt.content, 'user_default'
+                prompt_content = default_prompt.content
+                # 注入凭据信息
+                if project and '{credentials_info}' in prompt_content:
+                    credentials_text = await _format_project_credentials(project)
+                    prompt_content = prompt_content.replace('{credentials_info}', credentials_text)
+                return prompt_content, 'user_default'
         except UserPrompt.DoesNotExist:
             pass
 
@@ -266,7 +316,12 @@ async def get_effective_system_prompt_async(user, prompt_id=None):
         try:
             active_config = await sync_to_async(LLMConfig.objects.get)(is_active=True)
             if active_config.system_prompt and active_config.system_prompt.strip():
-                return active_config.system_prompt.strip(), 'global'
+                prompt_content = active_config.system_prompt.strip()
+                # 注入凭据信息
+                if project and '{credentials_info}' in prompt_content:
+                    credentials_text = await _format_project_credentials(project)
+                    prompt_content = prompt_content.replace('{credentials_info}', credentials_text)
+                return prompt_content, 'global'
         except LLMConfig.DoesNotExist:
             logger.warning("No active LLM configuration found")
 
@@ -581,8 +636,8 @@ class ChatAPIView(APIView):
                 # 构建消息列表，检查是否需要添加系统提示词
                 messages_list = []
 
-                # 获取有效的系统提示词（用户提示词优先）
-                effective_prompt, prompt_source = await get_effective_system_prompt_async(request.user, prompt_id)
+                # 获取有效的系统提示词（用户提示词优先，并注入项目凭据信息）
+                effective_prompt, prompt_source = await get_effective_system_prompt_async(request.user, prompt_id, project)
 
                 # 检查当前会话是否已经有系统提示词
                 should_add_system_prompt = False
@@ -1537,8 +1592,8 @@ class ChatStreamAPIView(View):
                 # 构建消息列表，检查是否需要添加系统提示词
                 messages_list = []
 
-                # 获取有效的系统提示词（用户提示词优先）
-                effective_prompt, prompt_source = await get_effective_system_prompt_async(request.user, prompt_id)
+                # 获取有效的系统提示词（用户提示词优先，并注入项目凭据信息）
+                effective_prompt, prompt_source = await get_effective_system_prompt_async(request.user, prompt_id, project)
                 logger.info(f"ChatStreamAPIView: Using {prompt_source} prompt: {repr(effective_prompt[:100] if effective_prompt else None)}")
 
                 # 检查当前会话是否已经有系统提示词

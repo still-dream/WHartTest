@@ -706,10 +706,26 @@ const formatHistoryTime = (timestamp: string) => {
 
 // 切换工具消息或思考过程的展开/收起状态
 const toggleExpand = (message: ChatMessage) => {
-  if (message.isThinkingProcess) {
-    message.isThinkingExpanded = !message.isThinkingExpanded;
-  } else {
-    message.isExpanded = !message.isExpanded;
+  // 找到messages数组中对应的消息索引
+  const index = messages.value.findIndex(m => 
+    m.content === message.content && 
+    m.time === message.time && 
+    m.messageType === message.messageType
+  );
+  
+  if (index !== -1) {
+    // 使用响应式方式更新消息
+    if (message.isThinkingProcess) {
+      messages.value[index] = {
+        ...messages.value[index],
+        isThinkingExpanded: !messages.value[index].isThinkingExpanded
+      };
+    } else {
+      messages.value[index] = {
+        ...messages.value[index],
+        isExpanded: !messages.value[index].isExpanded
+      };
+    }
   }
 };
 
