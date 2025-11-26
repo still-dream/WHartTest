@@ -102,11 +102,9 @@
       <template #level="{ record }">
         <a-tag :color="getLevelColor(record.level)">{{ record.level }}</a-tag>
       </template>
-      <template #notes="{ record }">
-        <a-tooltip v-if="record.notes" :content="record.notes">
-          <div class="notes-cell">{{ record.notes }}</div>
-        </a-tooltip>
-        <span v-else>-</span>
+      <template #module="{ record }">
+        <span v-if="record.module_detail">{{ record.module_detail }}</span>
+        <span v-else class="text-gray">未分配</span>
       </template>
       <template #operations="{ record }">
         <a-space :size="10">
@@ -243,7 +241,7 @@ const columns = [
   { title: '用例名称', dataIndex: 'name', slotName: 'name', width: 240, ellipsis: true, tooltip: false },
   { title: '前置条件', dataIndex: 'precondition', width: 150, ellipsis: true, tooltip: true },
   { title: '优先级', dataIndex: 'level', slotName: 'level', width: 75 },
-  { title: '备注', dataIndex: 'notes', slotName: 'notes', width: 150, ellipsis: true, tooltip: false }, // tooltip is handled by custom slot
+  { title: '所属模块', dataIndex: 'module_detail', slotName: 'module', width: 120, ellipsis: true, tooltip: true },
   {
     title: '创建者',
     dataIndex: 'creator_detail',
@@ -525,10 +523,9 @@ defineExpose({
   min-height: 0; /* Allow shrinking for nested flex container */
   max-height: calc(100% - 90px); /* 增加留给分页器的空间 */
 }
-.notes-cell {
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
+
+.text-gray {
+  color: #86909c;
 }
 
 :deep(.test-case-table .arco-table-td) {

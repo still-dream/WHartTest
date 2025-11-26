@@ -144,7 +144,7 @@ class TestCaseModule(models.Model):
     def __str__(self):
         if self.parent:
             return f"{self.parent} > {self.name}"
-        return f"{self.project.name} - {self.name}"
+        return self.name
 
     def clean(self):
         """验证模块级别不超过5级"""
