@@ -87,7 +87,7 @@ import {
   clearOrchestratorStreamState,
   latestOrchestratorContextUsage
 } from '@/features/langgraph/services/orchestratorService';
-import type { ChatRequest } from '@/features/langgraph/types/chat';
+import type { ChatRequest, ChatHistoryMessage } from '@/features/langgraph/types/chat';
 import type { LlmConfig } from '@/features/langgraph/types/llmConfig';
 import { useProjectStore } from '@/store/projectStore';
 import { useLlmConfigRefresh } from '@/composables/useLlmConfigRefresh';
@@ -111,7 +111,7 @@ interface ChatMessage {
   isUser: boolean;
   time: string;
   isLoading?: boolean;
-  messageType?: 'human' | 'ai' | 'tool' | 'system';
+  messageType?: 'human' | 'ai' | 'tool' | 'system' | 'agent_step' | 'step_separator';  // ⭐ 新增 step_separator 类型
   toolName?: string;
   isExpanded?: boolean;
   isStreaming?: boolean;
@@ -119,6 +119,15 @@ interface ChatMessage {
   imageDataUrl?: string;
   isThinkingProcess?: boolean;
   isThinkingExpanded?: boolean;
+  // Agent Step 专用字段
+  stepNumber?: number;
+  maxSteps?: number;
+  stepStatus?: 'start' | 'complete' | 'error';
+  // ⭐ Agent Loop 历史记录专用字段
+  agent?: string;  // 'agent_loop'
+  agentType?: string;  // 'intermediate' | 'final'
+  step?: number;  // 步骤号
+  isStepSeparator?: boolean;  // 是否是步骤分隔消息
 }
 
 interface ChatSession {
@@ -268,41 +277,9 @@ const loadChatHistorySilently = async () => {
           }
         });
         
-        // 清空当前消息列表
-        messages.value = [];
-
-        // 重新加载所有消息
-        const tempMessages: ChatMessage[] = [];
-        response.data.history.forEach(historyItem => {
-          if (historyItem.type === 'system') {
-            return;
-          }
-
-          const message: ChatMessage = {
-            content: historyItem.content,
-            isUser: historyItem.type === 'human',
-            time: formatHistoryTime(historyItem.timestamp),
-            messageType: historyItem.type
-          };
-
-          if (historyItem.type === 'tool') {
-            message.isExpanded = false;
-          }
-
-          // 🎨 如果是思考过程消息，设置折叠状态
-          if (historyItem.is_thinking_process) {
-            message.isThinkingProcess = true;
-            message.isThinkingExpanded = false;
-          }
-
-          // 如果消息包含图片，添加图片数据
-          if (historyItem.image) {
-            message.imageDataUrl = historyItem.image;
-          }
-
-          tempMessages.push(message);
-        });
-
+        // ✅ 使用纯函数处理历史记录,自动插入步骤分隔符
+        const tempMessages = enrichMessagesWithSeparators(response.data.history, formatHistoryTime);
+        
         // 🎨 合并连续的思考过程消息
         messages.value = mergeThinkingProcessMessages(tempMessages);
         
@@ -522,6 +499,80 @@ const loadSessionsFromServer = async () => {
   }
 };
 
+// ⭐ 纯函数: 为历史记录插入 Agent Loop 步骤分隔符
+// 用于统一处理步骤分隔符逻辑,避免代码重复
+const enrichMessagesWithSeparators = (rawHistory: ChatHistoryMessage[], formatHistoryTime: (timestamp: string) => string): ChatMessage[] => {
+  const result: ChatMessage[] = [];
+  let lastAgentLoopStep: number | null = null;  // ✅ 追踪上一条agent_loop消息的步骤号
+
+  rawHistory.forEach(historyItem => {
+    // 跳过系统消息
+    if (historyItem.type === 'system') {
+      return;
+    }
+
+    // ✅ 检测 Agent Loop 步骤变化: 只要有step字段就插入分隔符
+    // 修复逻辑: 与上一条agent_loop消息的步骤比较,而非全局追踪
+    // 这样可以支持多轮对话中步骤编号重复的情况(例如两次对话都从Step 1开始)
+    if (historyItem.agent === 'agent_loop' && historyItem.step !== undefined) {
+      const currentStep = historyItem.step;
+      
+      // 插入分隔符: 仅当步骤号与上一条不同,或者这是第一条agent_loop消息
+      if (lastAgentLoopStep === null || currentStep !== lastAgentLoopStep) {
+        result.push({
+          content: `步骤 ${currentStep}/${historyItem.max_steps || 500}`,
+          isUser: false,
+          time: formatHistoryTime(historyItem.timestamp),
+          messageType: 'step_separator'
+        });
+        
+        lastAgentLoopStep = currentStep;
+      }
+    }
+    
+    // ✅ 如果遇到非agent_loop消息,重置步骤追踪
+    // 这样下一次agent_loop调用会从新的步骤序列开始
+    if (historyItem.agent !== 'agent_loop') {
+      lastAgentLoopStep = null;
+    }
+
+    // 转换历史消息为 ChatMessage 格式
+    const message: ChatMessage = {
+      content: historyItem.content,
+      isUser: historyItem.type === 'human',
+      time: formatHistoryTime(historyItem.timestamp),
+      messageType: historyItem.type
+    };
+
+    // 工具消息默认折叠
+    if (historyItem.type === 'tool') {
+      message.isExpanded = false;
+    }
+
+    // 思考过程消息折叠状态
+    if (historyItem.is_thinking_process) {
+      message.isThinkingProcess = true;
+      message.isThinkingExpanded = false;
+    }
+
+    // 附加 Agent Loop 元数据
+    if (historyItem.agent === 'agent_loop') {
+      message.agent = historyItem.agent;
+      message.agentType = historyItem.agent_type;
+      message.step = historyItem.step;
+    }
+
+    // 图片数据
+    if (historyItem.image) {
+      message.imageDataUrl = historyItem.image;
+    }
+
+    result.push(message);
+  });
+
+  return result;
+};
+
 // 加载聊天历史记录
 const loadChatHistory = async () => {
   const storedSessionId = getSessionIdFromStorage();
@@ -560,45 +611,14 @@ const loadChatHistory = async () => {
         console.log(`🔄 恢复会话提示词: ${response.data.prompt_name} (ID: ${response.data.prompt_id})`);
       }
 
-      // 清空当前消息列表
-      messages.value = [];
-
-      // 将历史记录转换为消息格式
-      const tempMessages: ChatMessage[] = [];
-      response.data.history.forEach(historyItem => {
-        // 🆕 跳过系统消息，不在消息列表中显示
-        if (historyItem.type === 'system') {
-          return;
-        }
-
-        const message: ChatMessage = {
-          content: historyItem.content,
-          isUser: historyItem.type === 'human',
-          time: formatHistoryTime(historyItem.timestamp),
-          messageType: historyItem.type
-        };
-
-        // 如果是工具消息，设置默认折叠状态
-        if (historyItem.type === 'tool') {
-          message.isExpanded = false;
-        }
-
-        // 🎨 如果是思考过程消息，设置折叠状态
-        if (historyItem.is_thinking_process) {
-          message.isThinkingProcess = true;
-          message.isThinkingExpanded = false;
-        }
-
-        // 如果消息包含图片，添加图片数据
-        if (historyItem.image) {
-          message.imageDataUrl = historyItem.image;
-        }
-
-        tempMessages.push(message);
-      });
-
+      // ✅ 使用纯函数处理历史记录,自动插入步骤分隔符
+      const tempMessages = enrichMessagesWithSeparators(response.data.history, formatHistoryTime);
+      
       // 🎨 合并连续的思考过程消息
       messages.value = mergeThinkingProcessMessages(tempMessages);
+      
+      console.log('🔍 [Debug] messages.value最终数量:', messages.value.length);
+      console.log('🔍 [Debug] 最终step_separator数量:', messages.value.filter(m => m.messageType === 'step_separator').length);
 
       // 只有在会话列表中不存在该会话时才添加（避免重复）
       const existingSession = chatSessions.value.find(s => s.id === response.data.session_id);
@@ -633,8 +653,77 @@ const getCurrentTime = () => {
   return `${now.getHours().toString().padStart(2, '0')}:${now.getMinutes().toString().padStart(2, '0')}`;
 };
 
-// 获取Agent的emoji标识
+// 🔧 固化流式内容到messages.value（发送新消息前调用，避免内容丢失）
+const solidifyStreamContent = () => {
+  if (!sessionId.value) return;
 
+  // 固化普通LLM聊天的流式内容
+  const stream = activeStreams.value[sessionId.value];
+  if (stream && stream.isComplete && stream.content && stream.content.trim()) {
+    // 检查是否已经固化过（避免重复）
+    const lastMsg = messages.value[messages.value.length - 1];
+    const alreadySolidified = lastMsg && !lastMsg.isUser && lastMsg.content === stream.content;
+    
+    if (!alreadySolidified) {
+      // 先添加工具消息和中间消息
+      if (stream.messages && stream.messages.length > 0) {
+        stream.messages.forEach(msg => {
+          messages.value.push({
+            content: msg.content,
+            isUser: false,
+            time: msg.time,
+            messageType: msg.type as ChatMessage['messageType'],
+            isExpanded: msg.isExpanded,
+            isThinkingProcess: msg.isThinkingProcess,
+            isThinkingExpanded: msg.isThinkingExpanded
+          });
+        });
+      }
+      // 添加AI回复内容
+      messages.value.push({
+        content: stream.content,
+        isUser: false,
+        time: getCurrentTime(),
+        messageType: 'ai'
+      });
+      console.log('✅ 已固化LLM流式内容到messages.value');
+    }
+    clearStreamState(sessionId.value);
+  }
+
+  // 固化大脑模式的流式内容
+  const orchestratorStream = activeOrchestratorStreams.value[sessionId.value];
+  if (orchestratorStream && orchestratorStream.isComplete && orchestratorStream.content && orchestratorStream.content.trim()) {
+    const lastMsg = messages.value[messages.value.length - 1];
+    const alreadySolidified = lastMsg && !lastMsg.isUser && lastMsg.content === orchestratorStream.content;
+    
+    if (!alreadySolidified) {
+      // 先添加工具消息和中间消息
+      if (orchestratorStream.messages && orchestratorStream.messages.length > 0) {
+        orchestratorStream.messages.forEach(msg => {
+          messages.value.push({
+            content: msg.content,
+            isUser: false,
+            time: msg.time,
+            messageType: msg.type as ChatMessage['messageType'],
+            isExpanded: msg.isExpanded,
+            isThinkingProcess: msg.isThinkingProcess,
+            isThinkingExpanded: msg.isThinkingExpanded
+          });
+        });
+      }
+      // 添加AI回复内容
+      messages.value.push({
+        content: orchestratorStream.content,
+        isUser: false,
+        time: getCurrentTime(),
+        messageType: 'ai'
+      });
+      console.log('✅ 已固化大脑模式流式内容到messages.value');
+    }
+    clearOrchestratorStreamState(sessionId.value);
+  }
+};
 
 // 🎨 合并连续的思考过程消息（保持对象引用，避免丢失状态）
 const mergeThinkingProcessMessages = (messages: ChatMessage[]): ChatMessage[] => {
@@ -888,39 +977,9 @@ const switchSession = async (id: string) => {
         console.log(`🔄 切换会话时恢复提示词: ${response.data.prompt_name} (ID: ${response.data.prompt_id})`);
       }
 
-      const tempMessages: ChatMessage[] = [];
-      response.data.history.forEach(historyItem => {
-        // 🆕 跳过系统消息，不在消息列表中显示
-        if (historyItem.type === 'system') {
-          return;
-        }
-
-        const message: ChatMessage = {
-          content: historyItem.content,
-          isUser: historyItem.type === 'human',
-          time: formatHistoryTime(historyItem.timestamp),
-          messageType: historyItem.type
-        };
-
-        // 如果是工具消息，设置默认折叠状态
-        if (historyItem.type === 'tool') {
-          message.isExpanded = false;
-        }
-
-        // 🎨 如果是思考过程消息，设置折叠状态
-        if (historyItem.is_thinking_process) {
-          message.isThinkingProcess = true;
-          message.isThinkingExpanded = false;
-        }
-
-        // 如果消息包含图片，添加图片数据
-        if (historyItem.image) {
-          message.imageDataUrl = historyItem.image;
-        }
-
-        tempMessages.push(message);
-      });
-
+      // ✅ 使用纯函数处理历史记录,自动插入步骤分隔符
+      const tempMessages = enrichMessagesWithSeparators(response.data.history, formatHistoryTime);
+      
       // 🎨 合并连续的思考过程消息
       messages.value = mergeThinkingProcessMessages(tempMessages);
 
@@ -1102,6 +1161,9 @@ const handleSendMessage = async (data: { message: string; image?: string; imageD
     return;
   }
 
+  // 🔧 发送新消息前，先固化上一轮的流式内容（避免内容丢失）
+  solidifyStreamContent();
+
   // ⭐大脑模式使用orchestrator流式接口
   if (isBrainMode.value) {
     await handleBrainModeMessage(message);
@@ -1164,51 +1226,79 @@ const displayedMessages = computed(() => {
   // 从共享状态中获取当前会话的流
   const stream = sessionId.value ? activeStreams.value[sessionId.value] : null;
 
-  // 如果当前会话有正在进行的流，则添加流式消息
-  if (stream && !stream.isComplete) {
-    // 首先添加工具消息(如果有)
-    if (stream.messages && stream.messages.length > 0) {
-      stream.messages.forEach(msg => {
-        combined.push({
-          content: msg.content,
-          isUser: false,
-          time: msg.time,
-          messageType: msg.type,
-          isExpanded: msg.isExpanded
+  // 如果当前会话有流（无论是否完成）
+  if (stream) {
+    // 检查最后一条消息是否已经包含了流式内容
+    // 如果流已完成且内容已固化到 messages.value，则不需要再添加
+    const lastMsg = combined[combined.length - 1];
+    const contentAlreadyInMessages = lastMsg && 
+      !lastMsg.isUser && 
+      lastMsg.content === stream.content && 
+      !lastMsg.isLoading;
+
+    // 只有在内容尚未固化时才添加流式内容
+    if (!contentAlreadyInMessages) {
+      // 首先添加工具消息和 Agent Step 消息(如果有)
+      if (stream.messages && stream.messages.length > 0) {
+        stream.messages.forEach(msg => {
+          const chatMsg: ChatMessage = {
+            content: msg.content,
+            isUser: false,
+            time: msg.time,
+            messageType: msg.type as ChatMessage['messageType'],
+            isExpanded: msg.isExpanded,
+            isThinkingProcess: msg.isThinkingProcess,
+            isThinkingExpanded: msg.isThinkingExpanded
+          };
+
+          // Agent Step 专用字段
+          if (typeof msg.stepNumber === 'number') {
+            chatMsg.stepNumber = msg.stepNumber;
+          }
+          if (typeof msg.maxSteps === 'number') {
+            chatMsg.maxSteps = msg.maxSteps;
+          }
+          if (msg.stepStatus) {
+            chatMsg.stepStatus = msg.stepStatus;
+          }
+
+          combined.push(chatMsg);
         });
-      });
-    }
-    
-    // 然后处理AI消息
-    if (stream.error) {
-      // 如果有错误，显示错误消息
-      combined.push({
-        content: stream.error,
-        isUser: false,
-        time: getCurrentTime(),
-        messageType: 'ai',
-        isStreaming: false,
-      });
-    }
-    else if (!stream.content || stream.content.trim() === '') {
-      // 如果流式内容为空或只有空白字符，显示加载中状态
-      combined.push({
-        content: '',
-        isUser: false,
-        time: getCurrentTime(),
-        messageType: 'ai',
-        isLoading: true,
-      });
-    }
-    else {
-      // 有实际内容时，显示流式内容
-      combined.push({
-        content: stream.content,
-        isUser: false,
-        time: getCurrentTime(),
-        messageType: 'ai',
-        isStreaming: true,
-      });
+      }
+      
+      // 然后处理AI消息
+      if (stream.error) {
+        // 如果有错误，显示错误消息
+        combined.push({
+          content: stream.error,
+          isUser: false,
+          time: getCurrentTime(),
+          messageType: 'ai',
+          isStreaming: false,
+        });
+      }
+      else if (!stream.content || stream.content.trim() === '') {
+        // 如果流式内容为空或只有空白字符，且流还未完成，显示加载中状态
+        if (!stream.isComplete) {
+          combined.push({
+            content: '',
+            isUser: false,
+            time: getCurrentTime(),
+            messageType: 'ai',
+            isLoading: true,
+          });
+        }
+      }
+      else {
+        // 有实际内容时，显示流式内容
+        combined.push({
+          content: stream.content,
+          isUser: false,
+          time: getCurrentTime(),
+          messageType: 'ai',
+          isStreaming: !stream.isComplete,
+        });
+      }
     }
   }
   return combined;
@@ -1542,57 +1632,22 @@ watch(
     if (stream && stream.isComplete) {
       console.log(`会话 ${sessionId.value} 的流已完成。`);
       
-      // 🔧 修复：流完成后重新加载完整的对话历史，包括工具消息
-      if (sessionId.value && projectStore.currentProjectId) {
-        try {
-          const response = await getChatHistory(sessionId.value, projectStore.currentProjectId);
-          if (response.status === 'success') {
-            // 清空当前消息列表
-            messages.value = [];
-            
-            // 重新加载所有消息（包括工具消息）
-            response.data.history.forEach(historyItem => {
-              // 跳过系统消息
-              if (historyItem.type === 'system') {
-                return;
-              }
-              
-              const message: ChatMessage = {
-                content: historyItem.content,
-                isUser: historyItem.type === 'human',
-                time: formatHistoryTime(historyItem.timestamp),
-                messageType: historyItem.type
-              };
-              
-              // 如果是工具消息，设置默认折叠状态
-              if (historyItem.type === 'tool') {
-                message.isExpanded = false;
-              }
-              
-              // 如果消息包含图片，添加图片数据
-              if (historyItem.image) {
-                message.imageDataUrl = historyItem.image;
-              }
-              
-              messages.value.push(message);
-            });
-            
-            // 更新会话信息（只在新会话时添加到列表）
-            const existingSession = chatSessions.value.find(s => s.id === sessionId.value);
-            if (!existingSession) {
-              const firstHumanMessage = response.data.history.find(msg => msg.type === 'human')?.content;
-              if (firstHumanMessage) {
-                updateSessionInList(sessionId.value, firstHumanMessage, true);
-              }
-            }
+      const currentSessionId = sessionId.value;
+      
+      // 🔧 流完成后立即固化内容到messages.value，避免清理后内容丢失
+      solidifyStreamContent();
+      
+      // 更新会话列表
+      if (currentSessionId) {
+        const existingSession = chatSessions.value.find(s => s.id === currentSessionId);
+        if (!existingSession) {
+          // 获取用户第一条消息作为标题
+          const firstUserMsg = messages.value.find(m => m.role === 'user' || m.isUser);
+          if (firstUserMsg) {
+            updateSessionInList(currentSessionId, firstUserMsg.content, true);
           }
-        } catch (error) {
-          console.error('重新加载对话历史失败:', error);
         }
       }
-      
-      // 清理已完成的流状态，避免不必要的内存占用
-      clearStreamState(sessionId.value!);
 
       // 如果是通过本页面发送的消息，则需要在这里设置 isLoading = false
       if (isLoading.value) {

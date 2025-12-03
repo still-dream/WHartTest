@@ -374,7 +374,7 @@ class ChatAPIView(APIView):
         # 知识库相关参数
         knowledge_base_id = request.data.get('knowledge_base_id')
         use_knowledge_base = request.data.get('use_knowledge_base', True)  # 默认启用知识库
-        similarity_threshold = request.data.get('similarity_threshold', 0.7)
+        similarity_threshold = request.data.get('similarity_threshold', 0.3)
         top_k = request.data.get('top_k', 5)
 
         # 提示词相关参数
@@ -956,17 +956,42 @@ class ChatHistoryAPIView(APIView):
                                         logger.debug(f"ChatHistoryAPIView: Skipping empty AI message at index {i}")
                                         continue
                                     
-                                    # 提取additional_kwargs中的agent信息
+                                    # ⭐ 提取 additional_kwargs 中的 metadata（包含 Agent Loop 元数据）
                                     agent_info = None
                                     agent_type = None
+                                    step = None
+                                    max_steps = None
+                                    sse_event_type = None
+                                    
                                     if hasattr(msg, 'additional_kwargs') and msg.additional_kwargs:
+                                        # 兼容旧格式（直接存在 additional_kwargs）
                                         agent_info = msg.additional_kwargs.get('agent')
                                         agent_type = msg.additional_kwargs.get('agent_type')
-                                        logger.debug(f"ChatHistoryAPIView: AI message has agent info: {agent_info}, type: {agent_type}")
+                                        
+                                        # ⭐ 从 metadata 子字段提取（新格式）
+                                        metadata = msg.additional_kwargs.get('metadata', {})
+                                        if metadata:
+                                            agent_info = agent_info or metadata.get('agent')
+                                            agent_type = agent_type or metadata.get('agent_type')
+                                            step = metadata.get('step')
+                                            max_steps = metadata.get('max_steps')
+                                            sse_event_type = metadata.get('sse_event_type')
+                                        
+                                        logger.debug(f"ChatHistoryAPIView: AI message metadata - agent: {agent_info}, type: {agent_type}, step: {step}, sse_type: {sse_event_type}")
 
                                 elif isinstance(msg, ToolMessage):
                                     msg_type = "tool"
                                     content = msg.content if hasattr(msg, 'content') else str(msg)
+                                    
+                                    # ⭐ 提取工具消息的元数据
+                                    step = None
+                                    sse_event_type = None
+                                    if hasattr(msg, 'additional_kwargs') and msg.additional_kwargs:
+                                        metadata = msg.additional_kwargs.get('metadata', {})
+                                        if metadata:
+                                            step = metadata.get('step')
+                                            sse_event_type = metadata.get('sse_event_type')
+                                        logger.debug(f"ChatHistoryAPIView: Tool message metadata - step: {step}, sse_type: {sse_event_type}")
                                 else:
                                     # 处理其他类型的消息，可能是工具调用结果
                                     content = msg.content if hasattr(msg, 'content') else str(msg)
@@ -987,15 +1012,33 @@ class ChatHistoryAPIView(APIView):
                                     # 如果消息包含图片，添加图片数据
                                     if msg_type == "human" and 'image_data' in locals() and image_data:
                                         message_data["image"] = image_data
-                                    # 如果AI消息包含agent信息，添加到返回数据中
-                                    if msg_type == "ai" and 'agent_info' in locals() and agent_info:
-                                        message_data["agent"] = agent_info
+                                    
+                                    # ⭐ 如果 AI 消息包含 agent 信息（Agent Loop），添加完整元数据
+                                    if msg_type == "ai":
+                                        if 'agent_info' in locals() and agent_info:
+                                            message_data["agent"] = agent_info
                                         if 'agent_type' in locals() and agent_type:
                                             message_data["agent_type"] = agent_type
-                                        # 🎨 检查是否是思考过程消息
+                                        if 'step' in locals() and step is not None:
+                                            message_data["step"] = step  # ⭐ 步骤号
+                                        if 'max_steps' in locals() and max_steps is not None:
+                                            message_data["max_steps"] = max_steps
+                                        if 'sse_event_type' in locals() and sse_event_type:
+                                            message_data["sse_event_type"] = sse_event_type  # ⭐ SSE 事件类型
+                                        
+                                        # 检查是否是思考过程消息
                                         if hasattr(msg, 'additional_kwargs') and msg.additional_kwargs:
-                                            if msg.additional_kwargs.get('is_thinking_process'):
+                                            metadata = msg.additional_kwargs.get('metadata', {})
+                                            if metadata.get('is_thinking_process'):
                                                 message_data["is_thinking_process"] = True
+                                    
+                                    # ⭐ 如果是工具消息，添加步骤号和事件类型
+                                    elif msg_type == "tool":
+                                        if 'step' in locals() and step is not None:
+                                            message_data["step"] = step
+                                        if 'sse_event_type' in locals() and sse_event_type:
+                                            message_data["sse_event_type"] = sse_event_type
+                                    
                                     # 添加对应的时间戳
                                     if i in message_timestamps:
                                         timestamp_str = message_timestamps[i]
@@ -1938,7 +1981,7 @@ class ChatStreamAPIView(View):
         # 知识库相关参数
         knowledge_base_id = body_data.get('knowledge_base_id')
         use_knowledge_base = body_data.get('use_knowledge_base', True)
-        similarity_threshold = body_data.get('similarity_threshold', 0.7)
+        similarity_threshold = body_data.get('similarity_threshold', 0.3)
         top_k = body_data.get('top_k', 5)
 
         # 提示词相关参数

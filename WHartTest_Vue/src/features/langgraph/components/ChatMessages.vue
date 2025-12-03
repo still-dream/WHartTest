@@ -26,7 +26,7 @@ interface ChatMessage {
   isUser: boolean;
   time: string;
   isLoading?: boolean;
-  messageType?: 'human' | 'ai' | 'tool' | 'system';
+  messageType?: 'human' | 'ai' | 'tool' | 'system' | 'agent_step' | 'step_separator';
   toolName?: string;
   isExpanded?: boolean;
   isStreaming?: boolean;
@@ -34,6 +34,12 @@ interface ChatMessage {
   imageDataUrl?: string;
   isThinkingProcess?: boolean;
   isThinkingExpanded?: boolean;
+  // Agent Step 专用字段
+  stepNumber?: number;
+  maxSteps?: number;
+  stepStatus?: 'start' | 'complete' | 'error';
+  // Step Separator 专用字段
+  isStepSeparator?: boolean;
 }
 
 interface Props {

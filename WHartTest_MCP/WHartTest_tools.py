@@ -370,11 +370,40 @@ def add_functional_case(
         print("body-preview =", response.text[:200])
         # 如有非 2xx 状态码直接抛异常
         response.raise_for_status()
+        
+        response_payload = {}
+        try:
+            response_payload = response.json()
+        except ValueError:
+            pass
+        
+        created_case = {}
+        if isinstance(response_payload, dict):
+            created_case = response_payload.get("data") or response_payload
+        
+        # 返回详细的用例信息,而不是简单的"保存成功"
+        testcase_snapshot = {
+            "id": created_case.get("id"),
+            "name": created_case.get("name", name),
+            "module_id": created_case.get("module_id") or module_id,
+            "level": created_case.get("level") or level,
+            "precondition": created_case.get("precondition") or precondition,
+            "notes": created_case.get("notes") or notes,
+            "steps": created_case.get("steps") or steps,
+            "project_id": created_case.get("project") or project_id,
+        }
+        
         # 201，代表成功保存
         if response.json().get("code") == 201:
-            return f"用例：{name}保存成功"
+            return {
+                "message": "保存成功",
+                "testcase": testcase_snapshot
+            }
         else:
-            return "保存失败，请重试"
+            return {
+                "message": "保存失败，请重试",
+                "response": response_payload
+            }
     except requests.exceptions.HTTPError as e:
         print("HTTPError =", e)
         return e

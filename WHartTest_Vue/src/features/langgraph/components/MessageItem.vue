@@ -1,12 +1,33 @@
 <template>
   <div :class="['message-wrapper', messageClass]">
-    <div class="avatar">
-          <img v-if="message.messageType === 'ai'" :src="logo" alt="AI Avatar" class="avatar-img" />
-          <div v-else class="avatar-img" :class="avatarClass">
-            {{ avatarText }}
-          </div>
+    <!-- Step Separator: 步骤分隔符 -->
+    <template v-if="message.messageType === 'step_separator'">
+      <div class="step-separator">
+        <div class="step-separator-line"></div>
+        <span class="step-separator-label">{{ message.content }}</span>
+        <div class="step-separator-line"></div>
+      </div>
+    </template>
+
+    <!-- Agent Step 消息：紧凑的进度指示器 -->
+    <template v-else-if="message.messageType === 'agent_step'">
+      <!-- ✅ 统一使用与历史记录相同的分隔线样式 -->
+      <div class="step-separator">
+        <div class="step-separator-line"></div>
+        <span class="step-separator-label">{{ agentStepLabel }}</span>
+        <div class="step-separator-line"></div>
+      </div>
+    </template>
+
+    <!-- 其他消息类型：使用头像+气泡布局 -->
+    <template v-else>
+      <div class="avatar">
+        <img v-if="message.messageType === 'ai'" :src="logo" alt="AI Avatar" class="avatar-img" />
+        <div v-else class="avatar-img" :class="avatarClass">
+          {{ avatarText }}
         </div>
-    <div class="message-content">
+      </div>
+      <div class="message-content">
       <!-- 图片显示（在消息气泡之前） -->
       <div v-if="message.imageDataUrl || message.imageBase64" class="message-image-container">
         <img 
@@ -64,6 +85,7 @@
       </div>
       <div class="message-time">{{ message.time }}</div>
     </div>
+    </template>
   </div>
 </template>
 
@@ -92,14 +114,20 @@ interface ChatMessage {
   isUser: boolean;
   time: string;
   isLoading?: boolean;
-  messageType?: 'human' | 'ai' | 'tool' | 'system'; // 🆕 添加 system 类型
+  messageType?: 'human' | 'ai' | 'tool' | 'system' | 'agent_step' | 'step_separator';
   toolName?: string; // 工具名称
   isExpanded?: boolean;
-  isStreaming?: boolean; // 新增：标识是否正在流式输出
-  imageBase64?: string; // 🆕 消息携带的图片（Base64）
-  imageDataUrl?: string; // 🆕 完整的图片Data URL
-  isThinkingProcess?: boolean; // 🎨 是否是思考过程
-  isThinkingExpanded?: boolean; // 🎨 思考过程是否展开
+  isStreaming?: boolean; // 标识是否正在流式输出
+  imageBase64?: string; // 消息携带的图片(Base64)
+  imageDataUrl?: string; // 完整的图片Data URL
+  isThinkingProcess?: boolean; // 是否是思考过程
+  isThinkingExpanded?: boolean; // 思考过程是否展开
+  // Agent Step 专用字段
+  stepNumber?: number;
+  maxSteps?: number;
+  stepStatus?: 'start' | 'complete' | 'error';
+  // Step Separator 专用字段
+  isStepSeparator?: boolean;
 }
 
 interface Props {
@@ -114,9 +142,26 @@ defineEmits<{
 
 // 消息样式类
 const messageClass = computed(() => {
+  // ✅ agent_step 和 step_separator 使用相同的容器样式
+  if (props.message.messageType === 'step_separator' || props.message.messageType === 'agent_step') {
+    return 'step-separator-message';
+  }
   if (props.message.isUser) return 'user-message';
   if (props.message.messageType === 'tool') return 'tool-message';
   return 'ai-message';
+});
+
+// Agent Step 标签文本 (与历史记录格式保持一致)
+const agentStepLabel = computed(() => {
+  const step = props.message.stepNumber;
+  const max = props.message.maxSteps;
+  if (step !== undefined && max !== undefined) {
+    return `步骤 ${step}/${max}`;
+  }
+  if (step !== undefined) {
+    return `步骤 ${step}`;
+  }
+  return '步骤';
 });
 
 // 头像样式类
@@ -343,7 +388,109 @@ const formatToolMessage = (content: string) => {
   align-self: flex-start;
 }
 
+/* Step Separator 样式 - 步骤分隔符 */
+.step-separator-message {
+  max-width: 100%;
+  align-self: center;
+  margin: 20px 0;
+}
 
+.step-separator {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  width: 100%;
+}
+
+.step-separator-line {
+  flex: 1;
+  height: 1px;
+  background: linear-gradient(to right, transparent, #e5e6eb 20%, #e5e6eb 80%, transparent);
+}
+
+.step-separator-label {
+  font-size: 13px;
+  font-weight: 600;
+  color: #165dff;
+  background: linear-gradient(135deg, #e8f3ff 0%, #f2f5ff 100%);
+  padding: 6px 16px;
+  border-radius: 20px;
+  border: 1px solid #d4e6ff;
+  white-space: nowrap;
+  box-shadow: 0 2px 4px rgba(22, 93, 255, 0.08);
+}
+
+/* Agent Step 消息样式 - 紧凑的进度指示器 */
+.agent-step-message {
+  max-width: 100%;
+  align-self: center;
+}
+
+.agent-step-indicator {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 12px;
+  border-radius: 16px;
+  font-size: 12px;
+  background-color: #f2f3f5;
+  color: #86909c;
+  transition: all 0.2s ease;
+}
+
+.agent-step-indicator.is-start {
+  background-color: #e8f3ff;
+  color: #165dff;
+}
+
+.agent-step-indicator.is-complete {
+  background-color: #e8ffea;
+  color: #00b42a;
+}
+
+.agent-step-indicator.is-error {
+  background-color: #ffece8;
+  color: #f53f3f;
+}
+
+.agent-step-icon {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 16px;
+  height: 16px;
+}
+
+.agent-step-icon svg {
+  width: 16px;
+  height: 16px;
+}
+
+.agent-step-icon .spinner {
+  animation: spin 1s linear infinite;
+}
+
+@keyframes spin {
+  from { transform: rotate(0deg); }
+  to { transform: rotate(360deg); }
+}
+
+.agent-step-label {
+  font-weight: 500;
+}
+
+.agent-step-summary {
+  color: #4e5969;
+  max-width: 300px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.agent-step-time {
+  color: #c9cdd4;
+  font-size: 11px;
+}
 
 .avatar {
   width: 35px;

@@ -459,6 +459,12 @@ LOGGING = {
             'level': 'DEBUG',
             'propagate': False,
         },
+        # Orchestrator集成应用日志(Agent Loop压缩调试)
+        'orchestrator_integration': {
+            'handlers': ['console', 'app_file', 'error_file'],
+            'level': 'DEBUG',
+            'propagate': False,
+        },
     },
 }
 

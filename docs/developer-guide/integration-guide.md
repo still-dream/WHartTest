@@ -180,7 +180,7 @@ service = KnowledgeBaseService(kb)
 result = service.query(
     query_text="什么是API接口？",
     top_k=5,
-    similarity_threshold=0.7
+    similarity_threshold=0.5
 )
 
 # 2. 使用LangGraph RAG服务

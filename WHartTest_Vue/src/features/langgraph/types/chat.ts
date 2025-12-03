@@ -45,8 +45,14 @@ export interface ChatHistoryMessage {
   type: 'human' | 'ai' | 'tool' | 'system'; // 🆕 添加 system 类型
   content: string;
   timestamp: string; // 消息时间戳
-  image?: string; // 🆕 图片Data URL（包含完整的data:image/xxx;base64,前缀）
+  image?: string; // 🆕 图片Data URL(包含完整的data:image/xxx;base64,前缀)
   is_thinking_process?: boolean; // 思考过程标记
+  // ⭐ Agent Loop 历史记录专用字段
+  agent?: string; // 'agent_loop' 表示来自Agent Loop
+  agent_type?: string; // 'intermediate' | 'final' 表示中间/最终响应
+  step?: number; // Agent Loop步骤号
+  max_steps?: number; // Agent Loop最大步骤数
+  sse_event_type?: string; // 'message' | 'tool_result' SSE事件类型
 }
 
 /**

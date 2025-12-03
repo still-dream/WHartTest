@@ -359,15 +359,13 @@ class OrchestratorStreamAPIView(View):
                             
                             logger.info(f"OrchestratorStream: Tool {tool_name} completed with output: {str(actual_content)[:200]}")
                             
-                            # 优化工具输出显示
-                            output_preview = actual_content[:200] + "..." if len(actual_content) > 200 else actual_content
+                            # 完整发送工具输出,前端可以自行截断显示
                             output_length = len(actual_content)
                             
                             yield create_sse_data({
                                 'type': 'tool_end',
                                 'tool_name': tool_name,
-                                'tool_output': actual_content,
-                                'output_preview': output_preview,
+                                'tool_output': actual_content,  # 完整输出
                                 'output_length': output_length
                             })
                         

@@ -777,7 +777,7 @@ class KnowledgeBaseService:
             logger.error(f"文档处理失败: {document.id}, 错误: {e}")
             return False
 
-    def query(self, query_text: str, top_k: int = 5, similarity_threshold: float = 0.7,
+    def query(self, query_text: str, top_k: int = 5, similarity_threshold: float = 0.3,
               user=None) -> Dict[str, Any]:
         """查询知识库"""
         start_time = time.time()
