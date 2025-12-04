@@ -488,7 +488,7 @@ class ConversationalRAGService(KnowledgeRAGService):
             }
 
 
-def create_knowledge_tool(knowledge_base_id: str, user, similarity_threshold: float = 0.3, top_k: int = 5):
+def create_knowledge_tool(knowledge_base_id: str, user, similarity_threshold: float = 0.5, top_k: int = 5):
     """创建知识库工具，用于Agent调用"""
     from langchain_core.tools import tool
 

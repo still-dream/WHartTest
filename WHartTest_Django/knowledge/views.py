@@ -244,7 +244,8 @@ class KnowledgeBaseViewSet(BaseModelViewSet):
                 },
                 'dependencies': {
                     'langchain_huggingface': False,
-                    'langchain_chroma': False,
+                    'langchain_qdrant': False,
+                    'fastembed': False,
                     'sentence_transformers': False,
                     'torch': False
                 },
@@ -258,8 +259,14 @@ class KnowledgeBaseViewSet(BaseModelViewSet):
 
             # 检查依赖库
             try:
-                import langchain_chroma
-                status_info['dependencies']['langchain_chroma'] = True
+                import langchain_qdrant
+                status_info['dependencies']['langchain_qdrant'] = True
+            except ImportError:
+                pass
+
+            try:
+                import fastembed
+                status_info['dependencies']['fastembed'] = True
             except ImportError:
                 pass
 

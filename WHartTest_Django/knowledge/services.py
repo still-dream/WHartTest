@@ -38,15 +38,99 @@ from langchain_community.document_loaders import (
     WebBaseLoader
 )
 from langchain_text_splitters import RecursiveCharacterTextSplitter
-from langchain_chroma import Chroma
+from langchain_qdrant import QdrantVectorStore
+from qdrant_client import QdrantClient
+from qdrant_client.models import (
+    Distance,
+    VectorParams,
+    PointStruct,
+    SparseVector,
+    SparseVectorParams,
+    SparseIndexParams,
+    NamedVector,
+    NamedSparseVector,
+    models,
+)
 from langchain_core.documents import Document as LangChainDocument
 from .models import KnowledgeBase, Document, DocumentChunk, QueryLog, KnowledgeGlobalConfig
 import logging
 import requests
-from typing import List
+import uuid
+from typing import List, Optional, Dict
 from langchain.embeddings.base import Embeddings
 
+# 尝试导入 FastEmbed 用于 BM25 稀疏编码
+# 注意：需要在导入前临时禁用离线模式
+FASTEMBED_AVAILABLE = False
+SparseTextEmbedding = None
+
+def _init_fastembed():
+    """延迟初始化 FastEmbed（避免模块级别的离线模式影响）"""
+    global FASTEMBED_AVAILABLE, SparseTextEmbedding
+    if FASTEMBED_AVAILABLE:
+        return True
+    
+    # 临时禁用离线模式
+    offline_vars = ['HF_HUB_OFFLINE', 'TRANSFORMERS_OFFLINE', 'HF_DATASETS_OFFLINE']
+    old_values = {var: os.environ.pop(var, None) for var in offline_vars}
+    
+    try:
+        from fastembed import SparseTextEmbedding as _SparseTextEmbedding
+        SparseTextEmbedding = _SparseTextEmbedding
+        FASTEMBED_AVAILABLE = True
+        return True
+    except ImportError:
+        return False
+    finally:
+        # 恢复环境变量
+        for var, val in old_values.items():
+            if val is not None:
+                os.environ[var] = val
+
 logger = logging.getLogger(__name__)
+
+
+class SparseBM25Encoder:
+    """基于 FastEmbed 的 BM25 稀疏编码器"""
+
+    DEFAULT_MODEL = "Qdrant/bm25"
+
+    def __init__(self, model_name: Optional[str] = None):
+        # 初始化 FastEmbed（延迟导入）
+        if not _init_fastembed():
+            raise ImportError("需要安装 fastembed 才能启用 BM25 稀疏向量: pip install fastembed")
+        
+        self.model_name = model_name or self.DEFAULT_MODEL
+        
+        # 临时禁用离线模式以加载模型
+        offline_vars = ['HF_HUB_OFFLINE', 'TRANSFORMERS_OFFLINE', 'HF_DATASETS_OFFLINE']
+        old_values = {var: os.environ.pop(var, None) for var in offline_vars}
+        
+        # 重置 huggingface_hub 的离线状态缓存
+        try:
+            import huggingface_hub.constants
+            if hasattr(huggingface_hub.constants, 'HF_HUB_OFFLINE'):
+                huggingface_hub.constants.HF_HUB_OFFLINE = False
+        except Exception:
+            pass
+        
+        try:
+            self._encoder = SparseTextEmbedding(model_name=self.model_name)
+            logger.info(f"✅ 初始化 BM25 稀疏编码器: {self.model_name}")
+        finally:
+            # 恢复环境变量
+            for var, val in old_values.items():
+                if val is not None:
+                    os.environ[var] = val
+
+    def encode_documents(self, texts: List[str]) -> List:
+        """编码文档列表"""
+        return list(self._encoder.embed(texts))
+
+    def encode_query(self, text: str):
+        """编码查询"""
+        results = list(self._encoder.query_embed(text))
+        return results[0] if results else None
 
 
 class CustomAPIEmbeddings(Embeddings):
@@ -238,11 +322,18 @@ class DocumentProcessor:
 
 
 class VectorStoreManager:
-    """向量存储管理器"""
+    """向量存储管理器 - 支持稠密+稀疏混合检索"""
 
-    # 类级别的向量存储缓存
+    # 向量名称常量
+    DENSE_VECTOR_NAME = "dense"
+    SPARSE_VECTOR_NAME = "bm25"
+    # RRF 融合参数
+    RRF_K = 60
+
+    # 类级别的缓存
     _vector_store_cache = {}
     _embeddings_cache = {}
+    _sparse_encoder_cache = {}
     _global_config_cache = None
     _global_config_cache_time = 0
 
@@ -250,6 +341,7 @@ class VectorStoreManager:
         self.knowledge_base = knowledge_base
         self.global_config = self._get_global_config()
         self.embeddings = self._get_embeddings_instance()
+        self.sparse_encoder = self._get_sparse_encoder()
         self._log_embedding_info()
 
     @classmethod
@@ -301,6 +393,22 @@ class VectorStoreManager:
                 raise
                 
         return self._embeddings_cache[cache_key]
+
+    def _get_sparse_encoder(self) -> Optional[SparseBM25Encoder]:
+        """获取 BM25 稀疏编码器（带缓存）"""
+        cache_key = self.SPARSE_VECTOR_NAME
+        
+        if cache_key not in self._sparse_encoder_cache:
+            try:
+                self._sparse_encoder_cache[cache_key] = SparseBM25Encoder()
+            except ImportError as e:
+                logger.warning(f"⚠️ FastEmbed 未安装，将使用纯稠密向量检索: {e}")
+                self._sparse_encoder_cache[cache_key] = None
+            except Exception as e:
+                logger.warning(f"⚠️ BM25 编码器初始化失败: {e}，降级为纯稠密检索")
+                self._sparse_encoder_cache[cache_key] = None
+        
+        return self._sparse_encoder_cache[cache_key]
     
     def _create_openai_embeddings(self, config):
         """创建OpenAI Embeddings实例"""
@@ -393,32 +501,46 @@ class VectorStoreManager:
             logger.info(f"   🎉 说明: 使用自定义HTTP API嵌入服务")
 
         self._vector_store = None
+        self._qdrant_client = None
         logger.info(f"🤖 向量存储管理器初始化完成:")
         logger.info(f"   📋 知识库: {self.knowledge_base.name} (ID: {self.knowledge_base.id})")
         logger.info(f"   🎯 配置的嵌入模型: {config.model_name}")
         logger.info(f"   ✅ 实际使用的嵌入模型: {embedding_type}")
-        logger.info(f"   💾 向量存储类型: ChromaDB")
+        logger.info(f"   💾 向量存储类型: Qdrant")
+
+    def _get_qdrant_url(self) -> str:
+        """获取 Qdrant 服务地址"""
+        return os.environ.get('QDRANT_URL', 'http://localhost:8918')
+
+    def _get_collection_name(self) -> str:
+        """获取集合名称"""
+        return f"kb_{self.knowledge_base.id}"
+
+    @property
+    def qdrant_client(self) -> QdrantClient:
+        """获取 Qdrant 客户端"""
+        if self._qdrant_client is None:
+            qdrant_url = self._get_qdrant_url()
+            self._qdrant_client = QdrantClient(url=qdrant_url)
+            logger.info(f"🔗 已连接 Qdrant: {qdrant_url}")
+        return self._qdrant_client
 
     @property
     def vector_store(self):
         """获取向量存储实例（带缓存和健康检查）"""
         if self._vector_store is None:
-            # 使用知识库ID作为缓存键
             cache_key = str(self.knowledge_base.id)
 
             if cache_key in self._vector_store_cache:
-                # 验证缓存的实例是否仍然有效
                 cached_store = self._vector_store_cache[cache_key]
                 try:
-                    # 尝试访问 Collection,验证其存在性
-                    _ = cached_store._collection.count()
+                    # 验证 Qdrant 集合是否存在
+                    self.qdrant_client.get_collection(self._get_collection_name())
                     logger.info(f"使用缓存的向量存储实例: {cache_key}")
                     self._vector_store = cached_store
                 except Exception as e:
                     logger.warning(f"缓存的 Collection 无效,重新创建: {e}")
-                    # 清理失效的缓存
                     del self._vector_store_cache[cache_key]
-                    # 创建新实例
                     logger.info(f"创建新的向量存储实例: {cache_key}")
                     self._vector_store = self._create_vector_store()
                     self._vector_store_cache[cache_key] = self._vector_store
@@ -433,116 +555,167 @@ class VectorStoreManager:
     def clear_cache(cls, knowledge_base_id=None):
         """清理向量存储缓存"""
         if knowledge_base_id:
-            # 清理特定知识库的缓存
             cache_key = str(knowledge_base_id)
             if cache_key in cls._vector_store_cache:
                 del cls._vector_store_cache[cache_key]
                 logger.info(f"已清理知识库 {cache_key} 的向量存储缓存")
 
-            # 同时清理ChromaDB持久化目录
+            # 清理 Qdrant 集合
             try:
-                import shutil
-                persist_directory = os.path.join(
-                    settings.MEDIA_ROOT,
-                    'knowledge_bases',
-                    str(knowledge_base_id),
-                    'chroma_db'
-                )
-                if os.path.exists(persist_directory):
-                    shutil.rmtree(persist_directory)
-                    logger.info(f"已清理知识库 {knowledge_base_id} 的ChromaDB持久化数据")
+                qdrant_url = os.environ.get('QDRANT_URL', 'http://localhost:8918')
+                client = QdrantClient(url=qdrant_url)
+                collection_name = f"kb_{knowledge_base_id}"
+                if client.collection_exists(collection_name):
+                    client.delete_collection(collection_name)
+                    logger.info(f"已删除 Qdrant 集合: {collection_name}")
             except Exception as e:
-                logger.warning(f"清理ChromaDB持久化数据失败: {e}")
+                logger.warning(f"清理 Qdrant 集合失败: {e}")
         else:
             # 清理所有缓存
             cls._vector_store_cache.clear()
             cls._embeddings_cache.clear()
+            cls._sparse_encoder_cache.clear()
             logger.info("已清理所有向量存储缓存")
 
     def _create_vector_store(self):
-        """创建ChromaDB向量存储"""
-        persist_directory = os.path.join(
-            settings.MEDIA_ROOT,
-            'knowledge_bases',
-            str(self.knowledge_base.id),
-            'chroma_db'
-        )
-
-        # 确保目录存在
-        os.makedirs(persist_directory, exist_ok=True)
-
-        # 创建ChromaDB实例
-        chroma_instance = Chroma(
-            persist_directory=persist_directory,
-            embedding_function=self.embeddings,
-            collection_name=f"kb_{self.knowledge_base.id}"
-        )
-
-        return chroma_instance
-
-    def _fix_permissions_if_needed(self, persist_directory: str) -> bool:
-        """检测并修复权限问题，返回是否执行了修复"""
-        import glob
-        fixed = False
-
+        """创建 Qdrant 向量存储（支持稠密+稀疏混合）"""
+        collection_name = self._get_collection_name()
+        
+        # 获取嵌入向量维度
+        test_embedding = self.embeddings.embed_query("测试")
+        vector_size = len(test_embedding)
+        
+        # 配置命名向量（用于混合检索）
+        vectors_config = {
+            self.DENSE_VECTOR_NAME: VectorParams(
+                size=vector_size,
+                distance=Distance.COSINE
+            )
+        }
+        
+        # 配置稀疏向量
+        sparse_vectors_config = None
+        if self.sparse_encoder:
+            sparse_vectors_config = {
+                self.SPARSE_VECTOR_NAME: SparseVectorParams(
+                    index=SparseIndexParams(on_disk=False)
+                )
+            }
+        
+        # 确保集合存在
         try:
-            # 修复目录权限
-            if os.path.exists(persist_directory):
-                current_mode = os.stat(persist_directory).st_mode & 0o777
-                if current_mode < 0o775:
-                    os.chmod(persist_directory, 0o775)
-                    logger.info(f"修复目录权限: {persist_directory}")
-                    fixed = True
-
-            # 修复 SQLite 文件权限
-            for pattern in ['*.sqlite3', '*.sqlite3-wal', '*.sqlite3-shm']:
-                for filepath in glob.glob(os.path.join(persist_directory, pattern)):
-                    current_mode = os.stat(filepath).st_mode & 0o777
-                    if current_mode < 0o664:
-                        os.chmod(filepath, 0o664)
-                        logger.info(f"修复文件权限: {filepath}")
-                        fixed = True
+            if not self.qdrant_client.collection_exists(collection_name):
+                self.qdrant_client.create_collection(
+                    collection_name=collection_name,
+                    vectors_config=vectors_config,
+                    sparse_vectors_config=sparse_vectors_config
+                )
+                mode = "稀疏+稠密混合" if sparse_vectors_config else "纯稠密"
+                logger.info(f"✅ 创建 Qdrant 集合: {collection_name}, 维度: {vector_size}, 模式: {mode}")
+            else:
+                # 检查是否需要更新稀疏配置
+                if sparse_vectors_config:
+                    try:
+                        self.qdrant_client.update_collection(
+                            collection_name=collection_name,
+                            sparse_vectors_config=sparse_vectors_config
+                        )
+                    except Exception as e:
+                        logger.debug(f"跳过稀疏配置更新: {e}")
         except Exception as e:
-            logger.warning(f"修复权限失败: {e}")
-
-        return fixed
-
-    def _is_permission_error(self, error: Exception) -> bool:
-        """判断是否是权限相关错误"""
-        error_str = str(error).lower()
-        permission_keywords = ['permission', 'access', 'denied', 'readonly', 'locked', 'sqlite']
-        return any(keyword in error_str for keyword in permission_keywords)
+            logger.warning(f"检查/创建集合时出错: {e}")
+        
+        # 使用 LangChain 的 QdrantVectorStore（用于兼容性，实际混合查询直接用 client）
+        qdrant_store = QdrantVectorStore(
+            client=self.qdrant_client,
+            collection_name=collection_name,
+            embedding=self.embeddings,
+            vector_name=self.DENSE_VECTOR_NAME
+        )
+        
+        return qdrant_store
 
     def add_documents(self, documents: List[LangChainDocument], document_obj: Document) -> List[str]:
-        """添加文档到向量存储"""
+        """添加文档到向量存储（稠密+稀疏混合）"""
         try:
+            # 确保集合存在（触发 vector_store 属性会创建集合）
+            _ = self.vector_store
+            
             # 文档分块
             text_splitter = RecursiveCharacterTextSplitter(
                 chunk_size=self.knowledge_base.chunk_size,
                 chunk_overlap=self.knowledge_base.chunk_overlap
             )
             chunks = text_splitter.split_documents(documents)
-
-            persist_directory = os.path.join(
-                settings.MEDIA_ROOT,
-                'knowledge_bases',
-                str(self.knowledge_base.id),
-                'chroma_db'
+            
+            # 生成唯一的 vector_ids
+            vector_ids = [str(uuid.uuid4()) for _ in chunks]
+            chunk_texts = [chunk.page_content for chunk in chunks]
+            
+            # 计算稠密向量
+            dense_embeddings = self.embeddings.embed_documents(chunk_texts)
+            
+            # 计算稀疏向量（如果可用）
+            sparse_embeddings = None
+            if self.sparse_encoder:
+                sparse_embeddings = self.sparse_encoder.encode_documents(chunk_texts)
+            
+            # 构建 PointStruct 列表
+            points: List[PointStruct] = []
+            for i, (chunk, vector_id, dense_vector) in enumerate(zip(chunks, vector_ids, dense_embeddings)):
+                payload = dict(chunk.metadata or {})
+                payload.update({
+                    "page_content": chunk.page_content,
+                    "document_id": str(document_obj.id),
+                    "chunk_index": i,
+                    "vector_id": vector_id,
+                    "knowledge_base_id": str(self.knowledge_base.id),
+                })
+                
+                # 构建向量配置
+                vectors = {self.DENSE_VECTOR_NAME: dense_vector}
+                
+                # 添加稀疏向量（如果可用）
+                sparse_vectors = None
+                if sparse_embeddings and sparse_embeddings[i]:
+                    sparse_vec = sparse_embeddings[i]
+                    sparse_vectors = {
+                        self.SPARSE_VECTOR_NAME: SparseVector(
+                            indices=sparse_vec.indices.tolist(),
+                            values=sparse_vec.values.tolist(),
+                        )
+                    }
+                
+                point = PointStruct(
+                    id=vector_id,
+                    vector=vectors,
+                    payload=payload,
+                )
+                
+                # Qdrant SDK 需要单独设置 sparse_vectors
+                if sparse_vectors:
+                    point = PointStruct(
+                        id=vector_id,
+                        vector={
+                            self.DENSE_VECTOR_NAME: dense_vector,
+                            self.SPARSE_VECTOR_NAME: SparseVector(
+                                indices=sparse_embeddings[i].indices.tolist(),
+                                values=sparse_embeddings[i].values.tolist(),
+                            )
+                        },
+                        payload=payload,
+                    )
+                
+                points.append(point)
+            
+            # 批量写入 Qdrant
+            self.qdrant_client.upsert(
+                collection_name=self._get_collection_name(),
+                points=points,
             )
-
-            try:
-                # 添加到向量存储
-                vector_ids = self.vector_store.add_documents(chunks)
-            except Exception as e:
-                # 如果是权限错误，尝试修复后重试
-                if self._is_permission_error(e):
-                    logger.warning(f"向量存储操作失败，尝试修复权限: {e}")
-                    if self._fix_permissions_if_needed(persist_directory):
-                        vector_ids = self.vector_store.add_documents(chunks)
-                    else:
-                        raise
-                else:
-                    raise
+            
+            mode = "稀疏+稠密" if sparse_embeddings else "纯稠密"
+            logger.info(f"✅ 已写入 {len(points)} 个分块到 Qdrant（{mode}）")
 
             # 保存分块信息到数据库
             self._save_chunks_to_db(chunks, vector_ids, document_obj)
@@ -574,156 +747,235 @@ class VectorStoreManager:
         DocumentChunk.objects.bulk_create(chunk_objects)
 
     def similarity_search(self, query: str, k: int = 5, score_threshold: float = 0.1) -> List[Dict[str, Any]]:
-        """相似度搜索（带自动恢复机制）"""
-        # 记录搜索开始信息
+        """相似度搜索（支持稠密+稀疏混合检索）"""
         embedding_type = type(self.embeddings).__name__
-        logger.info(f"🔍 开始相似度搜索:")
+        logger.info(f"🔍 开始相似度搜索 (Qdrant):")
         logger.info(f"   📝 查询: '{query}'")
         logger.info(f"   🤖 使用嵌入模型: {embedding_type}")
         logger.info(f"   🎯 返回数量: {k}, 相似度阈值: {score_threshold}")
 
-        persist_directory = os.path.join(
-            settings.MEDIA_ROOT,
-            'knowledge_bases',
-            str(self.knowledge_base.id),
-            'chroma_db'
-        )
+        # 根据是否有稀疏编码器选择检索方式
+        if self.sparse_encoder:
+            logger.info("   🔀 使用混合检索（BM25 + 稠密向量）")
+            return self._hybrid_similarity_search(query, k, score_threshold)
+        else:
+            logger.info("   📊 使用纯稠密向量检索")
+            return self._dense_similarity_search(query, k, score_threshold)
 
-        # 尝试执行搜索,带自动恢复
-        max_retries = 2
-        for attempt in range(max_retries):
-            try:
-                # 执行相似度搜索
-                results = self.vector_store.similarity_search_with_score(query, k=k)
-                break  # 成功则跳出循环
-            except Exception as e:
-                error_msg = str(e)
-                # 处理权限错误
-                if self._is_permission_error(e) and attempt < max_retries - 1:
-                    logger.warning(f"搜索时遇到权限问题，尝试修复: {e}")
-                    if self._fix_permissions_if_needed(persist_directory):
-                        continue
-                # 处理 Collection 不存在错误
-                elif ("does not exist" in error_msg or "Collection" in error_msg) and attempt < max_retries - 1:
-                    logger.error(f"Collection 不存在 (尝试 {attempt + 1}/{max_retries}): {e}")
-                    # 清理缓存并重试
-                    cache_key = str(self.knowledge_base.id)
-                    self._vector_store_cache.pop(cache_key, None)
-                    self._vector_store = None
-                    logger.info("已清理缓存,正在重新创建 Collection...")
-                    continue
-                elif "does not exist" in error_msg or "Collection" in error_msg:
-                    # 最后一次尝试也失败,给出明确错误
-                    raise ValueError(
-                        f"知识库 '{self.knowledge_base.name}' 的向量索引已损坏。"
-                        f"请联系管理员重建知识库索引。知识库ID: {self.knowledge_base.id}"
-                    )
-                else:
-                    # 其他类型的错误直接抛出
-                    raise
-
+    def _dense_similarity_search(self, query: str, k: int, score_threshold: float) -> List[Dict[str, Any]]:
+        """纯稠密向量检索"""
         try:
-
-            logger.debug(f"原始搜索结果数量: {len(results)}")
-            for i, (doc, score) in enumerate(results):
-                logger.debug(f"结果 {i+1}: 原始相似度={score:.4f}, 内容={doc.page_content[:50]}...")
-
-            # 处理相似度分数
-            processed_results = []
-            for doc, score in results:
-                # 对于不同的向量存储和嵌入模型，相似度分数的含义不同
-                processed_score = self._process_similarity_score(score)
-                processed_results.append((doc, processed_score))
-                logger.debug(f"处理后相似度: {score:.4f} -> {processed_score:.4f}")
-
-            # 相似度过滤
-            if processed_results:
-                filtered_results = [
-                    (doc, score) for doc, score in processed_results
-                    if score >= score_threshold
-                ]
-
-                # 如果没有结果且阈值较高，降低阈值重试
-                if not filtered_results and score_threshold > 0.1:
-                    logger.info(f"阈值 {score_threshold} 过高，降低到 0.1 重试")
-                    score_threshold = 0.1
-                    filtered_results = [
-                        (doc, score) for doc, score in processed_results
-                        if score >= score_threshold
-                    ]
-
-                # 如果仍然没有结果，返回得分最高的结果
-                if not filtered_results:
-                    logger.info("没有结果通过阈值过滤，返回得分最高的结果")
-                    # 按相似度排序，返回前k个
-                    sorted_results = sorted(processed_results, key=lambda x: x[1], reverse=True)
-                    filtered_results = sorted_results[:min(k, len(sorted_results))]
-            else:
-                filtered_results = []
-
-            logger.info(f"📊 搜索结果统计:")
-            logger.info(f"   🔢 原始结果数量: {len(results)}")
-            logger.info(f"   ✅ 过滤后结果数量: {len(filtered_results)}")
-            logger.info(f"   🎯 使用的阈值: {score_threshold}")
-
-            # 格式化结果
-            formatted_results = []
-            for i, (doc, score) in enumerate(filtered_results):
-                result = {
-                    'content': doc.page_content,
-                    'metadata': doc.metadata,
-                    'similarity_score': float(score)
-                }
-                formatted_results.append(result)
-
-                # 记录每个结果的详细信息
-                source = doc.metadata.get('source', '未知来源')
-                percentage = score * 100
-                logger.info(f"   📄 结果{i+1}: 相似度={score:.4f} ({percentage:.1f}%), 来源={source}")
-
-            return formatted_results
+            dense_vector = self.embeddings.embed_query(query)
+            collection_name = self._get_collection_name()
+            
+            results = self.qdrant_client.search(
+                collection_name=collection_name,
+                query_vector=NamedVector(
+                    name=self.DENSE_VECTOR_NAME,
+                    vector=dense_vector,
+                ),
+                limit=k,
+                with_payload=True,
+            )
+            
+            logger.info(f"🔍 稠密检索结果: {len(results)}")
+            return self._format_search_results(results, score_threshold)
+            
         except Exception as e:
-            logger.error(f"相似度搜索失败: {e}")
+            logger.error(f"稠密向量搜索失败: {e}")
             raise
 
-    def _process_similarity_score(self, raw_score: float) -> float:
-        """处理相似度分数，确保分数有意义"""
+    def _hybrid_similarity_search(self, query: str, k: int, score_threshold: float) -> List[Dict[str, Any]]:
+        """混合检索（RRF 融合稠密+稀疏）"""
         try:
-            # ChromaDB 使用距离度量，需要转换为相似度
-            # 对于余弦距离：相似度 = 1 - 距离
-            # 对于欧几里得距离：相似度 = 1 / (1 + 距离)
-
-            if raw_score == 0.0:
-                # 0距离表示完全匹配
-                return 1.0
-
-            # ChromaDB 默认使用余弦距离，范围是 [0, 2]
-            # 转换为相似度：相似度 = 1 - (距离 / 2)
-            if raw_score <= 2.0:
-                similarity = 1.0 - (raw_score / 2.0)
-                return max(0.0, min(1.0, similarity))  # 确保在 [0, 1] 范围内
-            else:
-                # 如果距离大于2，可能是欧几里得距离
-                # 使用 1 / (1 + 距离) 公式
-                similarity = 1.0 / (1.0 + raw_score)
-                return similarity
-
+            collection_name = self._get_collection_name()
+            per_source_limit = max(k * 3, 10)  # 每种检索方式多取一些候选
+            
+            # 计算稠密向量
+            dense_vector = self.embeddings.embed_query(query)
+            
+            # 计算稀疏向量
+            sparse_query = self.sparse_encoder.encode_query(query)
+            
+            # 稠密向量检索
+            dense_results = self.qdrant_client.search(
+                collection_name=collection_name,
+                query_vector=NamedVector(
+                    name=self.DENSE_VECTOR_NAME,
+                    vector=dense_vector,
+                ),
+                limit=per_source_limit,
+                with_payload=True,
+            )
+            
+            # 稀疏向量检索
+            sparse_results = []
+            if sparse_query:
+                sparse_results = self.qdrant_client.search(
+                    collection_name=collection_name,
+                    query_vector=NamedSparseVector(
+                        name=self.SPARSE_VECTOR_NAME,
+                        vector=SparseVector(
+                            indices=sparse_query.indices.tolist(),
+                            values=sparse_query.values.tolist(),
+                        ),
+                    ),
+                    limit=per_source_limit,
+                    with_payload=True,
+                )
+            
+            logger.info(f"🔍 稠密候选: {len(dense_results)}, 稀疏候选: {len(sparse_results)}")
+            
+            # RRF 融合
+            fused_results = self._rrf_fusion(dense_results, sparse_results, k)
+            
+            return self._format_fused_results(fused_results, score_threshold)
+            
         except Exception as e:
-            logger.warning(f"处理相似度分数失败: {e}, 原始分数: {raw_score}")
-            return max(0.0, min(1.0, raw_score))  # 返回原始分数，确保在合理范围内
+            logger.error(f"混合搜索失败: {e}")
+            # 降级为纯稠密检索
+            logger.warning("⚠️ 降级为纯稠密检索")
+            return self._dense_similarity_search(query, k, score_threshold)
+
+    def _rrf_fusion(self, dense_results, sparse_results, limit: int) -> List[Dict[str, Any]]:
+        """RRF (Reciprocal Rank Fusion) 融合两种检索结果"""
+        if not dense_results and not sparse_results:
+            return []
+        
+        fused: Dict[str, Dict[str, Any]] = {}
+        contributors = 0
+        
+        def accumulate(results, label: str):
+            for rank, point in enumerate(results):
+                point_id = str(point.id)
+                if point_id not in fused:
+                    fused[point_id] = {
+                        "payload": point.payload or {},
+                        "score": 0.0,
+                        "labels": {},
+                        "original_scores": {},
+                    }
+                incremental = 1.0 / (self.RRF_K + rank + 1)
+                fused[point_id]["score"] += incremental
+                fused[point_id]["labels"][label] = incremental
+                fused[point_id]["original_scores"][label] = point.score
+        
+        if dense_results:
+            contributors += 1
+            accumulate(dense_results, "dense")
+        if sparse_results:
+            contributors += 1
+            accumulate(sparse_results, "sparse")
+        
+        # 归一化分数到 0-1 范围
+        max_possible = contributors * (1.0 / (self.RRF_K + 1))
+        max_possible = max(max_possible, 1e-9)
+        
+        fused_list = []
+        for point_id, data in fused.items():
+            data["id"] = point_id
+            data["score"] = min(data["score"] / max_possible, 1.0)
+            fused_list.append(data)
+        
+        # 按融合分数降序排序
+        fused_list.sort(key=lambda item: item["score"], reverse=True)
+        return fused_list[:limit]
+
+    def _format_search_results(self, results, score_threshold: float) -> List[Dict[str, Any]]:
+        """格式化稠密搜索结果"""
+        formatted_results = []
+        
+        for i, point in enumerate(results):
+            score = point.score
+            if score < score_threshold:
+                continue
+            
+            payload = point.payload or {}
+            content = payload.get("page_content", "")
+            
+            result = {
+                'content': content,
+                'metadata': payload,
+                'similarity_score': float(score)
+            }
+            formatted_results.append(result)
+            
+            source = payload.get('source', '未知来源')
+            logger.info(f"   📄 结果{i+1}: 相似度={score:.4f} ({score*100:.1f}%), 来源={source}")
+        
+        # 如果没有满足阈值的结果，返回最佳结果
+        if not formatted_results and results:
+            best = results[0]
+            payload = best.payload or {}
+            formatted_results.append({
+                'content': payload.get("page_content", ""),
+                'metadata': payload,
+                'similarity_score': float(best.score)
+            })
+        
+        logger.info(f"📊 过滤后结果数量: {len(formatted_results)}")
+        return formatted_results
+
+    def _format_fused_results(self, fused_results: List[Dict], score_threshold: float) -> List[Dict[str, Any]]:
+        """格式化 RRF 融合结果"""
+        formatted_results = []
+        
+        for i, entry in enumerate(fused_results):
+            score = entry["score"]
+            if score < score_threshold:
+                continue
+            
+            payload = entry.get("payload", {})
+            content = payload.get("page_content", "")
+            
+            # 添加融合来源信息
+            labels = entry.get("labels", {})
+            original_scores = entry.get("original_scores", {})
+            
+            result = {
+                'content': content,
+                'metadata': payload,
+                'similarity_score': float(score),
+                'fusion_detail': {
+                    'sources': list(labels.keys()),
+                    'dense_score': original_scores.get("dense"),
+                    'sparse_score': original_scores.get("sparse"),
+                }
+            }
+            formatted_results.append(result)
+            
+            source = payload.get('source', '未知来源')
+            sources_str = "+".join(labels.keys())
+            logger.info(f"   📄 结果{i+1}: 融合分={score:.4f} ({score*100:.1f}%), 来源={source}, 检索源=[{sources_str}]")
+        
+        # 如果没有满足阈值的结果，返回最佳结果
+        if not formatted_results and fused_results:
+            best = fused_results[0]
+            payload = best.get("payload", {})
+            formatted_results.append({
+                'content': payload.get("page_content", ""),
+                'metadata': payload,
+                'similarity_score': float(best["score"]),
+            })
+        
+        logger.info(f"📊 过滤后结果数量: {len(formatted_results)}")
+        return formatted_results
 
     def delete_document(self, document: Document):
-        """从向量存储中删除文档"""
+        """从 Qdrant 向量存储中删除文档"""
         try:
-            # 获取文档的所有分块
             chunks = document.chunks.all()
             vector_ids = [chunk.vector_id for chunk in chunks if chunk.vector_id]
 
-            # 从向量存储中删除
             if vector_ids:
-                self.vector_store.delete(vector_ids)
+                # Qdrant 删除
+                collection_name = self._get_collection_name()
+                self.qdrant_client.delete(
+                    collection_name=collection_name,
+                    points_selector=vector_ids
+                )
+                logger.info(f"✅ 已从 Qdrant 删除 {len(vector_ids)} 个向量")
 
-            # 从数据库中删除分块记录
             chunks.delete()
         except Exception as e:
             logger.error(f"删除文档向量失败: {e}")
@@ -745,7 +997,13 @@ class KnowledgeBaseService:
             document.status = 'processing'
             document.save()
 
-            # 清理已存在的分块（如果有的话）
+            # 清理已存在的分块和向量（如果有的话）
+            try:
+                self.vector_manager.delete_document(document)
+            except Exception as e:
+                logger.warning(f"删除旧向量时出错（可能是首次处理）: {e}")
+            
+            # 再从数据库删除分块记录
             document.chunks.all().delete()
 
             # 加载文档
@@ -777,7 +1035,7 @@ class KnowledgeBaseService:
             logger.error(f"文档处理失败: {document.id}, 错误: {e}")
             return False
 
-    def query(self, query_text: str, top_k: int = 5, similarity_threshold: float = 0.3,
+    def query(self, query_text: str, top_k: int = 5, similarity_threshold: float = 0.5,
               user=None) -> Dict[str, Any]:
         """查询知识库"""
         start_time = time.time()
@@ -789,7 +1047,7 @@ class KnowledgeBaseService:
             logger.info(f"   📚 知识库: {self.knowledge_base.name}")
             logger.info(f"   👤 用户: {user.username if user else '匿名'}")
             logger.info(f"   🤖 嵌入模型: {embedding_type}")
-            logger.info(f"   💾 向量存储: ChromaDB")
+            logger.info(f"   💾 向量存储: Qdrant")
 
             # 执行检索
             retrieval_start = time.time()

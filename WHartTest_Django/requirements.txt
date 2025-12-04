@@ -90,7 +90,7 @@ langchain-mcp-adapters==0.1.9
 # https://github.com/theorchard/openpyxl/blob/master/LICENCE.rst
 openpyxl==3.1.5
 
-# 知识库依赖 - ChromaDB专用
+# 知识库依赖
 # LangChain社区库 - MIT许可证 (当前版本: 0.3.24)
 # https://github.com/langchain-ai/langchain/blob/master/libs/community/LICENSE
 langchain-community==0.3.24
@@ -99,9 +99,17 @@ langchain-community==0.3.24
 # https://github.com/langchain-ai/langchain/blob/master/libs/text-splitters/LICENSE
 langchain-text-splitters==0.3.8
 
-# ChromaDB向量数据库 - Apache 2.0许可证 (当前版本: 1.0.12)
-# https://github.com/chroma-core/chroma/blob/main/LICENSE
-langchain-chroma==0.2.4
+# Qdrant向量数据库 - Apache 2.0许可证
+# https://github.com/qdrant/qdrant-client/blob/master/LICENSE
+langchain-qdrant==0.2.1
+
+# Qdrant客户端 - Apache 2.0许可证
+# https://github.com/qdrant/qdrant-client/blob/master/LICENSE
+qdrant-client==1.11.3
+
+# FastEmbed - 用于BM25稀疏向量编码（混合检索）
+# https://github.com/qdrant/fastembed/blob/main/LICENSE
+fastembed>=0.7.0,<1.0
 
 # HuggingFace嵌入模型支持（已弃用 - 会自动安装 torch 和 CUDA 依赖）
 # 注意：langchain-huggingface 依赖 sentence-transformers，会自动安装 torch（约800MB+）和 CUDA 库（约1GB+）

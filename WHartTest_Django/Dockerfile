@@ -31,6 +31,19 @@ COPY requirements.txt .
 RUN uv venv /opt/venv && \
     uv pip install --python /opt/venv/bin/python --no-cache -r requirements.txt
 
+# 预下载 BM25 稀疏编码模型（用于混合检索）
+# 使用 FASTEMBED_CACHE_PATH 环境变量强制指定缓存路径
+ENV HOME=/root \
+    FASTEMBED_CACHE_PATH=/root/.cache/fastembed
+RUN mkdir -p /root/.cache/fastembed && \
+    /opt/venv/bin/python -c "\
+import os; \
+os.environ['FASTEMBED_CACHE_PATH'] = '/root/.cache/fastembed'; \
+from fastembed import SparseTextEmbedding; \
+m = SparseTextEmbedding('Qdrant/bm25'); \
+print('BM25 model downloaded to:', os.environ.get('FASTEMBED_CACHE_PATH')); \
+" && ls -la /root/.cache/fastembed/
+
 # ============================================
 # 第二阶段：运行阶段（仅包含运行时依赖）
 # ============================================
@@ -53,6 +66,9 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 
 # 从构建阶段复制虚拟环境（不包含构建工具）
 COPY --from=builder /opt/venv /opt/venv
+
+# 从构建阶段复制预下载的 BM25 模型缓存
+COPY --from=builder /root/.cache/fastembed /root/.cache/fastembed
 
 # 复制启动脚本和配置文件
 COPY entrypoint.sh /app/entrypoint.sh

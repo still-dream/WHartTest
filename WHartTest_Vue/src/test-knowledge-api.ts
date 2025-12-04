@@ -176,7 +176,8 @@ export function validateResponseFormat() {
     },
     dependencies: {
       langchain_huggingface: true,
-      langchain_chroma: true,
+      langchain_qdrant: true,
+      fastembed: true,
       sentence_transformers: true,
       torch: true
     },

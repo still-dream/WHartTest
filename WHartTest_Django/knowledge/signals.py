@@ -1,6 +1,6 @@
 """
 知识库信号处理器
-确保数据库与 ChromaDB 的数据一致性
+确保数据库与 Qdrant 的数据一致性
 """
 import os
 import shutil
@@ -16,19 +16,18 @@ logger = logging.getLogger(__name__)
 def cleanup_knowledge_base(sender, instance, **kwargs):
     """
     知识库删除前清理所有相关数据
-    确保 ChromaDB Collection 与数据库记录同步删除
+    确保 Qdrant Collection 与数据库记录同步删除
     """
     try:
         from .services import VectorStoreManager
         
         logger.info(f"🗑️  开始清理知识库: {instance.name} (ID: {instance.id})")
         
-        # 1. 清理向量存储缓存
+        # 1. 清理向量存储缓存（会同时删除 Qdrant 集合）
         VectorStoreManager.clear_cache(instance.id)
-        logger.info("  ✅ 已清理内存缓存")
+        logger.info("  ✅ 已清理向量存储缓存和 Qdrant 集合")
         
-        # 2. 删除 ChromaDB 持久化目录
-        # ChromaDB 的数据存储在 knowledge_bases/{kb_id}/chroma_db/
+        # 2. 删除知识库文件目录
         kb_directory = os.path.join(
             settings.MEDIA_ROOT,
             'knowledge_bases',
@@ -37,7 +36,7 @@ def cleanup_knowledge_base(sender, instance, **kwargs):
         
         if os.path.exists(kb_directory):
             shutil.rmtree(kb_directory)
-            logger.info(f"  ✅ 已删除向量数据目录: {kb_directory}")
+            logger.info(f"  ✅ 已删除文件目录: {kb_directory}")
         else:
             logger.info(f"  ⚠️  目录不存在,跳过: {kb_directory}")
         
@@ -45,8 +44,6 @@ def cleanup_knowledge_base(sender, instance, **kwargs):
         
     except Exception as e:
         logger.error(f"❌ 清理知识库失败: {e}", exc_info=True)
-        # 不抛出异常,允许数据库删除操作继续执行
-        # 避免因清理失败而阻止数据库记录删除
 
 
 @receiver(post_delete, sender='knowledge.Document')

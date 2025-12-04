@@ -130,9 +130,10 @@ WHartTest 后端基于 Django REST Framework 构建，采用 Python 生态的现
 ### LangChain 社区组件
 - **langchain-community** (0.3.24): 社区扩展
 - **langchain-text-splitters** (0.3.8): 文本分割器
-- **langchain-chroma** (0.2.4): ChromaDB 集成
-- **langchain-huggingface** (0.2.0): HuggingFace 嵌入模型集成
-- **开源协议**: MIT License
+- **langchain-qdrant** (0.2.1): Qdrant 向量数据库集成
+- **qdrant-client** (1.11.3): Qdrant 客户端
+- **fastembed** (>=0.7.0): BM25 稀疏向量编码（混合检索）
+- **开源协议**: MIT/Apache 2.0 License
 
 ## 文档处理
 

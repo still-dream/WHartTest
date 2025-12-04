@@ -19,6 +19,6 @@ WHartTest 平台采用现代化的前后端分离架构，旨在实现高度的�
 
 ## 2. 后端架构
 
-后端是一个基于 **Django** 和 **Django REST Framework** 构建的强大 API 服务。它不仅提供了标准的 CRUD 功能，还深度集成了 **LangChain** 和 **LangGraph** 作为 AI 引擎，利用 **ChromaDB** 和 **HuggingFace 模型** 构建了先进的知识库检索能力 (RAG)。
+后端是一个基于 **Django** 和 **Django REST Framework** 构建的强大 API 服务。它不仅提供了标准的 CRUD 功能，还深度集成了 **LangChain** 和 **LangGraph** 作为 AI 引擎，利用 **Qdrant** 向量数据库（支持BM25混合检索）和多种嵌入模型构建了先进的知识库检索能力 (RAG)。
 
 [**➡️ 查看详细后端架构**](./permission-system.md)

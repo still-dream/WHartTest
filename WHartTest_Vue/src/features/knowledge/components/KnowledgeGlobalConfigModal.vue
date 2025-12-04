@@ -251,57 +251,21 @@ const testEmbeddingService = async () => {
 
   testingConnection.value = true;
   try {
-    const testText = 'This is a test embedding request.';
-    let testUrl = '';
-    let requestBody: any = {};
-    let headers: Record<string, string> = { 'Content-Type': 'application/json' };
-
-    switch (formData.embedding_service) {
-      case 'openai':
-        testUrl = `${formData.api_base_url!.replace(/\/+$/, '')}/embeddings`;
-        headers['Authorization'] = `Bearer ${formData.api_key}`;
-        requestBody = { input: testText, model: formData.model_name };
-        break;
-      case 'azure_openai':
-        testUrl = `${formData.api_base_url!.replace(/\/+$/, '')}/openai/deployments/${formData.model_name}/embeddings?api-version=2024-02-15-preview`;
-        headers['api-key'] = formData.api_key!;
-        requestBody = { input: testText };
-        break;
-      case 'ollama':
-        testUrl = `${formData.api_base_url!.replace(/\/+$/, '')}/api/embeddings`;
-        requestBody = { model: formData.model_name, prompt: testText };
-        break;
-      case 'custom':
-        testUrl = formData.api_base_url!.replace(/\/+$/, '');
-        if (formData.api_key) headers['Authorization'] = `Bearer ${formData.api_key}`;
-        requestBody = { input: testText, model: formData.model_name };
-        break;
-    }
-
-    const response = await fetch(testUrl, {
-      method: 'POST',
-      headers,
-      body: JSON.stringify(requestBody),
-      signal: AbortSignal.timeout(30000)
+    // 通过后端代理测试，避免跨域问题
+    const result = await KnowledgeService.testEmbeddingConnection({
+      embedding_service: formData.embedding_service,
+      api_base_url: formData.api_base_url,
+      api_key: formData.api_key || '',
+      model_name: formData.model_name,
     });
-
-    if (response.ok) {
-      const data = await response.json();
-      let hasEmbedding = formData.embedding_service === 'ollama'
-        ? data.embedding && Array.isArray(data.embedding)
-        : data.data && Array.isArray(data.data) && data.data[0]?.embedding;
-      
-      if (hasEmbedding) {
-        Message.success('嵌入模型测试成功！服务运行正常');
-      } else {
-        Message.warning('服务响应成功但数据格式异常');
-      }
+    
+    if (result.success) {
+      Message.success(result.message || '嵌入模型测试成功！服务运行正常');
     } else {
-      const errorText = await response.text();
-      Message.error(`测试失败: HTTP ${response.status} - ${errorText}`);
+      Message.error(result.message || '测试失败');
     }
   } catch (error: any) {
-    Message.error(error.name === 'TimeoutError' ? '请求超时' : '无法连接到服务');
+    Message.error(error?.message || '无法连接到服务');
   } finally {
     testingConnection.value = false;
   }

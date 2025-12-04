@@ -5,7 +5,7 @@
 您的知识库系统已成功集成BGE-M3嵌入模型和LangChain，具备以下特性：
 
 - ✅ **BGE-M3多语言嵌入模型**: 支持中文+100多种语言，1024维向量
-- ✅ **ChromaDB向量存储**: 高性能本地向量数据库
+- ✅ **Qdrant向量存储**: 高性能向量数据库，支持BM25混合检索
 - ✅ **LangChain集成**: 标准化的文档处理和检索流程
 - ✅ **LangGraph对话系统**: 支持RAG增强的智能对话
 - ✅ **MCP工具集成**: 可与外部工具无缝协作
@@ -102,11 +102,12 @@ BGE-M3 (BAAI/bge-m3)
 
 ### 向量存储层
 ```
-ChromaDB
-├── 本地持久化存储
+Qdrant
+├── Docker 容器化部署
 ├── 按知识库隔离 (collection_name: kb_{id})
-├── 自动权限管理
-└── 相似度搜索优化
+├── 稠密向量 + BM25 稀疏向量
+├── RRF (Reciprocal Rank Fusion) 混合检索
+└── 高精度关键词+语义双重匹配
 ```
 
 ### 应用层
@@ -233,7 +234,7 @@ curl -X POST "http://localhost:8000/api/langgraph/chat/" \
 
 2. **依赖库缺失**
    ```bash
-   pip install langchain-huggingface langchain-chroma sentence-transformers
+   pip install langchain-qdrant qdrant-client fastembed
    ```
 
 3. **权限问题**

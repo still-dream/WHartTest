@@ -25,11 +25,12 @@ class KnowledgeGlobalConfig(models.Model):
         default='custom',
         help_text=_('选择嵌入服务提供商')
     )
-    api_base_url = models.URLField(
+    api_base_url = models.CharField(
         _('API基础URL'),
+        max_length=500,
         blank=True,
         null=True,
-        help_text=_('API服务的基础URL，如：https://api.openai.com/v1')
+        help_text=_('API服务的基础URL，如：https://api.openai.com/v1 或 http://bge-m3:11434')
     )
     api_key = models.CharField(
         _('API密钥'),

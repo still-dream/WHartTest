@@ -70,7 +70,7 @@ WhartTest 是一个基于 Django REST Framework 构建的AI驱动测试自动化
 - **数据库**: SQLite（开发）/ PostgreSQL（生产）
 - **认证**: JWT + API Key 双重认证
 - **AI引擎**: LangChain + LangGraph（测试用例生成核心）
-- **知识库引擎**: LangChain + ChromaDB + 多种嵌入服务（OpenAI/Azure/Ollama等）
+- **知识库引擎**: LangChain + Qdrant + 多种嵌入服务（OpenAI/Azure/Ollama等）
 - **MCP集成**: FastMCP + langchain-mcp-adapters（工具调用）
 - **API文档**: drf-spectacular (OpenAPI 3.0)
 - **环境变量管理**: python-dotenv
@@ -97,7 +97,8 @@ langchain-mcp-adapters
 
 # 知识库相关
 langchain-text-splitters
-langchain-chroma # ChromaDB向量数据库集成
+langchain-qdrant # Qdrant向量数据库集成
+fastembed # BM25稀疏向量（混合检索）
 # 注意：现使用CustomAPIEmbeddings通过API调用嵌入模型，无需以下本地模型依赖
 # langchain-huggingface # HuggingFace嵌入模型支持 (已弃用)
 # sentence-transformers # HuggingFace句子转换模型 (已弃用，约1GB+)

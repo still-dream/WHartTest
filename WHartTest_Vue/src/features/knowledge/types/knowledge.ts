@@ -317,7 +317,8 @@ export interface SystemStatusResponse {
   };
   dependencies: {
     langchain_huggingface: boolean;
-    langchain_chroma: boolean;
+    langchain_qdrant: boolean;
+    fastembed: boolean;
     sentence_transformers: boolean;
     torch: boolean;
   };

@@ -55,9 +55,13 @@ services:
       - CELERY_RESULT_BACKEND=redis://redis:6379/0
       # 内部API基础URL - 使用localhost因为在同一容器
       - DJANGO_BASE_URL=http://localhost:8000
+      # Qdrant向量数据库
+      - QDRANT_URL=http://qdrant:6333
     depends_on:
       redis:
         condition: service_healthy
+      qdrant:
+        condition: service_started
     networks:
       - wharttest-network
     restart: unless-stopped
@@ -169,6 +173,18 @@ services:
         limits:
           memory: 4G
 
+  # Qdrant 向量数据库 - 知识库检索
+  qdrant:
+    image: docker.m.daocloud.io/qdrant/qdrant:latest
+    container_name: wharttest-qdrant
+    ports:
+      - "8918:6333"  # REST API
+    volumes:
+      - qdrant-data:/qdrant/storage
+    networks:
+      - wharttest-network
+    restart: unless-stopped
+
 networks:
   wharttest-network:
     driver: bridge
@@ -178,5 +194,6 @@ volumes:
   redis-data:
   celery-beat-schedule:
   bge-m3-data:
+  qdrant-data:
     # db.sqlite3 和 media 改用本地目录挂载，不再需要 named volume
     # playwright-screenshots 改用本地目录挂载，不再需要 named volume

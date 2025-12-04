@@ -9,7 +9,7 @@
 #### 主要变更：
 - **知识库对象 (`KnowledgeBase`)**：
   - `project` 字段类型从 `string` 改为 `number`
-  - 移除了 `vector_store_type` 字段（系统只支持Chroma）
+  - 移除了 `vector_store_type` 字段（系统使用Qdrant）
 
 - **查询响应 (`QueryResponse`)**：
   - 移除了 `answer`、`retrieval_time`、`generation_time`、`total_time` 字段

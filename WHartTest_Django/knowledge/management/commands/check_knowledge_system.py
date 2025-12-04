@@ -105,11 +105,15 @@ class Command(BaseCommand):
         issues = []
         
         required_packages = {
-            'langchain_huggingface': 'LangChain HuggingFace集成',
-            'langchain_chroma': 'LangChain ChromaDB集成',
-            'sentence_transformers': 'SentenceTransformers库',
-            'torch': 'PyTorch深度学习框架',
-            'transformers': 'HuggingFace Transformers库'
+            'langchain_qdrant': 'LangChain Qdrant集成',
+            'qdrant_client': 'Qdrant客户端',
+            'fastembed': 'FastEmbed (BM25稀疏向量)',
+        }
+        
+        optional_packages = {
+            'langchain_huggingface': 'LangChain HuggingFace集成 (可选)',
+            'sentence_transformers': 'SentenceTransformers库 (可选)',
+            'torch': 'PyTorch深度学习框架 (可选)',
         }
         
         for package, description in required_packages.items():
@@ -219,18 +223,20 @@ class Command(BaseCommand):
                 kb_dirs = [d for d in kb_dir.iterdir() if d.is_dir()]
                 self.stdout.write(f'  📁 知识库目录数量: {len(kb_dirs)}')
                 
-                # 检查ChromaDB文件
-                for kb_path in kb_dirs:
-                    chroma_path = kb_path / 'chroma_db'
-                    if chroma_path.exists():
-                        sqlite_files = list(chroma_path.glob('*.sqlite3*'))
-                        if sqlite_files:
-                            self.stdout.write(f'     ✅ {kb_path.name}: {len(sqlite_files)} 个数据库文件')
-                        else:
-                            issue = f'知识库 {kb_path.name} 缺少ChromaDB文件'
-                            issues.append(issue)
-                            if self.verbose:
-                                self.stdout.write(f'     ⚠️  {issue}')
+                # 检查 Qdrant 连接
+                try:
+                    from qdrant_client import QdrantClient
+                    import os
+                    qdrant_url = os.environ.get('QDRANT_URL', 'http://localhost:8918')
+                    client = QdrantClient(url=qdrant_url)
+                    collections = client.get_collections().collections
+                    self.stdout.write(f'  🗄️  Qdrant 集合数量: {len(collections)}')
+                    for col in collections:
+                        self.stdout.write(f'     ✅ {col.name}')
+                except Exception as e:
+                    issue = f'Qdrant 连接失败: {e}'
+                    issues.append(issue)
+                    self.stdout.write(f'  ❌ {issue}')
             else:
                 self.stdout.write('  📁 知识库目录不存在')
                 

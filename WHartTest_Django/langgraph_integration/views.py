@@ -374,7 +374,7 @@ class ChatAPIView(APIView):
         # 知识库相关参数
         knowledge_base_id = request.data.get('knowledge_base_id')
         use_knowledge_base = request.data.get('use_knowledge_base', True)  # 默认启用知识库
-        similarity_threshold = request.data.get('similarity_threshold', 0.3)
+        similarity_threshold = request.data.get('similarity_threshold', 0.5)
         top_k = request.data.get('top_k', 5)
 
         # 提示词相关参数
@@ -1981,7 +1981,7 @@ class ChatStreamAPIView(View):
         # 知识库相关参数
         knowledge_base_id = body_data.get('knowledge_base_id')
         use_knowledge_base = body_data.get('use_knowledge_base', True)
-        similarity_threshold = body_data.get('similarity_threshold', 0.3)
+        similarity_threshold = body_data.get('similarity_threshold', 0.5)
         top_k = body_data.get('top_k', 5)
 
         # 提示词相关参数
