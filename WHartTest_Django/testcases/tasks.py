@@ -265,7 +265,7 @@ def _save_result(result: TestCaseResult):
     result.save()
 
 async def _execute_testcase_via_chat_api(result: TestCaseResult):
-    """通过对话API执行测试用例"""
+    """通过 Agent Loop SSE API 执行测试用例"""
     # 使用thread_sensitive=False避免死锁
     execution = await sync_to_async(lambda: result.execution, thread_sensitive=False)()
     testcase = await sync_to_async(lambda: result.testcase, thread_sensitive=False)()
@@ -298,10 +298,10 @@ async def _execute_testcase_via_chat_api(result: TestCaseResult):
             steps_text += f"{step.step_number}. {step.description}\n   预期结果: {step.expected_result}\n"
         
         # 4. 格式化提示词，填充测试用例信息
-        # 使用 Template.safe_substitute 支持 $variable 格式的变量替换
         from string import Template
         prompt_template = Template(prompt.content)
         formatted_prompt = prompt_template.safe_substitute(
+            project_id=project.id,
             testcase_id=testcase.id,
             testcase_name=testcase.name,
             precondition=testcase.precondition or "无",
@@ -311,12 +311,10 @@ async def _execute_testcase_via_chat_api(result: TestCaseResult):
         logger.info(f"格式化后的提示词长度: {len(formatted_prompt)} 字符")
         execution_log.append(f"✓ 准备执行 {len(steps)} 个测试步骤")
         
-        # 5. 构造对话API请求
-        # 使用内部URL（假设在同一个Django项目中）
-        api_url = f"{settings.BASE_URL}/api/lg/chat/" if hasattr(settings, 'BASE_URL') else "http://localhost:8000/api/lg/chat/"
+        # 5. 构造 Agent Loop API 请求
+        api_url = f"{settings.BASE_URL}/api/orchestrator/agent-loop/" if hasattr(settings, 'BASE_URL') else "http://localhost:8000/api/orchestrator/agent-loop/"
         
-        # 生成唯一的会话ID用于此次测试执行
-        # 关键修复：添加result.id和uuid确保每个并发执行的用例使用独立的MCP浏览器会话
+        # 生成唯一的会话ID
         session_id = f"test_exec_{execution.id}_{testcase.id}_{result.id}_{uuid.uuid4().hex[:8]}"
         
         request_data = {
@@ -324,76 +322,118 @@ async def _execute_testcase_via_chat_api(result: TestCaseResult):
             "session_id": session_id,
             "project_id": str(project.id),
             "prompt_id": str(prompt.id),
-            "use_knowledge_base": False  # 测试执行不需要知识库
+            "use_knowledge_base": False
         }
         
-        logger.info(f"调用对话API: {api_url}")
+        logger.info(f"调用 Agent Loop API: {api_url}")
         logger.info(f"会话ID: {session_id}")
         execution_log.append(f"✓ 开始与AI测试引擎通信...")
         
-        # 6. 生成认证令牌并调用对话API
-        async with httpx.AsyncClient(timeout=300.0) as client:  # 5分钟超时
-            # 为执行用户生成JWT令牌
-            def generate_token():
-                refresh = RefreshToken.for_user(executor)
-                return str(refresh.access_token)
-            
-            access_token = await sync_to_async(generate_token)()
-            
-            headers = {
-                'Authorization': f'Bearer {access_token}',
-                'Content-Type': 'application/json'
-            }
-            
-            response = await client.post(
+        # 6. 生成认证令牌并调用 Agent Loop SSE API
+        def generate_token():
+            refresh = RefreshToken.for_user(executor)
+            return str(refresh.access_token)
+        
+        access_token = await sync_to_async(generate_token)()
+        
+        headers = {
+            'Authorization': f'Bearer {access_token}',
+            'Content-Type': 'application/json',
+            'Accept': 'text/event-stream'
+        }
+        
+        # 收集 SSE 流式响应
+        final_response = ""
+        step_count = 0
+        
+        async with httpx.AsyncClient(timeout=300.0) as client:
+            async with client.stream(
+                'POST',
                 api_url,
                 json=request_data,
                 headers=headers
-            )
-            
-            response.raise_for_status()
-            result_data = response.json()
+            ) as response:
+                response.raise_for_status()
+                
+                async for line in response.aiter_lines():
+                    if not line or not line.startswith('data: '):
+                        continue
+                    
+                    try:
+                        data_str = line[6:]  # 去掉 'data: ' 前缀
+                        if data_str == '[DONE]':
+                            break
+                        
+                        data = json.loads(data_str)
+                        event_type = data.get('type', '')
+                        
+                        if event_type == 'step_start':
+                            step_count += 1
+                            execution_log.append(f"\n🔄 AI执行步骤 {step_count}")
+                        
+                        elif event_type == 'content':
+                            content = data.get('content', '')
+                            if content:
+                                final_response += content
+                        
+                        elif event_type == 'message':
+                            # Agent Loop 的 message 事件包含 AI 的响应（思考过程）
+                            msg_data = data.get('data', '')
+                            if msg_data:
+                                final_response += msg_data
+                                # 显示 AI 的说明（前150字符）
+                                short_msg = msg_data[:150].replace('\n', ' ').strip()
+                                if len(msg_data) > 150:
+                                    short_msg += '...'
+                                if short_msg:
+                                    execution_log.append(f"   💬 {short_msg}")
+                        
+                        elif event_type == 'tool_call':
+                            tool_name = data.get('name', '')
+                            execution_log.append(f"   🔧 {tool_name}")
+                        
+                        elif event_type == 'tool_result':
+                            pass  # 不显示工具结果
+                        
+                        elif event_type == 'step_end' or event_type == 'step_complete':
+                            pass  # 步骤结束信号，不需要输出
+                        
+                        elif event_type == 'final':
+                            final_response = data.get('content', final_response)
+                        
+                        elif event_type == 'error':
+                            error_msg = data.get('message', '未知错误')
+                            execution_log.append(f"   ❌ 错误: {error_msg}")
+                            raise Exception(error_msg)
+                    
+                    except json.JSONDecodeError:
+                        continue
         
-        # 7. 解析对话API返回结果
-        if result_data.get('status') != 'success':
-            raise Exception(f"对话API返回错误: {result_data.get('message', '未知错误')}")
+        logger.info(f"Agent Loop 执行完成，共 {step_count} 个步骤")
         
-        data = result_data.get('data', {})
-        llm_response = data.get('llm_response', '')
-        conversation_flow = data.get('conversation_flow', [])
-        
-        logger.info(f"收到AI响应，对话流程包含 {len(conversation_flow)} 条消息")
-        execution_log.append(f"✓ 收到AI测试引擎响应")
-        
-        # 8. 尝试从响应中提取JSON格式的测试结果
+        # 7. 尝试从最终响应中提取JSON格式的测试结果
         test_result_json = None
-        
-        # 从llm_response中尝试提取JSON
         try:
-            # 寻找JSON代码块
-            if '```json' in llm_response:
-                json_start = llm_response.find('```json') + 7
-                json_end = llm_response.find('```', json_start)
+            if '```json' in final_response:
+                json_start = final_response.find('```json') + 7
+                json_end = final_response.find('```', json_start)
                 if json_end > json_start:
-                    json_str = llm_response[json_start:json_end].strip()
+                    json_str = final_response[json_start:json_end].strip()
                     test_result_json = json.loads(json_str)
-            elif '```' in llm_response:
-                # 尝试纯代码块
-                json_start = llm_response.find('```') + 3
-                json_end = llm_response.find('```', json_start)
+            elif '```' in final_response:
+                json_start = final_response.find('```') + 3
+                json_end = final_response.find('```', json_start)
                 if json_end > json_start:
-                    json_str = llm_response[json_start:json_end].strip()
+                    json_str = final_response[json_start:json_end].strip()
                     test_result_json = json.loads(json_str)
             else:
-                # 尝试直接解析整个响应
-                test_result_json = json.loads(llm_response)
+                test_result_json = json.loads(final_response)
         except json.JSONDecodeError as e:
             logger.warning(f"无法从AI响应中提取JSON: {e}")
-            execution_log.append(f"⚠ AI响应格式不完全符合预期，使用对话流程解析")
+            execution_log.append(f"⚠ AI响应格式不符合预期，分析响应内容")
         
-        # 9. 根据解析结果更新TestCaseResult
+        # 8. 根据解析结果更新TestCaseResult
         if test_result_json:
-            # 有结构化的JSON结果
             final_status = test_result_json.get('status', 'fail')
             summary = test_result_json.get('summary', '')
             step_results = test_result_json.get('steps', [])
@@ -405,12 +445,10 @@ async def _execute_testcase_via_chat_api(result: TestCaseResult):
             execution_log.append(f"总结: {summary}")
             execution_log.append(f"{'='*50}\n")
             
-            # 记录每个步骤的执行情况
             for step_result in step_results:
                 step_num = step_result.get('step_number', 0)
                 step_desc = step_result.get('description', '')
                 step_status = step_result.get('status', 'unknown')
-                step_screenshot = step_result.get('screenshot')
                 step_error = step_result.get('error')
                 
                 status_icon = "✓" if step_status == 'pass' else "✗"
@@ -418,54 +456,35 @@ async def _execute_testcase_via_chat_api(result: TestCaseResult):
                 
                 if step_error:
                     execution_log.append(f"  错误: {step_error}")
-                
-                # 只保存消息文本，不保存URL（URL从testcase.screenshots获取）
-                if step_screenshot:
-                    screenshots.append(step_screenshot)
-            
-            # 获取测试用例的实际截图URL列表
-            try:
-                testcase_screenshots = await sync_to_async(
-                    lambda: list(testcase.screenshots.filter(
-                        step_number__isnull=False
-                    ).order_by('step_number').values_list('screenshot', flat=True))
-                )()
-                
-                if testcase_screenshots:
-                    # 使用实际的截图URL替换screenshots字段
-                    screenshots = [f"{settings.MEDIA_URL}{url}" if not url.startswith('http') else url
-                                 for url in testcase_screenshots]
-                    logger.info(f"从测试用例获取到 {len(screenshots)} 个截图URL")
-            except Exception as e:
-                logger.warning(f"获取测试用例截图失败: {e}")
         else:
-            # 没有结构化JSON，从对话流程推断结果
-            # 假设如果AI没有明确报告错误，则视为通过
-            has_error = any('error' in msg.get('content', '').lower() or 'fail' in msg.get('content', '').lower()
-                          for msg in conversation_flow if msg.get('type') == 'ai')
-            
+            # 没有结构化JSON，分析响应内容判断结果
+            has_error = 'error' in final_response.lower() or 'fail' in final_response.lower() or '失败' in final_response
             result.status = 'fail' if has_error else 'pass'
             
             execution_log.append(f"\n{'='*50}")
             execution_log.append(f"测试完成 - 状态: {'失败' if has_error else '通过'}")
             execution_log.append(f"{'='*50}\n")
-            
-            # 记录对话流程
-            for msg in conversation_flow:
-                msg_type = msg.get('type', 'unknown')
-                content = msg.get('content', '')
-                
-                if msg_type == 'ai':
-                    execution_log.append(f"AI: {content[:200]}...")
-                elif msg_type == 'tool':
-                    execution_log.append(f"工具调用: {content[:100]}...")
         
-        # 如果所有步骤都成功，设置为通过状态
+        # 获取测试用例的截图
+        try:
+            testcase_screenshots = await sync_to_async(
+                lambda: list(testcase.screenshots.filter(
+                    step_number__isnull=False
+                ).order_by('step_number').values_list('screenshot', flat=True))
+            )()
+            
+            if testcase_screenshots:
+                screenshots = [f"{settings.MEDIA_URL}{url}" if not url.startswith('http') else url
+                             for url in testcase_screenshots]
+                logger.info(f"从测试用例获取到 {len(screenshots)} 个截图URL")
+        except Exception as e:
+            logger.warning(f"获取测试用例截图失败: {e}")
+        
         if result.status == 'running':
             result.status = 'pass'
             execution_log.append("\n✓ 所有步骤执行完成")
         
-        # 【关键修复】执行完成后清理MCP会话，释放浏览器资源
+        # 清理MCP会话
         try:
             from mcp_tools.persistent_client import mcp_session_manager
             await mcp_session_manager.cleanup_user_session(
@@ -479,7 +498,7 @@ async def _execute_testcase_via_chat_api(result: TestCaseResult):
             logger.warning(f"清理MCP会话失败: {e}")
         
     except httpx.HTTPError as e:
-        error_msg = f"调用对话API失败: {str(e)}"
+        error_msg = f"调用 Agent Loop API 失败: {str(e)}"
         execution_log.append(f"\n✗ {error_msg}")
         logger.error(error_msg, exc_info=True)
         raise Exception(error_msg)

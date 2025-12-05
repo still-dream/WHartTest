@@ -93,9 +93,8 @@ class AgentLoopStreamAPIView(View):
         """
         保存对话历史到 chat_history.sqlite
         
-        messages 参数应包含本轮的用户消息、每个 Agent Loop 步骤的
-        推理与工具摘要，与 ChatStreamAPIView 使用相同的 checkpointer
-        格式，确保 ChatHistoryAPIView 能正确读取历史记录。
+        messages 参数是本轮完整的消息列表（包含之前步骤的消息），
+        直接覆盖保存，避免重复追加。
         """
         if not messages:
             logger.warning("AgentLoopStreamAPI: No new messages to persist")
@@ -113,23 +112,19 @@ class AgentLoopStreamAPIView(View):
                 }
             }
             
-            # 获取现有的 checkpoint（如果有）
-            existing_messages = []
+            # 获取现有 checkpoint 的 channel_versions（用于计算下一个版本）
             current_channel_versions = {}
             try:
                 checkpoint_tuple = await checkpointer.aget(config)
                 if checkpoint_tuple:
                     checkpoint_dict = checkpoint_tuple.checkpoint if hasattr(checkpoint_tuple, 'checkpoint') else checkpoint_tuple
                     if checkpoint_dict and isinstance(checkpoint_dict, dict):
-                        channel_values = checkpoint_dict.get("channel_values", {})
-                        existing_messages = channel_values.get("messages", [])
                         current_channel_versions = checkpoint_dict.get("channel_versions", {})
-                        logger.info(f"AgentLoopStreamAPI: Found {len(existing_messages)} existing messages")
             except Exception as e:
                 logger.warning(f"AgentLoopStreamAPI: Could not load existing checkpoint: {e}")
             
-            # 添加新消息
-            all_messages = list(existing_messages) + list(messages)
+            # 直接使用传入的 messages 作为完整消息列表（不再追加）
+            all_messages = list(messages)
             
             # 计算新的 channel 版本
             current_messages_version = current_channel_versions.get("messages")
@@ -176,7 +171,7 @@ class AgentLoopStreamAPIView(View):
                 new_channel_versions
             )
             
-            logger.info(f"AgentLoopStreamAPI: Saved {len(messages)} new messages to checkpoint, total: {len(all_messages)}")
+            logger.info(f"AgentLoopStreamAPI: Saved checkpoint with {len(all_messages)} messages")
 
     async def _load_conversation_summary(
         self,
@@ -429,9 +424,25 @@ class AgentLoopStreamAPIView(View):
         image_base64: Optional[str] = None,
     ):
         """创建 SSE 流式生成器"""
-        # 用于收集所有消息的列表
+        # 用于收集所有消息的列表（会先加载历史消息）
         conversation_messages: List[AnyMessage] = []
         session_created = False
+        
+        # 先加载历史消息（用于续接会话时避免重复）
+        thread_id = f"{request.user.id}_{project_id}_{session_id}"
+        try:
+            async with get_async_checkpointer() as checkpointer:
+                config = {"configurable": {"thread_id": thread_id, "checkpoint_ns": ""}}
+                checkpoint_tuple = await checkpointer.aget(config)
+                if checkpoint_tuple:
+                    checkpoint_dict = checkpoint_tuple.checkpoint if hasattr(checkpoint_tuple, 'checkpoint') else checkpoint_tuple
+                    if checkpoint_dict and isinstance(checkpoint_dict, dict):
+                        existing_messages = checkpoint_dict.get("channel_values", {}).get("messages", [])
+                        if existing_messages:
+                            conversation_messages = list(existing_messages)
+                            logger.info(f"AgentLoopStreamAPI: Loaded {len(existing_messages)} existing messages for continuation")
+        except Exception as e:
+            logger.warning(f"AgentLoopStreamAPI: Could not load existing messages: {e}")
         
         try:
             # 1. 获取 LLM 配置

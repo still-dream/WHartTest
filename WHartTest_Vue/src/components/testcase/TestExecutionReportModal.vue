@@ -102,7 +102,7 @@
       </a-descriptions>
 
       <a-divider>执行日志</a-divider>
-      <pre class="execution-log">{{ getExecutionLog(selectedResult.testcase_id) }}</pre>
+      <div class="execution-log-container" v-html="formatExecutionLog(getExecutionLog(selectedResult.testcase_id))"></div>
 
       <a-divider>执行截图</a-divider>
       <div v-if="selectedResult.screenshots && selectedResult.screenshots.length > 0">
@@ -146,8 +146,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed, watch, nextTick } from 'vue';
-import { Message } from '@arco-design/web-vue';
+import { ref, computed, watch } from 'vue';
 import { IconCalendar, IconClockCircle, IconLeft, IconRight } from '@arco-design/web-vue/es/icon';
 import {
   getTestExecutionReport,
@@ -156,7 +155,6 @@ import {
   type TestCaseResult,
 } from '@/services/testExecutionService';
 import { formatDateTime, formatDuration } from '@/utils/formatters';
-import { API_BASE_URL } from '@/config/api';
 
 // Types
 type ReportData = NonNullable<TestReportResponse['data']>;
@@ -182,7 +180,6 @@ const report = ref<ReportData | null>(null);
 const fullResults = ref<TestCaseResult[]>([]);
 const detailDrawerVisible = ref(false);
 const selectedResult = ref<ReportResult | null>(null);
-const carouselRef = ref<any>(null);
 
 const modalVisible = computed({
   get: () => props.visible,
@@ -242,13 +239,6 @@ const getExecutionLog = (testcaseId: number) => {
   return result?.execution_log || '无执行日志';
 };
 
-const getFullScreenshotUrl = (relativePath: string) => {
-  if (!relativePath) return '';
-  // 假设API_BASE_URL是http://localhost:8000/api, 我们需要http://localhost:8000
-  const baseUrl = API_BASE_URL.replace('/api', '');
-  return `${baseUrl}/media/${relativePath}`;
-};
-
 const handleClose = () => {
   modalVisible.value = false;
 };
@@ -269,6 +259,126 @@ const getStatusText = (status: string) => {
     cancelled: '已取消', error: '错误', skip: '跳过'
   };
   return texts[status] || status;
+};
+
+const formatExecutionLog = (log: string): string => {
+  if (!log || log === '无执行日志') {
+    return '<div class="log-empty">无执行日志</div>';
+  }
+
+  const lines = log.split('\n');
+  let html = '<div class="log-content">';
+  let inResultSection = false;
+  let resultSectionHtml = '';
+  let inAiSection = false;
+  let aiSectionHtml = '';
+  let aiStepCount = 0;
+
+  const closeAiSection = () => {
+    if (inAiSection && aiSectionHtml) {
+      html += `<details class="log-ai-section">
+        <summary class="log-ai-header">🤖 AI 执行过程（共 ${aiStepCount} 个步骤）</summary>
+        <div class="log-ai-content">${aiSectionHtml}</div>
+      </details>`;
+      aiSectionHtml = '';
+      aiStepCount = 0;
+      inAiSection = false;
+    }
+  };
+
+  for (const line of lines) {
+    const trimmedLine = line.trim();
+
+    // 检测测试结果分隔线开始 - 结束AI区块
+    if (trimmedLine.startsWith('==') && trimmedLine.endsWith('==')) {
+      closeAiSection();
+      if (!inResultSection) {
+        inResultSection = true;
+        resultSectionHtml = '<div class="log-result-section">';
+      } else {
+        inResultSection = false;
+        resultSectionHtml += '</div>';
+        html += resultSectionHtml;
+        resultSectionHtml = '';
+      }
+      continue;
+    }
+
+    // 测试结果部分的特殊处理
+    if (inResultSection) {
+      if (trimmedLine.startsWith('测试结果:')) {
+        const status = trimmedLine.replace('测试结果:', '').trim();
+        const isPass = status.toUpperCase() === 'PASS';
+        resultSectionHtml += `<div class="log-result-status ${isPass ? 'pass' : 'fail'}">
+          <span class="status-icon">${isPass ? '✓' : '✗'}</span>
+          <span class="status-text">测试结果: ${status}</span>
+        </div>`;
+      } else if (trimmedLine.startsWith('总结:')) {
+        resultSectionHtml += `<div class="log-result-summary">${escapeHtml(trimmedLine)}</div>`;
+      } else if (trimmedLine.startsWith('测试完成')) {
+        const isPass = trimmedLine.includes('通过');
+        resultSectionHtml += `<div class="log-result-status ${isPass ? 'pass' : 'fail'}">
+          <span class="status-icon">${isPass ? '✓' : '✗'}</span>
+          <span class="status-text">${escapeHtml(trimmedLine)}</span>
+        </div>`;
+      } else if (trimmedLine) {
+        resultSectionHtml += `<div class="log-result-line">${escapeHtml(trimmedLine)}</div>`;
+      }
+      continue;
+    }
+
+    // AI执行步骤开始
+    if (trimmedLine.startsWith('🔄')) {
+      if (!inAiSection) {
+        inAiSection = true;
+      }
+      aiStepCount++;
+      aiSectionHtml += `<div class="log-line step">${escapeHtml(trimmedLine)}</div>`;
+      continue;
+    }
+
+    // AI区块内的子内容
+    if (inAiSection) {
+      if (trimmedLine.startsWith('🔧')) {
+        aiSectionHtml += `<div class="log-line tool">${escapeHtml(trimmedLine)}</div>`;
+      } else if (trimmedLine.startsWith('💬')) {
+        aiSectionHtml += `<div class="log-line message">${escapeHtml(trimmedLine)}</div>`;
+      } else if (trimmedLine.startsWith('❌')) {
+        aiSectionHtml += `<div class="log-line error">${escapeHtml(trimmedLine)}</div>`;
+      } else if (trimmedLine) {
+        aiSectionHtml += `<div class="log-line">${escapeHtml(trimmedLine)}</div>`;
+      }
+      continue;
+    }
+
+    // 普通日志行处理
+    if (!trimmedLine) {
+      html += '<div class="log-line empty"></div>';
+    } else if (trimmedLine.startsWith('✓')) {
+      html += `<div class="log-line success">${escapeHtml(trimmedLine)}</div>`;
+    } else if (trimmedLine.startsWith('✗') || trimmedLine.startsWith('❌')) {
+      html += `<div class="log-line error">${escapeHtml(trimmedLine)}</div>`;
+    } else if (trimmedLine.startsWith('⚠')) {
+      html += `<div class="log-line warning">${escapeHtml(trimmedLine)}</div>`;
+    } else if (trimmedLine.startsWith('[步骤')) {
+      const isPass = trimmedLine.includes('✓');
+      html += `<div class="log-line step-result ${isPass ? 'pass' : 'fail'}">${escapeHtml(trimmedLine)}</div>`;
+    } else if (trimmedLine.startsWith('  错误:')) {
+      html += `<div class="log-line step-error">${escapeHtml(trimmedLine)}</div>`;
+    } else {
+      html += `<div class="log-line">${escapeHtml(trimmedLine)}</div>`;
+    }
+  }
+
+  closeAiSection();
+  html += '</div>';
+  return html;
+};
+
+const escapeHtml = (text: string): string => {
+  const div = document.createElement('div');
+  div.textContent = text;
+  return div.innerHTML;
 };
 
 const currentSlideIndex = ref(0);
@@ -323,7 +433,183 @@ watch(
 .statistics-grid { display: grid; grid-template-columns: repeat(5, 1fr); gap: 16px; margin-bottom: 24px; }
 .stat-card { text-align: center; }
 .results-table { margin-top: 16px; }
-.error-message, .execution-log { white-space: pre-wrap; background-color: var(--color-fill-2); padding: 8px; border-radius: 4px; font-family: monospace; }
+.error-message { white-space: pre-wrap; background-color: var(--color-fill-2); padding: 8px; border-radius: 4px; font-family: monospace; }
+
+/* 执行日志样式 */
+.execution-log-container {
+  background-color: var(--color-fill-1);
+  border-radius: 8px;
+  padding: 16px;
+  font-family: 'Consolas', 'Monaco', monospace;
+  font-size: 13px;
+  line-height: 1.6;
+  max-height: 400px;
+  overflow-y: auto;
+}
+
+.execution-log-container :deep(.log-empty) {
+  color: var(--color-text-3);
+  text-align: center;
+  padding: 20px;
+}
+
+.execution-log-container :deep(.log-content) {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+/* AI执行过程整体折叠区块 */
+.execution-log-container :deep(.log-ai-section) {
+  margin: 8px 0;
+  border: 1px solid rgba(22, 93, 255, 0.2);
+  border-radius: 6px;
+  background-color: rgba(22, 93, 255, 0.02);
+}
+
+.execution-log-container :deep(.log-ai-header) {
+  padding: 10px 12px;
+  cursor: pointer;
+  color: #165dff;
+  font-weight: 600;
+  user-select: none;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.execution-log-container :deep(.log-ai-header:hover) {
+  background-color: rgba(22, 93, 255, 0.08);
+}
+
+.execution-log-container :deep(.log-ai-header::marker) {
+  color: #165dff;
+}
+
+.execution-log-container :deep(.log-ai-content) {
+  padding: 8px 12px 12px 16px;
+  border-top: 1px solid rgba(22, 93, 255, 0.1);
+  max-height: 300px;
+  overflow-y: auto;
+}
+
+.execution-log-container :deep(.log-line.step) {
+  color: #165dff;
+  font-weight: 600;
+  margin-top: 8px;
+  padding: 6px 8px;
+  background-color: rgba(22, 93, 255, 0.06);
+  border-radius: 4px;
+}
+
+.execution-log-container :deep(.log-line) {
+  padding: 4px 8px;
+  border-radius: 4px;
+  transition: background-color 0.2s;
+}
+
+.execution-log-container :deep(.log-line:hover) {
+  background-color: var(--color-fill-2);
+}
+
+.execution-log-container :deep(.log-line.empty) {
+  height: 8px;
+}
+
+.execution-log-container :deep(.log-line.success) {
+  color: #00b42a;
+}
+
+.execution-log-container :deep(.log-line.error) {
+  color: #f53f3f;
+}
+
+.execution-log-container :deep(.log-line.warning) {
+  color: #ff7d00;
+}
+
+.execution-log-container :deep(.log-line.tool) {
+  color: #722ed1;
+  padding-left: 8px;
+}
+
+.execution-log-container :deep(.log-line.message) {
+  color: var(--color-text-2);
+  padding-left: 8px;
+  font-style: italic;
+}
+
+.execution-log-container :deep(.log-line.step-result) {
+  padding: 6px 12px;
+  margin: 4px 0;
+  border-radius: 6px;
+  font-weight: 500;
+}
+
+.execution-log-container :deep(.log-line.step-result.pass) {
+  background-color: rgba(0, 180, 42, 0.1);
+  color: #00b42a;
+  border-left: 3px solid #00b42a;
+}
+
+.execution-log-container :deep(.log-line.step-result.fail) {
+  background-color: rgba(245, 63, 63, 0.1);
+  color: #f53f3f;
+  border-left: 3px solid #f53f3f;
+}
+
+.execution-log-container :deep(.log-line.step-error) {
+  color: #f53f3f;
+  padding-left: 32px;
+  font-size: 12px;
+}
+
+/* 测试结果区块样式 */
+.execution-log-container :deep(.log-result-section) {
+  margin: 16px 0;
+  padding: 16px;
+  border-radius: 8px;
+  background: linear-gradient(135deg, var(--color-fill-2) 0%, var(--color-fill-3) 100%);
+  border: 1px solid var(--color-border);
+}
+
+.execution-log-container :deep(.log-result-status) {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 12px 16px;
+  border-radius: 8px;
+  font-size: 16px;
+  font-weight: 600;
+  margin-bottom: 12px;
+}
+
+.execution-log-container :deep(.log-result-status.pass) {
+  background: linear-gradient(135deg, rgba(0, 180, 42, 0.15) 0%, rgba(0, 180, 42, 0.08) 100%);
+  color: #00b42a;
+  border: 1px solid rgba(0, 180, 42, 0.3);
+}
+
+.execution-log-container :deep(.log-result-status.fail) {
+  background: linear-gradient(135deg, rgba(245, 63, 63, 0.15) 0%, rgba(245, 63, 63, 0.08) 100%);
+  color: #f53f3f;
+  border: 1px solid rgba(245, 63, 63, 0.3);
+}
+
+.execution-log-container :deep(.log-result-status .status-icon) {
+  font-size: 20px;
+}
+
+.execution-log-container :deep(.log-result-summary) {
+  color: var(--color-text-2);
+  padding: 8px 0;
+  line-height: 1.6;
+}
+
+.execution-log-container :deep(.log-result-line) {
+  color: var(--color-text-2);
+  padding: 4px 0;
+}
 .screenshot-count {
   margin-bottom: 12px;
   color: var(--color-text-2);

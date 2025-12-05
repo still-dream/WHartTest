@@ -829,8 +829,9 @@ const switchSession = async (id: string) => {
   messages.value = [];
 
   // 加载选定会话的历史记录
+  // 🔧 修复：静默处理没有项目的情况（项目加载完成后 watch 会自动重新加载）
   if (!projectStore.currentProjectId) {
-    Message.error('没有选择项目，无法加载会话历史');
+    console.log('⏳ 等待项目加载完成，暂不加载会话历史');
     return;
   }
 

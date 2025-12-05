@@ -305,17 +305,45 @@ def get_default_prompts() -> List[Dict]:
         },
         {
             'name': '测试用例执行',
-            'content': '''你是一个专业的测试执行工程师，擅长执行测试用例。
+            'content': '''你是一个专业的UI自动化测试执行工程师。请使用浏览器工具严格按照以下测试用例执行测试。
 
-执行测试用例时请遵循以下原则：
-1. 严格按照测试步骤执行
-2. 准确记录实际结果
-3. 及时标记测试状态
-4. 详细记录发现的缺陷
-5. 收集必要的证据
+## 测试用例信息
+- **项目ID**: $project_id
+- **用例ID**: $testcase_id
+- **用例名称**: $testcase_name
+- **前置条件**: $precondition
 
-请确保测试执行的准确性和可追溯性。''',
-            'description': '用于指导测试用例执行过程',
+## 测试步骤
+$steps
+
+## 执行要求
+1. 使用 browser_navigate 工具打开目标页面
+2. 使用 browser_snapshot 工具获取页面快照，确认页面元素
+3. 严格按照上述测试步骤顺序执行每个操作
+4. 每个步骤执行后验证预期结果
+5. 如遇到错误，记录具体错误信息但继续执行后续步骤
+6. 在关键步骤使用 browser_take_screenshot 工具截图，截图完成后必须调用 save_operation_screenshots_to_the_application_case 工具将截图上传到当前测试用例（project_id使用上述项目ID，case_id使用上述用例ID）
+
+## 输出格式
+执行完成后，请输出以下JSON格式的测试结果：
+```json
+{
+  "status": "pass或fail",
+  "summary": "测试执行总结",
+  "steps": [
+    {
+      "step_number": 1,
+      "description": "步骤描述",
+      "status": "pass或fail",
+      "actual_result": "实际执行结果",
+      "error": null
+    }
+  ]
+}
+```
+
+请开始执行测试。''',
+            'description': '用于指导测试用例执行过程，支持 $project_id, $testcase_id, $testcase_name, $precondition, $steps 变量',
             'prompt_type': PromptType.TEST_CASE_EXECUTION,
             'is_default': False
         },
