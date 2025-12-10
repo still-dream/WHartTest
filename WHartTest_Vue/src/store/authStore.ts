@@ -7,6 +7,7 @@ import {
 } from '@/services/authService';
 import { getUserPermissions } from '@/services/permissionService';
 import { useStorage } from '@vueuse/core';
+import { useProjectStore } from '@/store/projectStore';
 
 // 用户信息结构
 interface User {
@@ -159,6 +160,10 @@ export const useAuthStore = defineStore('auth', {
       localStorage.removeItem('auth-accessToken');
       localStorage.removeItem('auth-refreshToken');
       localStorage.removeItem('auth-userPermissions');
+      
+      // 清空项目选择器状态
+      const projectStore = useProjectStore();
+      projectStore.reset();
     },
     // 应用初始化时调用此方法来同步 localStorage 的状态到 Pinia state
     checkAuthStatus() {

@@ -103,6 +103,20 @@ export const useProjectStore = defineStore('project', () => {
     }
   };
   
+  // 重置状态（用于用户退出时清空）
+  const reset = () => {
+    currentProject.value = null;
+    projectList.value = [];
+    error.value = null;
+    loading.value = false;
+    // 清除 localStorage 中保存的项目ID
+    try {
+      localStorage.removeItem(PROJECT_STORAGE_KEY);
+    } catch (err) {
+      console.warn('清除保存的项目ID失败:', err);
+    }
+  };
+  
   return {
     currentProject,
     currentProjectId,
@@ -112,6 +126,7 @@ export const useProjectStore = defineStore('project', () => {
     error,
     fetchProjects,
     setCurrentProject,
-    setCurrentProjectById
+    setCurrentProjectById,
+    reset
   };
 });
