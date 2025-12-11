@@ -5,12 +5,16 @@
     <a-card class="filter-card">
       <div class="filter-row">
         <a-space wrap>
+          <a-button type="primary" @click="openCreateModal">
+            <template #icon><icon-plus /></template>
+            新建脚本
+          </a-button>
           <a-select
             v-model="filterStatus"
             placeholder="脚本状态"
             allow-clear
             style="width: 150px"
-            @change="fetchScripts"
+            @change="handleFilterChange"
           >
             <a-option value="active">启用</a-option>
             <a-option value="draft">草稿</a-option>
@@ -21,17 +25,16 @@
             placeholder="来源"
             allow-clear
             style="width: 150px"
-            @change="fetchScripts"
+            @change="handleFilterChange"
           >
             <a-option value="ai_generated">AI 生成</a-option>
-            <a-option value="recorded">录制生成</a-option>
             <a-option value="manual">手动编写</a-option>
           </a-select>
           <a-input-search
             v-model="searchKeyword"
             placeholder="搜索脚本名称"
             style="width: 200px"
-            @search="fetchScripts"
+            @search="handleFilterChange"
           />
         </a-space>
         <a-button type="primary" @click="fetchScripts">
@@ -46,29 +49,30 @@
         :data="scripts"
         :loading="loading"
         :pagination="pagination"
+        :header-cell-style="{ textAlign: 'center' }"
         @page-change="handlePageChange"
       >
         <template #columns>
-          <a-table-column title="ID" data-index="id" :width="70" align="center" />
-          <a-table-column title="脚本名称" data-index="name" :width="250">
+          <a-table-column title="ID" data-index="id" :width="60" align="center" />
+          <a-table-column title="脚本名称" data-index="name" :width="180" align="center">
             <template #cell="{ record }">
               <a-link @click="showDetail(record)">{{ record.name }}</a-link>
             </template>
           </a-table-column>
-          <a-table-column title="关联用例" data-index="test_case_name" :width="200" />
-          <a-table-column title="类型" data-index="script_type" :width="120">
+          <a-table-column title="关联用例" data-index="test_case_name" :width="150" align="center" />
+          <a-table-column title="类型" data-index="script_type" :width="100" align="center">
             <template #cell="{ record }">
               <a-tag color="blue">{{ getScriptTypeLabel(record.script_type) }}</a-tag>
             </template>
           </a-table-column>
-          <a-table-column title="来源" data-index="source" :width="100">
+          <a-table-column title="来源" data-index="source" :width="100" align="center">
             <template #cell="{ record }">
               <a-tag :color="getSourceColor(record.source)">
                 {{ getSourceLabel(record.source) }}
               </a-tag>
             </template>
           </a-table-column>
-          <a-table-column title="状态" data-index="status" :width="80">
+          <a-table-column title="状态" data-index="status" :width="80" align="center">
             <template #cell="{ record }">
               <a-badge :status="getStatusBadge(record.status)" :text="getStatusLabel(record.status)" />
             </template>
@@ -76,7 +80,7 @@
           <a-table-column title="版本" data-index="version" :width="60" align="center">
             <template #cell="{ record }">v{{ record.version }}</template>
           </a-table-column>
-          <a-table-column title="最近执行" data-index="latest_status" :width="100">
+          <a-table-column title="最近执行" data-index="latest_status" :width="90" align="center">
             <template #cell="{ record }">
               <template v-if="record.latest_status">
                 <a-tag :color="getExecutionStatusColor(record.latest_status)">
@@ -86,41 +90,29 @@
               <span v-else class="text-gray">未执行</span>
             </template>
           </a-table-column>
-          <a-table-column title="创建时间" data-index="created_at" :width="160">
+          <a-table-column title="创建时间" data-index="created_at" :width="160" align="center">
             <template #cell="{ record }">
               {{ formatTime(record.created_at) }}
             </template>
           </a-table-column>
-          <a-table-column title="操作" :width="180" fixed="right">
+          <a-table-column title="操作" :width="200" fixed="right" align="center">
             <template #cell="{ record }">
               <a-space>
                 <a-button type="text" size="small" @click="showDetail(record)">
                   <icon-eye />
                 </a-button>
-                <a-dropdown trigger="hover">
-                  <a-button
-                    type="text"
-                    size="small"
-                    :loading="executingId === record.id"
-                  >
-                    <icon-play-arrow />
-                    <icon-down style="margin-left: 2px; font-size: 10px;" />
-                  </a-button>
-                  <template #content>
-                    <a-doption @click="executeScript(record, true, false)">
-                      <icon-eye-invisible style="margin-right: 6px;" />
-                      快速执行（无头）
-                    </a-doption>
-                    <a-doption @click="executeScript(record, true, true)">
-                      <icon-video-camera style="margin-right: 6px;" />
-                      录屏执行（无头+录屏）
-                    </a-doption>
-                    <a-doption @click="executeScript(record, false, false)">
-                      <icon-desktop style="margin-right: 6px;" />
-                      调试执行（有头可视）
-                    </a-doption>
-                  </template>
-                </a-dropdown>
+                <a-button type="text" size="small" @click="openEditModal(record)">
+                  <icon-edit />
+                </a-button>
+                <a-button
+                  type="text"
+                  size="small"
+                  :loading="executingId === record.id"
+                  @click="executeScript(record, true, false)"
+                  title="快速执行（无头模式）"
+                >
+                  <icon-play-arrow />
+                </a-button>
                 <a-popconfirm
                   content="确定要删除此脚本吗？"
                   @ok="deleteScript(record.id)"
@@ -175,7 +167,7 @@
                 </a-tag>
               </template>
             </a-table-column>
-            <a-table-column title="执行时间" data-index="created_at" :width="160">
+            <a-table-column title="执行时间" data-index="created_at" :width="180">
               <template #cell="{ record }">{{ formatTime(record.created_at) }}</template>
             </a-table-column>
             <a-table-column title="耗时" data-index="execution_time" :width="80">
@@ -250,17 +242,224 @@
         </a-table>
       </template>
     </a-drawer>
+
+    <!-- 新建/编辑脚本弹窗 - 左右布局 -->
+    <a-modal
+      v-model:visible="editModalVisible"
+      :title="isEditMode ? '编辑脚本' : '新建脚本'"
+      :width="1400"
+      :body-style="{ padding: 0 }"
+      :mask-closable="false"
+      :footer="false"
+      @cancel="closeEditModal"
+    >
+      <div class="script-editor-layout">
+        <!-- 左侧面板 -->
+        <div class="editor-left-panel">
+          <!-- 预览模式：显示执行日志 -->
+          <div v-if="isPreviewMode" class="execution-logs-panel">
+            <div class="logs-header">
+              <span class="logs-title">
+                <icon-code-block /> 执行日志
+              </span>
+              <a-badge :status="previewStatusBadge" :text="previewStatusText" />
+            </div>
+            <div class="logs-content">
+              <div v-for="(log, idx) in executionLogs" :key="idx" class="log-item">
+                {{ log }}
+              </div>
+              <div v-if="executionLogs.length === 0" class="log-item log-placeholder">
+                等待执行...
+              </div>
+            </div>
+          </div>
+          
+          <!-- 编辑模式：显示表单 -->
+          <a-form v-else :model="scriptForm" layout="vertical" :rules="formRules" ref="formRef" class="script-form">
+            <a-form-item label="脚本名称" field="name" required>
+              <a-input v-model="scriptForm.name" placeholder="请输入脚本名称" />
+            </a-form-item>
+            
+            <a-form-item label="关联测试用例" field="test_case" required>
+              <a-select
+                v-model="scriptForm.test_case"
+                placeholder="选择测试用例"
+                :loading="testCasesLoading"
+                allow-search
+                :filter-option="false"
+                @search="searchTestCases"
+              >
+                <a-option v-for="tc in testCaseOptions" :key="tc.id" :value="tc.id">
+                  {{ tc.name }}
+                </a-option>
+              </a-select>
+            </a-form-item>
+
+            <a-row :gutter="12">
+              <a-col :span="12">
+                <a-form-item label="脚本类型" field="script_type">
+                  <a-select v-model="scriptForm.script_type" placeholder="选择类型">
+                    <a-option value="playwright_python">Python</a-option>
+                    <a-option value="playwright_javascript">JavaScript</a-option>
+                  </a-select>
+                </a-form-item>
+              </a-col>
+              <a-col :span="12">
+                <a-form-item label="状态" field="status">
+                  <a-select v-model="scriptForm.status" placeholder="选择状态">
+                    <a-option value="draft">草稿</a-option>
+                    <a-option value="active">启用</a-option>
+                    <a-option value="deprecated">已废弃</a-option>
+                  </a-select>
+                </a-form-item>
+              </a-col>
+            </a-row>
+
+            <a-form-item label="来源" field="source">
+              <a-select v-model="scriptForm.source" placeholder="选择来源">
+                <a-option value="manual">手动编写</a-option>
+                <a-option value="ai_generated">AI 生成</a-option>
+              </a-select>
+            </a-form-item>
+
+            <a-form-item label="目标URL" field="target_url">
+              <a-input v-model="scriptForm.target_url" placeholder="测试的目标网址" />
+            </a-form-item>
+
+            <a-row :gutter="12">
+              <a-col :span="12">
+                <a-form-item label="超时时间（秒）" field="timeout_seconds">
+                  <a-input-number v-model="scriptForm.timeout_seconds" :min="10" :max="600" style="width: 100%;" />
+                </a-form-item>
+              </a-col>
+              <a-col :span="12">
+                <a-form-item label="运行模式">
+                  <a-checkbox v-model="scriptForm.headless">无头模式</a-checkbox>
+                </a-form-item>
+              </a-col>
+            </a-row>
+
+            <a-form-item label="描述" field="description">
+              <a-textarea v-model="scriptForm.description" placeholder="脚本描述" :auto-size="{ minRows: 2, maxRows: 4 }" />
+            </a-form-item>
+
+            <div class="form-actions">
+              <a-space>
+                <a-button @click="closeEditModal">取消</a-button>
+                <a-button type="primary" :loading="saving" @click="handleSaveScript">
+                  {{ isEditMode ? '保存修改' : '创建脚本' }}
+                </a-button>
+              </a-space>
+            </div>
+          </a-form>
+        </div>
+
+        <!-- 右侧：代码编辑器 + 执行预览 -->
+        <div class="editor-right-panel">
+          <div class="editor-header">
+            <span class="editor-title">
+              <icon-code /> 脚本代码
+              <a-tag size="small" :color="scriptForm.script_type === 'playwright_python' ? 'blue' : 'orange'">
+                {{ scriptForm.script_type === 'playwright_python' ? 'Python' : 'JavaScript' }}
+              </a-tag>
+            </span>
+            <a-space v-if="isEditMode">
+              <a-button
+                v-if="!isPreviewMode"
+                size="small"
+                type="primary"
+                status="success"
+                :loading="isExecuting"
+                @click="startLivePreview"
+              >
+                <template #icon><icon-play-arrow /></template>
+                调试执行
+              </a-button>
+              <a-button
+                v-else-if="isExecuting"
+                size="small"
+                status="danger"
+                @click="stopLivePreview"
+              >
+                <template #icon><icon-pause /></template>
+                停止执行
+              </a-button>
+              <a-button
+                v-else
+                size="small"
+                type="secondary"
+                @click="stopLivePreview"
+              >
+                <template #icon><icon-close /></template>
+                关闭预览
+              </a-button>
+            </a-space>
+          </div>
+          
+          <!-- 代码编辑器 / 执行预览切换 -->
+          <div class="editor-content">
+            <!-- 预览模式：显示浏览器画面 -->
+            <div v-if="isPreviewMode" class="preview-container">
+              <div class="preview-frame">
+                <img
+                  v-if="currentFrame"
+                  :src="'data:image/jpeg;base64,' + currentFrame"
+                  class="preview-image"
+                  alt="浏览器画面"
+                />
+                <div v-else class="preview-placeholder">
+                  <icon-loading v-if="isExecuting" spin :size="48" />
+                  <span>{{ isExecuting ? '正在启动浏览器...' : '等待执行' }}</span>
+                </div>
+              </div>
+              <!-- 帧回放控制条 - 点状指示器 -->
+              <div v-if="frameHistory.length > 1 && !isExecuting" class="frame-playback-bar">
+                <a-button size="mini" @click="prevFrame" :disabled="currentFrameIndex <= 0">
+                  <icon-left />
+                </a-button>
+                <div class="frame-dots">
+                  <div
+                    v-for="(_, index) in frameHistory"
+                    :key="index"
+                    class="frame-dot"
+                    :class="{ active: index === currentFrameIndex }"
+                    @click="selectFrame(index)"
+                    :title="`帧 ${index + 1}`"
+                  />
+                </div>
+                <a-button size="mini" @click="nextFrame" :disabled="currentFrameIndex >= frameHistory.length - 1">
+                  <icon-right />
+                </a-button>
+                <span class="frame-info">{{ currentFrameIndex + 1 }} / {{ frameHistory.length }}</span>
+              </div>
+            </div>
+            
+            <!-- 编辑模式：显示 Monaco 编辑器 -->
+            <div v-else class="monaco-container">
+              <VueMonacoEditor
+                v-model:value="scriptForm.script_content"
+                :language="monacoLanguage"
+                theme="vs-dark"
+                :options="monacoOptions"
+                @mount="handleEditorMount"
+              />
+            </div>
+          </div>
+        </div>
+      </div>
+    </a-modal>
   </div>
 </template>
 
 <script setup lang="ts">
-import { ref, onMounted } from 'vue';
-import { Message } from '@arco-design/web-vue';
+import { ref, reactive, computed, onMounted, onUnmounted, shallowRef } from 'vue';
+import { Message, type FormInstance } from '@arco-design/web-vue';
 import { 
-  IconRefresh, IconEye, IconPlayArrow, IconDelete, IconDown, IconEyeInvisible, IconVideoCamera, IconDesktop
+  IconRefresh, IconEye, IconPlayArrow, IconDelete, IconPlus, IconEdit, IconCode, IconPause, IconLoading, IconCodeBlock, IconClose, IconLeft, IconRight
 } from '@arco-design/web-vue/es/icon';
 import { useProjectStore } from '@/store/projectStore';
 import request from '@/utils/request';
+import { VueMonacoEditor } from '@guolao/vue-monaco-editor';
 
 interface AutomationScript {
   id: number;
@@ -274,9 +473,29 @@ interface AutomationScript {
   target_url: string;
   description: string;
   script_content: string;
+  timeout_seconds: number;
+  headless: boolean;
   created_at: string;
   latest_status: string | null;
   executions?: any[];
+}
+
+interface TestCaseOption {
+  id: number;
+  name: string;
+}
+
+interface ScriptForm {
+  name: string;
+  test_case: number | undefined;
+  script_type: string;
+  source: string;
+  status: string;
+  target_url: string;
+  description: string;
+  script_content: string;
+  timeout_seconds: number;
+  headless: boolean;
 }
 
 const projectStore = useProjectStore();
@@ -292,6 +511,290 @@ const detailVisible = ref(false);
 const currentScript = ref<AutomationScript | null>(null);
 const executionsLoading = ref(false);
 
+// 编辑弹窗
+const editModalVisible = ref(false);
+const isEditMode = ref(false);
+const editingScriptId = ref<number | null>(null);
+const formRef = ref<FormInstance>();
+const testCasesLoading = ref(false);
+const testCaseOptions = ref<TestCaseOption[]>([]);
+const saving = ref(false);
+
+const getDefaultForm = (): ScriptForm => ({
+  name: '',
+  test_case: undefined,
+  script_type: 'playwright_python',
+  source: 'manual',
+  status: 'draft',
+  target_url: '',
+  description: '',
+  script_content: '',
+  timeout_seconds: 60,
+  headless: true,
+});
+
+const scriptForm = reactive<ScriptForm>(getDefaultForm());
+
+const formRules = {
+  name: [{ required: true, message: '请输入脚本名称' }],
+  test_case: [{ required: true, message: '请选择关联的测试用例' }],
+  script_content: [{ required: true, message: '请输入脚本代码' }],
+};
+
+// Monaco Editor 配置
+const editorRef = shallowRef();
+const monacoLanguage = computed(() => 
+  scriptForm.script_type === 'playwright_python' ? 'python' : 'javascript'
+);
+
+const monacoOptions = {
+  automaticLayout: true,
+  minimap: { enabled: true },
+  fontSize: 14,
+  lineNumbers: 'on' as const,
+  scrollBeyondLastLine: false,
+  wordWrap: 'on' as const,
+  tabSize: 4,
+  insertSpaces: true,
+  formatOnPaste: true,
+  renderWhitespace: 'selection' as const,
+  bracketPairColorization: { enabled: true },
+  padding: { top: 10 },
+};
+
+const handleEditorMount = (editor: any) => {
+  editorRef.value = editor;
+};
+
+// 实时执行预览
+const isPreviewMode = ref(false);
+const isExecuting = ref(false);
+const currentFrame = ref<string>('');
+const executionLogs = ref<string[]>([]);
+const previewStatus = ref<'idle' | 'connecting' | 'running' | 'completed' | 'error'>('idle');
+let previewWebSocket: WebSocket | null = null;
+
+// 帧历史（用于回放）
+const frameHistory = ref<string[]>([]);
+const currentFrameIndex = ref(0);
+
+// 帧回放控制
+const selectFrame = (index: number) => {
+  if (frameHistory.value[index]) {
+    currentFrameIndex.value = index;
+    currentFrame.value = frameHistory.value[index];
+  }
+};
+
+const prevFrame = () => {
+  if (currentFrameIndex.value > 0) {
+    currentFrameIndex.value--;
+    currentFrame.value = frameHistory.value[currentFrameIndex.value];
+  }
+};
+
+const nextFrame = () => {
+  if (currentFrameIndex.value < frameHistory.value.length - 1) {
+    currentFrameIndex.value++;
+    currentFrame.value = frameHistory.value[currentFrameIndex.value];
+  }
+};
+
+const previewStatusBadge = computed(() => {
+  const map: Record<string, 'default' | 'processing' | 'success' | 'error'> = {
+    idle: 'default',
+    connecting: 'processing',
+    running: 'processing',
+    completed: 'success',
+    error: 'error',
+  };
+  return map[previewStatus.value] || 'default';
+});
+
+const previewStatusText = computed(() => {
+  const map: Record<string, string> = {
+    idle: '等待执行',
+    connecting: '正在连接...',
+    running: '执行中',
+    completed: '执行完成',
+    error: '执行出错',
+  };
+  return map[previewStatus.value] || '';
+});
+
+// 获取用户 Token
+const getUserToken = (): string => {
+  // 从 localStorage 获取 JWT access token
+  return localStorage.getItem('auth-accessToken') || '';
+};
+
+// 构建保存 payload
+const buildScriptPayload = () => ({
+  name: scriptForm.name,
+  test_case: scriptForm.test_case,
+  script_type: scriptForm.script_type,
+  source: scriptForm.source,
+  status: scriptForm.status,
+  target_url: scriptForm.target_url,
+  description: scriptForm.description,
+  script_content: scriptForm.script_content,
+  timeout_seconds: scriptForm.timeout_seconds,
+  headless: scriptForm.headless,
+});
+
+// 静默保存脚本（不关闭弹窗，用于调试执行前自动保存）
+const silentSaveScript = async (): Promise<boolean> => {
+  try {
+    // validate() 校验失败时会 reject，成功时返回 undefined
+    await formRef.value?.validate();
+  } catch {
+    Message.warning('请先填写必填字段');
+    return false;
+  }
+  
+  try {
+    const payload = buildScriptPayload();
+    
+    if (isEditMode.value && editingScriptId.value) {
+      await request.patch(`/automation-scripts/${editingScriptId.value}/`, payload);
+    } else {
+      const response = await request.post('/automation-scripts/', payload);
+      // 新建脚本后更新 editingScriptId，这样 WebSocket 能找到脚本
+      editingScriptId.value = response.data.id;
+      isEditMode.value = true;
+    }
+    return true;
+  } catch (error: any) {
+    Message.error(error.response?.data?.detail || error.message || '保存失败');
+    return false;
+  }
+};
+
+// 开始实时预览
+const startLivePreview = async () => {
+  // 先自动保存脚本内容
+  const saved = await silentSaveScript();
+  if (!saved) {
+    return;
+  }
+  
+  isPreviewMode.value = true;
+  isExecuting.value = true;
+  previewStatus.value = 'connecting';
+  currentFrame.value = '';
+  executionLogs.value = [];
+  frameHistory.value = [];  // 清空帧历史
+  currentFrameIndex.value = 0;
+  
+  // 构建 WebSocket URL
+  const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+  const host = window.location.host;
+  const token = getUserToken();
+  const wsUrl = `${protocol}//${host}/ws/execution-preview/${editingScriptId.value}/?token=${token}`;
+  
+  try {
+    previewWebSocket = new WebSocket(wsUrl);
+    
+    previewWebSocket.onopen = () => {
+      previewStatus.value = 'running';
+      executionLogs.value.push('[连接成功] 开始执行脚本...');
+      // 发送开始执行命令
+      previewWebSocket?.send(JSON.stringify({
+        action: 'start',
+        headless: true,
+        fps: 10
+      }));
+    };
+    
+    previewWebSocket.onmessage = (event) => {
+      try {
+        const data = JSON.parse(event.data);
+        
+        if (data.type === 'frame') {
+          // 更新当前帧并保存到历史（限制最多100帧，避免内存溢出）
+          currentFrame.value = data.data;
+          frameHistory.value.push(data.data);
+          if (frameHistory.value.length > 100) {
+            frameHistory.value.shift();
+          }
+          currentFrameIndex.value = frameHistory.value.length - 1;
+        } else if (data.type === 'status') {
+          // 更新状态
+          if (data.status === 'completed') {
+            previewStatus.value = 'completed';
+            isExecuting.value = false;
+          } else if (data.status === 'error') {
+            previewStatus.value = 'error';
+            isExecuting.value = false;
+          }
+          executionLogs.value.push(`[${data.status}] ${data.message}`);
+        } else if (data.type === 'log') {
+          executionLogs.value.push(data.message);
+        }
+        
+        // 限制日志数量
+        if (executionLogs.value.length > 100) {
+          executionLogs.value = executionLogs.value.slice(-100);
+        }
+      } catch (e) {
+        console.error('解析 WebSocket 消息失败:', e);
+      }
+    };
+    
+    previewWebSocket.onerror = (error) => {
+      console.error('WebSocket 错误:', error);
+      previewStatus.value = 'error';
+      isExecuting.value = false;
+      executionLogs.value.push('[错误] WebSocket 连接失败');
+    };
+    
+    previewWebSocket.onclose = () => {
+      // 连接关闭时，如果还在执行中，标记为错误
+      if (isExecuting.value) {
+        previewStatus.value = 'error';
+        isExecuting.value = false;
+        executionLogs.value.push('[断开] 连接已关闭');
+      }
+      // 不清理 currentFrame，让用户继续查看最后一帧
+    };
+  } catch (error) {
+    console.error('创建 WebSocket 失败:', error);
+    previewStatus.value = 'error';
+    isExecuting.value = false;
+    Message.error('无法连接到执行服务器');
+  }
+};
+
+// 停止实时预览
+const stopLivePreview = () => {
+  if (previewWebSocket) {
+    // 如果还在执行中，发送停止命令
+    if (isExecuting.value) {
+      previewWebSocket.send(JSON.stringify({ action: 'stop' }));
+      executionLogs.value.push('[停止] 用户主动停止执行');
+    }
+    previewWebSocket.close();
+    previewWebSocket = null;
+  }
+  
+  isExecuting.value = false;
+  previewStatus.value = 'idle';
+  
+  // 清理画面、帧历史并关闭预览模式
+  isPreviewMode.value = false;
+  currentFrame.value = '';
+  frameHistory.value = [];
+  currentFrameIndex.value = 0;
+};
+
+// 组件卸载时清理 WebSocket
+onUnmounted(() => {
+  if (previewWebSocket) {
+    previewWebSocket.close();
+    previewWebSocket = null;
+  }
+});
+
 // 分页
 const pagination = ref({
   current: 1,
@@ -305,7 +808,7 @@ const pagination = ref({
 const fetchScripts = async () => {
   loading.value = true;
   try {
-    const params: any = {
+    const params: Record<string, string | number> = {
       page: pagination.value.current,
       page_size: pagination.value.pageSize,
     };
@@ -320,12 +823,19 @@ const fetchScripts = async () => {
     const response = await request.get('/automation-scripts/', { params });
     // 响应拦截器会将后端的 { status, data: [...] } 转换为 { data: [...] }
     scripts.value = response.data.data || response.data.results || [];
-    pagination.value.total = response.data.data?.length || response.data.count || scripts.value.length;
+    // 优先使用后端返回的 count，否则使用当前结果长度
+    pagination.value.total = response.data.count ?? scripts.value.length;
   } catch (error: any) {
     Message.error(error.message || '获取脚本列表失败');
   } finally {
     loading.value = false;
   }
+};
+
+// 筛选变化时重置页码并刷新
+const handleFilterChange = () => {
+  pagination.value.current = 1;
+  fetchScripts();
 };
 
 // 分页变化
@@ -387,6 +897,133 @@ const deleteScript = async (id: number) => {
     fetchScripts();
   } catch (error: any) {
     Message.error(error.message || '删除失败');
+  }
+};
+
+// 搜索测试用例
+const searchTestCases = async (keyword: string) => {
+  const projectId = projectStore.currentProjectId;
+  if (!projectId) {
+    testCaseOptions.value = [];
+    return;
+  }
+  
+  testCasesLoading.value = true;
+  try {
+    const params: any = { search: keyword, page_size: 50 };
+    const response = await request.get(`/projects/${projectId}/testcases/`, { params });
+    const data = response.data.data || response.data.results || response.data || [];
+    testCaseOptions.value = data.map((tc: any) => ({ id: tc.id, name: tc.name }));
+  } catch {
+    testCaseOptions.value = [];
+  } finally {
+    testCasesLoading.value = false;
+  }
+};
+
+// 加载初始测试用例（编辑时需要显示已选择的用例）
+const loadInitialTestCases = async (selectedId?: number) => {
+  const projectId = projectStore.currentProjectId;
+  if (!projectId) {
+    testCaseOptions.value = [];
+    return;
+  }
+  
+  testCasesLoading.value = true;
+  try {
+    const params: any = { page_size: 20 };
+    const response = await request.get(`/projects/${projectId}/testcases/`, { params });
+    const data = response.data.data || response.data.results || response.data || [];
+    testCaseOptions.value = data.map((tc: any) => ({ id: tc.id, name: tc.name }));
+    
+    // 如果有已选择的用例且不在列表中，单独加载
+    if (selectedId && !testCaseOptions.value.some(tc => tc.id === selectedId)) {
+      const tcRes = await request.get(`/projects/${projectId}/testcases/${selectedId}/`);
+      const tcData = tcRes.data.data || tcRes.data;
+      testCaseOptions.value.unshift({ id: tcData.id, name: tcData.name });
+    }
+  } catch {
+    testCaseOptions.value = [];
+  } finally {
+    testCasesLoading.value = false;
+  }
+};
+
+// 打开新建弹窗
+const openCreateModal = () => {
+  isEditMode.value = false;
+  editingScriptId.value = null;
+  Object.assign(scriptForm, getDefaultForm());
+  loadInitialTestCases();
+  editModalVisible.value = true;
+};
+
+// 打开编辑弹窗
+const openEditModal = async (script: AutomationScript) => {
+  isEditMode.value = true;
+  editingScriptId.value = script.id;
+  
+  // 加载完整脚本数据
+  try {
+    const response = await request.get(`/automation-scripts/${script.id}/`);
+    const data = response.data.data || response.data;
+    
+    Object.assign(scriptForm, {
+      name: data.name || '',
+      test_case: data.test_case,
+      script_type: data.script_type || 'playwright_python',
+      source: data.source || 'manual',
+      status: data.status || 'draft',
+      target_url: data.target_url || '',
+      description: data.description || '',
+      script_content: data.script_content || '',
+      timeout_seconds: data.timeout_seconds || 60,
+      headless: data.headless !== false,
+    });
+    
+    await loadInitialTestCases(data.test_case);
+    editModalVisible.value = true;
+  } catch (error: any) {
+    Message.error(error.message || '加载脚本详情失败');
+  }
+};
+
+// 关闭编辑弹窗
+const closeEditModal = () => {
+  // 关闭弹窗前清理 WebSocket 连接
+  stopLivePreview();
+  editModalVisible.value = false;
+  formRef.value?.resetFields();
+};
+
+// 保存脚本
+const handleSaveScript = async () => {
+  try {
+    // validate() 校验失败时会 reject
+    await formRef.value?.validate();
+  } catch {
+    // 校验失败，表单会自动显示错误提示
+    return;
+  }
+  
+  saving.value = true;
+  try {
+    const payload = buildScriptPayload();
+    
+    if (isEditMode.value && editingScriptId.value) {
+      await request.patch(`/automation-scripts/${editingScriptId.value}/`, payload);
+      Message.success('脚本已更新');
+    } else {
+      await request.post('/automation-scripts/', payload);
+      Message.success('脚本已创建');
+    }
+    
+    editModalVisible.value = false;
+    fetchScripts();
+  } catch (error: any) {
+    Message.error(error.response?.data?.detail || error.message || '保存失败');
+  } finally {
+    saving.value = false;
   }
 };
 
@@ -588,5 +1225,214 @@ onMounted(() => {
   color: #86909c;
   text-align: center;
   padding: 16px;
+}
+
+/* 左右布局的脚本编辑器 */
+.script-editor-layout {
+  display: flex;
+  height: 700px;
+  overflow: hidden;
+}
+
+.editor-left-panel {
+  width: 360px;
+  min-width: 360px;
+  padding: 20px;
+  border-right: 1px solid #e5e6eb;
+  overflow-y: auto;
+  background: #fafafa;
+  display: flex;
+  flex-direction: column;
+}
+
+.script-form {
+  flex: 1;
+}
+
+.script-form :deep(.arco-form-item) {
+  margin-bottom: 16px;
+}
+
+.form-actions {
+  margin-top: 16px;
+  padding-top: 16px;
+  border-top: 1px solid #e5e6eb;
+  display: flex;
+  justify-content: flex-end;
+}
+
+/* 执行日志面板 - 占满整个左侧区域 */
+.execution-logs-panel {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+}
+
+.logs-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  font-size: 14px;
+  font-weight: 500;
+  color: #1d2129;
+  margin-bottom: 12px;
+  flex-shrink: 0;
+}
+
+.logs-header .logs-title {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.execution-logs-panel .logs-content {
+  flex: 1;
+  background: #1e1e1e;
+  border-radius: 4px;
+  padding: 12px;
+  overflow-y: auto;
+  font-family: 'Consolas', 'Monaco', monospace;
+  font-size: 12px;
+}
+
+.execution-logs-panel .log-item {
+  color: #cccccc;
+  line-height: 1.6;
+  word-break: break-all;
+}
+
+.execution-logs-panel .log-placeholder {
+  color: #666;
+  font-style: italic;
+}
+
+.editor-right-panel {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  background: #1e1e1e;
+  min-width: 0;
+}
+
+.editor-header {
+  padding: 12px 16px;
+  background: #252526;
+  border-bottom: 1px solid #3c3c3c;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.editor-title {
+  color: #cccccc;
+  font-size: 14px;
+  font-weight: 500;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.editor-content {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+.monaco-container {
+  flex: 1;
+  min-height: 0;
+}
+
+/* 执行预览样式 */
+.preview-container {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  background: #1e1e1e;
+  padding: 12px;
+}
+
+.preview-status {
+  padding: 8px 12px;
+  background: #252526;
+  border-radius: 4px;
+  margin-bottom: 12px;
+}
+
+.preview-frame {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: #000;
+  border-radius: 4px;
+  overflow: hidden;
+  min-height: 400px;
+}
+
+.preview-image {
+  max-width: 100%;
+  max-height: 100%;
+  object-fit: contain;
+}
+
+.preview-placeholder {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  color: #666;
+}
+
+/* 帧回放控制条 */
+.frame-playback-bar {
+  display: flex;
+  align-items: center;
+  padding: 10px 12px;
+  background: #252526;
+  border-radius: 4px;
+  margin-top: 12px;
+  gap: 8px;
+}
+
+.frame-dots {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  flex: 1;
+  flex-wrap: wrap;
+  max-height: 60px;
+  overflow-y: auto;
+  padding: 4px;
+}
+
+.frame-dot {
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  background: #555;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.frame-dot:hover {
+  background: #888;
+  transform: scale(1.2);
+}
+
+.frame-dot.active {
+  background: #1890ff;
+  box-shadow: 0 0 4px #1890ff;
+}
+
+.frame-info {
+  font-size: 12px;
+  color: #999;
+  min-width: 60px;
+  text-align: right;
 }
 </style>

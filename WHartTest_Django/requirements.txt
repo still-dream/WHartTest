@@ -18,6 +18,12 @@ drf-spectacular==0.28.0
 # https://github.com/adamchainz/django-cors-headers/blob/main/LICENSE
 django-cors-headers==4.3.1
 
+# Django Channels WebSocket支持 - BSD许可证
+# https://github.com/django/channels/blob/main/LICENSE
+channels==4.3.2
+channels-redis==4.3.0
+daphne==4.2.1
+
 # 环境变量管理 - BSD许可证 (当前版本: 1.1.1)
 # https://github.com/theskumar/python-dotenv/blob/main/LICENSE
 python-dotenv==1.1.1
@@ -229,7 +235,8 @@ redis==5.2.0
 
 # Uvicorn ASGI服务器 - BSD许可证 (当前版本: 0.34.0)
 # https://github.com/encode/uvicorn/blob/master/LICENSE.md
-uvicorn==0.34.0
+# 使用 [standard] 以支持 websockets
+uvicorn[standard]==0.34.0
 
 # HTTPX异步HTTP客户端 - BSD许可证 (当前版本: 0.28.1)
 # https://github.com/encode/httpx/blob/master/LICENSE.md

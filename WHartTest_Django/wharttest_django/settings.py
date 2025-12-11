@@ -69,6 +69,7 @@ else:
 # Application definition
 
 INSTALLED_APPS = [
+    'daphne',  # Channels ASGI server，必须放在最前面
     'django.contrib.admin',
     'django.contrib.auth',
     'django.contrib.contenttypes',
@@ -78,6 +79,7 @@ INSTALLED_APPS = [
     'rest_framework',
     'rest_framework_simplejwt',
     'django_filters',  # 添加 django-filter
+    'channels',  # Django Channels for WebSocket
     'accounts', # 或者 'accounts.apps.AccountsConfig'
     'projects', # 项目管理应用
     'testcases', # 用例管理应用
@@ -91,6 +93,16 @@ INSTALLED_APPS = [
     'requirements', # 需求评审管理应用
     'orchestrator_integration', # 智能编排集成应用
 ]
+
+# ASGI 配置（用于 Channels WebSocket）
+ASGI_APPLICATION = 'wharttest_django.asgi.application'
+
+# Channels Layer 配置（使用内存后端，生产环境建议使用 Redis）
+CHANNEL_LAYERS = {
+    'default': {
+        'BACKEND': 'channels.layers.InMemoryChannelLayer'
+    }
+}
 
 MIDDLEWARE = [
     'django.middleware.security.SecurityMiddleware',

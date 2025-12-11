@@ -10,6 +10,14 @@ import App from './App.vue'
 import router from './router' // 新增导入
 import 'wired-elements'
 
+// Monaco Editor 配置
+import { loader } from '@guolao/vue-monaco-editor'
+loader.config({
+  paths: {
+    vs: 'https://cdn.jsdelivr.net/npm/monaco-editor@0.45.0/min/vs',
+  },
+})
+
 const app = createApp(App)
 
 app.use(createPinia())
