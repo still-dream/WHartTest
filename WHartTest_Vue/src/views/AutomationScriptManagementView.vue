@@ -1,7 +1,5 @@
 <template>
   <div class="automation-script-management">
-    <a-page-header title="自动化用例管理" subtitle="管理 AI 生成的 Playwright 自动化测试脚本" />
-
     <a-card class="filter-card">
       <div class="filter-row">
         <a-space wrap>

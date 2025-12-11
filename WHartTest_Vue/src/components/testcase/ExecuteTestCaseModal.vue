@@ -27,12 +27,12 @@
           <a-checkbox v-model="formData.generatePlaywrightScript">
             <span class="checkbox-label">
               <icon-code class="checkbox-icon" />
-              执行完成后自动生成 Playwright 脚本
+              <span class="checkbox-text">
+                <span class="checkbox-title">执行完成后自动生成 Playwright 脚本</span>
+                <span class="checkbox-desc">开启后，AI 执行过程中的浏览器操作将被转换为可重复执行的自动化用例</span>
+              </span>
             </span>
           </a-checkbox>
-          <div class="checkbox-hint">
-            开启后，AI 执行过程中的浏览器操作将被转换为可重复执行的自动化用例
-          </div>
         </a-form-item>
 
         <a-form-item v-if="formData.generatePlaywrightScript">
@@ -131,20 +131,30 @@ const handleCancel = () => {
 
   .checkbox-label {
     display: flex;
-    align-items: center;
+    align-items: flex-start;
     gap: 6px;
     font-weight: 500;
   }
 
   .checkbox-icon {
     color: var(--color-primary-6);
+    margin-top: 2px;
   }
 
-  .checkbox-hint {
-    margin-top: 4px;
-    margin-left: 22px;
+  .checkbox-text {
+    display: flex;
+    flex-direction: column;
+  }
+
+  .checkbox-title {
+    font-weight: 500;
+  }
+
+  .checkbox-desc {
     font-size: 12px;
     color: var(--color-text-3);
+    margin-top: 4px;
+    font-weight: 400;
   }
 
   .radio-option {
