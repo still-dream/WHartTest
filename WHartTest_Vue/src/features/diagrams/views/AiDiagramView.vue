@@ -216,8 +216,13 @@ const loadFromStorage = () => {
 
 // Draw.io URL 配置
 // 支持自托管：设置环境变量 VITE_DRAWIO_URL 为自托管地址，如 http://localhost:8920
+// 生产环境可使用相对路径如 /drawio，通过 Nginx 反向代理
 // 默认使用官方 embed 服务
-const DRAWIO_BASE_URL = import.meta.env.VITE_DRAWIO_URL || 'https://embed.diagrams.net';
+const DRAWIO_ENV_URL = import.meta.env.VITE_DRAWIO_URL || 'https://embed.diagrams.net';
+// 处理相对路径：转换为完整 URL
+const DRAWIO_BASE_URL = DRAWIO_ENV_URL.startsWith('/')
+  ? `${window.location.origin}${DRAWIO_ENV_URL}`
+  : DRAWIO_ENV_URL;
 const DRAWIO_ORIGIN = new URL(DRAWIO_BASE_URL).origin;
 
 // Draw.io URL (使用 embed 模式，启用自动保存)
