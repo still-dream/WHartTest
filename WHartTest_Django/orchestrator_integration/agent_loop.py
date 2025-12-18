@@ -265,16 +265,16 @@ class AgentOrchestrator:
         }
     
     async def _execute_step(
-        self, 
-        task: AgentTask, 
+        self,
+        task: AgentTask,
         context: Dict,
         stream_callback: callable = None
     ) -> Dict[str, Any]:
         """
         执行单步
-        
+
         这是一次独立的 AI 调用，上下文不累积
-        
+
         Args:
             task: 任务对象
             context: 步骤上下文
@@ -282,14 +282,17 @@ class AgentOrchestrator:
                             如果提供，则使用流式 LLM 调用
         """
         start_time = time.time()
-        
+
         # 构建消息（独立上下文）
         system_prompt = self.STEP_SYSTEM_PROMPT.format(**context)
         messages = [
             SystemMessage(content=system_prompt),
             HumanMessage(content="请执行下一步操作。")
         ]
-        
+
+        # 记录执行步骤的基本信息
+        logger.debug(f"_execute_step: task={task.id}, step={task.current_step}, goal={context.get('goal', '')[:50]}..., streaming={stream_callback is not None}")
+
         try:
             # 调用 AI（根据是否提供回调选择流式或非流式）
             if stream_callback:
@@ -336,18 +339,38 @@ class AgentOrchestrator:
     
     async def _invoke_llm(self, messages: List, max_retries: int = 3) -> Any:
         """调用 LLM，支持自动重试
-        
+
         Args:
             messages: 消息列表
             max_retries: 最大重试次数，默认3次
         """
         import httpx
         import openai
-        
+
+        logger.debug(f"LLM 非流式调用开始: messages_count={len(messages)}, model={getattr(self.llm, 'model_name', getattr(self.llm, 'model', 'unknown'))}")
+
         last_error = None
         for attempt in range(max_retries):
             try:
-                return await asyncio.to_thread(self.llm_with_tools.invoke, messages)
+                response = await asyncio.to_thread(self.llm_with_tools.invoke, messages)
+
+                # 检查响应是否包含错误信息
+                if hasattr(response, 'content') and response.content:
+                    content = response.content
+                    if isinstance(content, str):
+                        content_lower = content.lower()
+                        error_keywords = ['error', 'exception', '错误', '失败', 'failed', 'invalid', 'unauthorized', 'rate limit', 'quota']
+                        if any(kw in content_lower for kw in error_keywords):
+                            logger.warning(f"LLM 非流式响应可能包含错误信息: {content[:500]}{'...' if len(content) > 500 else ''}")
+
+                # 检查 response_metadata 中的错误
+                if hasattr(response, 'response_metadata'):
+                    metadata = response.response_metadata
+                    if isinstance(metadata, dict):
+                        if metadata.get('error') or metadata.get('finish_reason') == 'error':
+                            logger.error(f"LLM 响应包含错误元数据: {metadata}")
+
+                return response
             except (httpx.ConnectError, openai.APIConnectionError) as e:
                 last_error = e
                 if attempt < max_retries - 1:
@@ -356,29 +379,37 @@ class AgentOrchestrator:
                     await asyncio.sleep(wait_time)
                 else:
                     logger.error(f"LLM 连接失败，已达最大重试次数 ({max_retries}): {e}")
-            except Exception as e:
-                # 非连接错误，直接抛出不重试
+            except ValueError as e:
+                # 捕获 "No generation chunks were returned" 等 ValueError
+                error_msg = str(e)
+                logger.error(f"LLM 非流式调用 ValueError: {error_msg}")
+                logger.error(f"  - 模型: {getattr(self.llm, 'model_name', getattr(self.llm, 'model', 'unknown'))}")
+                logger.error(f"  - 消息数量: {len(messages)}")
                 raise
-        
+            except Exception as e:
+                # 非连接错误，记录详情后抛出
+                logger.error(f"LLM 非流式调用异常: {type(e).__name__}: {e}")
+                raise
+
         # 所有重试都失败
         raise last_error
     
     async def _invoke_llm_streaming(
-        self, 
-        messages: List, 
+        self,
+        messages: List,
         on_chunk: callable = None,
         max_retries: int = 3
     ) -> Any:
         """流式调用 LLM，支持实时输出和自动重试
-        
+
         Args:
             messages: 消息列表
             on_chunk: 收到文本 chunk 时的回调函数，签名: async def on_chunk(text: str)
             max_retries: 最大重试次数，默认3次
-            
+
         Returns:
             合并后的完整 AIMessage 响应
-            
+
         注意：
             - 重试会从头开始，不会发送重置信号给客户端
             - 如果部分内容已发送后失败，客户端可能收到不完整内容
@@ -386,7 +417,10 @@ class AgentOrchestrator:
         import httpx
         import openai
         from langchain_core.messages import AIMessage
-        
+
+        # 记录请求信息用于调试
+        logger.debug(f"LLM 流式调用开始: messages_count={len(messages)}, model={getattr(self.llm, 'model_name', getattr(self.llm, 'model', 'unknown'))}")
+
         last_error = None
         for attempt in range(max_retries):
             try:
@@ -396,9 +430,30 @@ class AgentOrchestrator:
                 tool_calls_by_index: Dict[int, Dict] = {}
                 # 记录已使用的最大 index，用于分配新的 index
                 max_used_index = -1
-                
+                chunk_count = 0  # 记录收到的 chunk 数量
+
+                logger.debug(f"LLM astream 调用开始 (attempt {attempt + 1}/{max_retries})")
+
                 # 使用 astream 进行流式调用
                 async for chunk in self.llm_with_tools.astream(messages):
+                    chunk_count += 1
+                    if chunk_count == 1:
+                        logger.debug(f"收到第一个 chunk: type={type(chunk).__name__}, has_content={hasattr(chunk, 'content') and bool(chunk.content)}")
+
+                    # 检查 chunk 是否包含错误信息（某些模型会通过特殊字段返回错误）
+                    if hasattr(chunk, 'response_metadata'):
+                        metadata = chunk.response_metadata
+                        if isinstance(metadata, dict):
+                            # 检查常见的错误字段
+                            if metadata.get('error') or metadata.get('finish_reason') == 'error':
+                                logger.error(f"LLM chunk 包含错误元数据: {metadata}")
+
+                    # 检查是否有 additional_kwargs 中的错误
+                    if hasattr(chunk, 'additional_kwargs'):
+                        additional = chunk.additional_kwargs
+                        if isinstance(additional, dict) and additional.get('error'):
+                            logger.error(f"LLM chunk additional_kwargs 包含错误: {additional}")
+
                     # 处理文本内容 - 规范化为字符串
                     if hasattr(chunk, 'content') and chunk.content:
                         content = chunk.content
@@ -498,8 +553,23 @@ class AgentOrchestrator:
                                     'args': tc_args if isinstance(tc_args, dict) else {}
                                 }
                 
+                # 记录流式调用结束统计
+                logger.debug(f"LLM astream 完成: chunk_count={chunk_count}, content_parts={len(collected_content)}, tool_calls_count={len(tool_calls_by_index)}")
+
+                # 检查是否收到了任何 chunk
+                if chunk_count == 0:
+                    logger.warning("LLM 流式调用未收到任何 chunk")
+
                 # 合并为完整响应
                 full_content = ''.join(collected_content)
+
+                # 检查响应内容是否包含错误信息（某些 API 会在内容中返回错误而非抛异常）
+                if full_content:
+                    content_lower = full_content.lower()
+                    error_keywords = ['error', 'exception', '错误', '失败', 'failed', 'invalid', 'unauthorized', 'rate limit', 'quota']
+                    if any(kw in content_lower for kw in error_keywords):
+                        # 可能是错误响应，记录完整内容供排查
+                        logger.warning(f"LLM 响应可能包含错误信息: {full_content[:500]}{'...' if len(full_content) > 500 else ''}")
                 
                 # 解析工具调用参数
                 final_tool_calls = []
@@ -564,6 +634,21 @@ class AgentOrchestrator:
                         pass
                 if hasattr(e, 'body'):
                     logger.error(f"API 错误 body: {e.body}")
+                raise
+            except ValueError as e:
+                # 捕获 "No generation chunks were returned" 等 ValueError
+                error_msg = str(e)
+                logger.error(f"LLM 流式调用 ValueError: {error_msg}")
+                # 记录更多上下文信息帮助排查
+                logger.error(f"  - 模型: {getattr(self.llm, 'model_name', getattr(self.llm, 'model', 'unknown'))}")
+                logger.error(f"  - 消息数量: {len(messages)}")
+                if messages:
+                    # 记录消息摘要（不记录完整内容以免日志过长）
+                    for i, msg in enumerate(messages):
+                        msg_type = type(msg).__name__
+                        msg_content = getattr(msg, 'content', '')
+                        content_preview = msg_content[:200] if isinstance(msg_content, str) else str(msg_content)[:200]
+                        logger.error(f"  - 消息[{i}] type={msg_type}, content_len={len(str(msg_content))}, preview={content_preview}...")
                 raise
             except Exception as e:
                 logger.error(f"LLM 调用异常: {type(e).__name__}: {e}")

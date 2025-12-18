@@ -230,13 +230,11 @@ def obtain_use_case_level(project_id: int = Field(description='项目id')):
     # 使用 .get() 方法安全地访问嵌套键，避免 KeyError
     data_obj = data.get("data")
     if not isinstance(data_obj, dict):
-        print("错误: JSON结构中未找到有效的 'data' 对象。")
-        exit()
+        return "错误: JSON结构中未找到有效的 'data' 对象。"
 
     custom_fields_list = data_obj.get("customFields")
     if not isinstance(custom_fields_list, list) or not custom_fields_list:
-        print("错误: JSON结构中未找到有效的 'customFields' 列表或列表为空。")
-        exit()
+        return "错误: JSON结构中未找到有效的 'customFields' 列表或列表为空。"
 
     # 假设第一个 customField 对象就是我们需要的“用例等级”字段
     # 如果实际情况不是这样，您可能需要遍历 custom_fields_list 并检查 fieldName 或 internalFieldKey
@@ -244,8 +242,7 @@ def obtain_use_case_level(project_id: int = Field(description='项目id')):
 
     options_list = target_field.get("options")
     if not isinstance(options_list, list):
-        print("错误: 在目标自定义字段中未找到有效的 'options' 列表。")
-        exit()
+        return "错误: 在目标自定义字段中未找到有效的 'options' 列表。"
 
     # 用于存储 P几 对应的 fieldId 的字典
     p_level_field_ids = {}
