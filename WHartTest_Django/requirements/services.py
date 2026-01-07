@@ -1751,6 +1751,8 @@ class ModuleOperationService:
             return self._delete_module(operation_data)
         elif operation == 'create':
             return self._create_module(operation_data)
+        elif operation == 'update':
+            return self._update_module(operation_data)
         else:
             raise ValueError(f"不支持的操作类型: {operation}")
 
@@ -1967,6 +1969,32 @@ class ModuleOperationService:
             'new_module_id': str(module.id),
             'title': module.title,
             'message': f'成功创建新模块 "{module.title}"'
+        }
+
+    def _update_module(self, operation_data: dict) -> dict:
+        """更新模块内容"""
+        target_module_id = operation_data['target_modules'][0]
+        module_data = operation_data['new_module_data']
+
+        module = RequirementModule.objects.get(
+            id=target_module_id,
+            document=self.document
+        )
+
+        # 更新字段
+        if 'title' in module_data:
+            module.title = module_data['title']
+        if 'content' in module_data:
+            module.content = module_data['content']
+
+        module.is_auto_generated = False
+        module.save()
+
+        return {
+            'operation': 'update',
+            'module_id': str(module.id),
+            'title': module.title,
+            'message': f'成功更新模块 "{module.title}"'
         }
 
     def _get_next_order(self) -> int:

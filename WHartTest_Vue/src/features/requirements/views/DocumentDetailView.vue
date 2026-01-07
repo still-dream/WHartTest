@@ -412,9 +412,9 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed, onMounted, nextTick } from 'vue';
+import { ref, computed, onMounted, nextTick, h } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
-import { Message, Modal } from '@arco-design/web-vue';
+import { Message, Modal, Input as AInput } from '@arco-design/web-vue';
 import {
   IconArrowLeft,
   IconCheckCircle,
@@ -755,10 +755,51 @@ const editModule = (module: DocumentModule) => {
 
 // 保存模块
 const saveModule = async () => {
-  // TODO: 实现模块保存逻辑
-  Message.success('模块保存成功');
-  editModalVisible.value = false;
-  await loadDocument();
+  if (!document.value || !editForm.value.title?.trim()) {
+    Message.warning('请输入模块标题');
+    return;
+  }
+
+  try {
+    if (currentEditingModule.value) {
+      // 编辑已有模块 - 使用 rename 操作
+      const response = await RequirementDocumentService.moduleOperation(document.value.id, {
+        operation: 'rename',
+        target_modules: [currentEditingModule.value.id],
+        new_module_data: {
+          title: editForm.value.title.trim()
+        }
+      });
+      if (response.status === 'success') {
+        Message.success('模块更新成功');
+      } else {
+        Message.error(response.message || '更新模块失败');
+        return;
+      }
+    } else {
+      // 新建模块
+      const response = await RequirementDocumentService.moduleOperation(document.value.id, {
+        operation: 'create',
+        target_modules: [],
+        new_module_data: {
+          title: editForm.value.title.trim(),
+          content: editForm.value.content || '',
+          order: editForm.value.order
+        }
+      });
+      if (response.status === 'success') {
+        Message.success('模块创建成功');
+      } else {
+        Message.error(response.message || '创建模块失败');
+        return;
+      }
+    }
+    editModalVisible.value = false;
+    await loadDocument();
+  } catch (error) {
+    console.error('保存模块失败:', error);
+    Message.error('保存模块失败');
+  }
 };
 
 // 取消模态框编辑
@@ -841,10 +882,40 @@ const startEditTitle = (module: DocumentModule) => {
 };
 
 const saveTitleModal = async () => {
-  if (editingTitle.value.trim() && currentEditingTitleModule.value) {
-    // TODO: 调用API保存标题
-    currentEditingTitleModule.value.title = editingTitle.value.trim();
-    Message.success('标题已更新');
+  if (!document.value || !currentEditingTitleModule.value) {
+    cancelTitleEdit();
+    return;
+  }
+
+  const newTitle = editingTitle.value.trim();
+  if (!newTitle) {
+    Message.warning('请输入标题');
+    return;
+  }
+
+  // 如果标题没有变化，直接取消编辑
+  if (newTitle === currentEditingTitleModule.value.title) {
+    cancelTitleEdit();
+    return;
+  }
+
+  try {
+    const response = await RequirementDocumentService.moduleOperation(document.value.id, {
+      operation: 'update',
+      target_modules: [currentEditingTitleModule.value.id],
+      new_module_data: {
+        title: newTitle
+      }
+    });
+    if (response.status === 'success') {
+      currentEditingTitleModule.value.title = newTitle;
+      Message.success('标题已更新');
+    } else {
+      Message.error(response.message || '更新标题失败');
+    }
+  } catch (error) {
+    console.error('更新标题失败:', error);
+    Message.error('更新标题失败');
   }
   cancelTitleEdit();
 };
@@ -864,10 +935,37 @@ const editModuleContent = (module: DocumentModule) => {
 };
 
 const saveContent = async (module: DocumentModule) => {
-  if (editingContent.value.trim()) {
-    // TODO: 调用API保存内容
-    module.content = editingContent.value.trim();
-    Message.success('内容已更新');
+  if (!document.value) return;
+
+  const newContent = editingContent.value.trim();
+  if (!newContent) {
+    cancelContentEdit();
+    return;
+  }
+
+  // 如果内容没有变化，直接取消编辑
+  if (newContent === module.content) {
+    cancelContentEdit();
+    return;
+  }
+
+  try {
+    const response = await RequirementDocumentService.moduleOperation(document.value.id, {
+      operation: 'update',
+      target_modules: [module.id],
+      new_module_data: {
+        content: newContent
+      }
+    });
+    if (response.status === 'success') {
+      module.content = newContent;
+      Message.success('内容已更新');
+    } else {
+      Message.error(response.message || '更新内容失败');
+    }
+  } catch (error) {
+    console.error('更新内容失败:', error);
+    Message.error('更新内容失败');
   }
   cancelContentEdit();
 };
@@ -892,10 +990,50 @@ const mergeSelectedModules = async () => {
     Message.warning('请至少选择两个模块进行合并');
     return;
   }
-  // TODO: 实现模块合并逻辑
-  Message.success(`已合并 ${selectedModules.value.length} 个模块`);
-  clearSelection();
-  await loadDocument();
+  if (!document.value) return;
+
+  // 获取选中模块的标题，用于生成默认合并标题
+  const selectedModulesList = document.value.modules.filter(m => selectedModules.value.includes(m.id));
+  const defaultTitle = selectedModulesList[0]?.title || '合并模块';
+
+  // 弹出输入框让用户输入合并后的标题
+  const inputValue = ref(defaultTitle);
+  Modal.confirm({
+    title: '合并模块',
+    content: () => h('div', [
+      h('p', { style: 'margin-bottom: 8px' }, `将合并 ${selectedModules.value.length} 个模块，请输入合并后的标题：`),
+      h(AInput, {
+        modelValue: inputValue.value,
+        'onUpdate:modelValue': (val: string) => { inputValue.value = val; },
+        placeholder: '请输入合并后的模块标题'
+      })
+    ]),
+    okText: '确认合并',
+    cancelText: '取消',
+    onOk: async () => {
+      if (!inputValue.value.trim()) {
+        Message.warning('请输入合并后的标题');
+        return Promise.reject();
+      }
+      try {
+        const response = await RequirementDocumentService.moduleOperation(document.value!.id, {
+          operation: 'merge',
+          target_modules: selectedModules.value,
+          merge_title: inputValue.value.trim()
+        });
+        if (response.status === 'success') {
+          Message.success(`已合并 ${selectedModules.value.length} 个模块`);
+          clearSelection();
+          await loadDocument();
+        } else {
+          Message.error(response.message || '合并模块失败');
+        }
+      } catch (error) {
+        console.error('合并模块失败:', error);
+        Message.error('合并模块失败');
+      }
+    }
+  });
 };
 
 const deleteSelectedModules = async () => {
@@ -903,10 +1041,35 @@ const deleteSelectedModules = async () => {
     Message.warning('请选择要删除的模块');
     return;
   }
-  // TODO: 实现批量删除逻辑
-  Message.success(`已删除 ${selectedModules.value.length} 个模块`);
-  clearSelection();
-  await loadDocument();
+  if (!document.value) return;
+
+  Modal.warning({
+    title: '确认删除',
+    content: `确定要删除选中的 ${selectedModules.value.length} 个模块吗？此操作不可恢复。`,
+    okText: '确认删除',
+    cancelText: '取消',
+    onOk: async () => {
+      try {
+        // 逐个删除选中的模块
+        for (const moduleId of selectedModules.value) {
+          const response = await RequirementDocumentService.moduleOperation(document.value!.id, {
+            operation: 'delete',
+            target_modules: [moduleId]
+          });
+          if (response.status !== 'success') {
+            Message.error(response.message || '删除模块失败');
+            return;
+          }
+        }
+        Message.success(`已删除 ${selectedModules.value.length} 个模块`);
+        clearSelection();
+        await loadDocument();
+      } catch (error) {
+        console.error('删除模块失败:', error);
+        Message.error('删除模块失败');
+      }
+    }
+  });
 };
 
 const clearSelection = () => {

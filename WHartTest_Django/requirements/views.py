@@ -532,10 +532,6 @@ class RequirementDocumentViewSet(BaseModelViewSet):
                     )
 
                     if result['success']:
-                        # 更新文档状态
-                        document.status = 'ready_for_review'
-                        document.save()
-
                         # 返回更新后的模块列表
                         modules = document.modules.order_by('order')
                         modules_serializer = RequirementModuleSerializer(modules, many=True)
@@ -568,10 +564,6 @@ class RequirementDocumentViewSet(BaseModelViewSet):
                 try:
                     operation_service = ModuleOperationService(document)
                     result = operation_service.execute_operation(serializer.validated_data)
-
-                    # 更新文档状态
-                    document.status = 'ready_for_review'
-                    document.save()
 
                     # 返回更新后的模块列表
                     modules = document.modules.order_by('order')

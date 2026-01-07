@@ -237,7 +237,8 @@ class ModuleOperationSerializer(serializers.Serializer):
         ('reorder', '重新排序'),
         ('rename', '重命名'),
         ('delete', '删除'),
-        ('create', '创建新模块')
+        ('create', '创建新模块'),
+        ('update', '更新模块')
     ])
 
     # 操作目标

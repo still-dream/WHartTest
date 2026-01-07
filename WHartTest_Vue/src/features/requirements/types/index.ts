@@ -83,7 +83,7 @@ export interface DocumentModule {
 }
 
 // 模块操作类型
-export type ModuleOperationType = 'merge' | 'split' | 'rename' | 'reorder' | 'delete' | 'adjust_boundary';
+export type ModuleOperationType = 'merge' | 'split' | 'rename' | 'reorder' | 'delete' | 'create' | 'update' | 'adjust_boundary';
 
 // 模块操作请求
 export interface ModuleOperationRequest {
