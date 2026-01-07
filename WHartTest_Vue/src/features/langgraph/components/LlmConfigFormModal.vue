@@ -56,10 +56,10 @@
           </a-form-item>
         </a-col>
         <a-col :span="12">
-          <a-form-item field="api_key" label="API Key" :required="!isEditing">
+          <a-form-item field="api_key" label="API Key">
             <a-input-password
               v-model="formData.api_key"
-              :placeholder="isEditing ? '留空不修改' : '请输入 API Key'"
+              :placeholder="isEditing ? '留空不修改' : '请输入 API Key（可选）'"
             />
           </a-form-item>
         </a-col>
@@ -193,24 +193,6 @@ const formRules: Record<string, FieldRule[]> = {
     { required: true, message: 'API URL 不能为空' },
     { type: 'url', message: '请输入有效的 URL' },
   ],
-  api_key: [
-    {
-      required: !isEditing.value,
-      message: 'API Key 不能为空',
-      validator: (value: string | undefined, cb: (error?: string) => void) => {
-        if (!isEditing.value && !value) {
-          return cb('API Key 不能为空');
-        }
-        if (value && value.length < 10 && !isEditing.value) {
-          return cb('API key 必须至少 10 个字符长。');
-        }
-        if (isEditing.value && value && value.length > 0 && value.length < 10) {
-          return cb('API key 必须至少 10 个字符长。');
-        }
-        return cb();
-      }
-    },
-  ],
 };
 
 
@@ -280,10 +262,6 @@ const handleSubmit = async () => {
   } else {
     // 新增模式
     submitData = { ...formData.value };
-     if (!submitData.api_key) { // 防御性检查，理论上表单校验会阻止
-        Message.error('API Key 不能为空');
-        return;
-    }
     emit('submit', submitData);
   }
 };
@@ -299,21 +277,17 @@ const fetchAvailableModels = async () => {
     return;
   }
 
-  if (!formData.value.api_key) {
-    Message.warning('请先填写 API Key');
-    return;
-  }
-
   loadingModels.value = true;
-  
+
   try {
     const apiUrl = formData.value.api_url.replace(/\/$/, '');
     const modelsEndpoint = `${apiUrl}/models`;
+    const headers: Record<string, string> = { 'Content-Type': 'application/json' };
+    if (formData.value.api_key) {
+      headers['Authorization'] = `Bearer ${formData.value.api_key}`;
+    }
     const response = await axios.get(modelsEndpoint, {
-      headers: {
-        'Authorization': `Bearer ${formData.value.api_key}`,
-        'Content-Type': 'application/json',
-      },
+      headers,
       timeout: 10000,
     });
 
@@ -348,20 +322,20 @@ const testLlmModel = async () => {
     Message.warning('请先填写 API URL');
     return;
   }
-  if (!formData.value.api_key) {
-    Message.warning('请先填写 API Key');
-    return;
-  }
   if (!formData.value.name) {
     Message.warning('请先填写模型名称');
     return;
   }
 
   testingModel.value = true;
-  
+
   try {
     const apiUrl = formData.value.api_url.replace(/\/$/, '');
     const chatEndpoint = `${apiUrl}/chat/completions`;
+    const headers: Record<string, string> = { 'Content-Type': 'application/json' };
+    if (formData.value.api_key) {
+      headers['Authorization'] = `Bearer ${formData.value.api_key}`;
+    }
     const response = await axios.post(chatEndpoint, {
       model: formData.value.name,
       messages: [
@@ -369,10 +343,7 @@ const testLlmModel = async () => {
       ],
       max_tokens: 10
     }, {
-      headers: {
-        'Authorization': `Bearer ${formData.value.api_key}`,
-        'Content-Type': 'application/json',
-      },
+      headers,
       timeout: 30000,
     });
 
@@ -401,7 +372,7 @@ const testLlmModel = async () => {
 
 // 处理模型输入框聚焦
 const handleModelInputFocus = () => {
-  if (formData.value.api_url && formData.value.api_key && modelOptions.value.length === 0) {
+  if (formData.value.api_url && modelOptions.value.length === 0) {
     fetchAvailableModels();
   }
 };

@@ -46,9 +46,9 @@ class LLMConfigSerializer(serializers.ModelSerializer):
 
     def validate_api_key(self, value):
         """验证API密钥"""
-        if not value or len(value.strip()) < 10:
-            raise serializers.ValidationError("API密钥长度至少需要10个字符")
-        return value.strip()
+        if value and len(value.strip()) < 1:
+            raise serializers.ValidationError("API密钥长度至少需要1个字符")
+        return value.strip() if value else ''
 
     def validate_api_url(self, value):
         """验证API地址"""

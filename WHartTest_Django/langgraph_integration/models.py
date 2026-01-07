@@ -27,7 +27,7 @@ class LLMConfig(models.Model):
     
     # API连接配置（保持不变）
     api_url = models.URLField(verbose_name="API地址", help_text="LLM服务的API端点URL")
-    api_key = models.CharField(max_length=512, verbose_name="API密钥", help_text="访问LLM服务的API密钥")
+    api_key = models.CharField(max_length=512, blank=True, default='', verbose_name="API密钥", help_text="访问LLM服务的API密钥（可选）")
     
     # 提示词配置（保持不变）
     system_prompt = models.TextField(blank=True, null=True, verbose_name="系统提示词",
