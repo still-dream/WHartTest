@@ -379,6 +379,12 @@
 /* 模板管理相关模态框 */
 .template-form-modal .arco-modal-body {
   padding: 20px 24px;
+  display: flex;
+  justify-content: center;
+}
+
+.template-form-modal .arco-spin {
+  width: 100%;
 }
 
 /* 导入弹窗特殊处理 */
@@ -388,11 +394,19 @@
   justify-content: center;
 }
 
+.import-modal .arco-spin {
+  width: 100%;
+}
+
 /* 导出弹窗特殊处理 */
 .export-modal .arco-modal-body {
   padding: 20px 24px;
   display: flex;
   justify-content: center;
+}
+
+.export-modal .arco-spin {
+  width: 100%;
 }
 
 /* 模态框按钮间距 */

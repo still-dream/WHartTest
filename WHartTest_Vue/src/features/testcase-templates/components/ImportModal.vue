@@ -366,6 +366,20 @@ defineExpose({ open });
   box-sizing: border-box;
 }
 
+/* 隐藏上传列表中的开始按钮 */
+:deep(.arco-upload-progress) {
+  display: none !important;
+}
+
+/* 上传列表项样式 */
+:deep(.arco-upload-list-item) {
+  padding-right: 32px;
+}
+
+:deep(.arco-upload-list-item-operation) {
+  right: 8px;
+}
+
 /* 步骤指引 */
 .step-guide {
   display: flex;

@@ -46,6 +46,9 @@
                 :auto-upload="false"
                 accept=".xlsx,.xls"
                 :limit="1"
+                :show-retry-button="false"
+                :show-cancel-button="false"
+                :show-preview-button="false"
                 @change="handleSampleFileChange"
               >
                 <template #upload-button>
@@ -55,7 +58,6 @@
                   </a-button>
                 </template>
               </a-upload>
-              <div class="upload-tip">上传样例文件后可自动识别表头列名</div>
             </a-form-item>
 
             <a-row :gutter="16">
@@ -563,6 +565,11 @@ defineExpose({ open });
 .step-content {
   min-height: 320px;
   padding: 4px 0;
+}
+
+/* 隐藏上传列表中的开始按钮 */
+:deep(.arco-upload-progress) {
+  display: none !important;
 }
 
 .upload-tip {
