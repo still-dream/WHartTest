@@ -8,6 +8,7 @@ from django.http import HttpResponse
 from django.conf import settings
 from openpyxl import Workbook
 from openpyxl.styles import Font, Alignment
+from rest_framework.parsers import MultiPartParser, FormParser
 import io
 
 from .models import (
@@ -138,14 +139,20 @@ class TestCaseViewSet(viewsets.ModelViewSet):
         导出用例为Excel格式
         支持两种方式传递要导出的用例ID：
         1. GET请求通过ids参数: /api/projects/1/testcases/export-excel/?ids=1,2,3
-        2. POST请求通过请求体: {"ids": [1, 2, 3]}
+        2. POST请求通过请求体: {"ids": [1, 2, 3], "template_id": 1}
         如果不提供ids，则导出项目下所有用例
+        如果提供template_id，则使用模版配置导出
         """
+        from testcase_templates.models import ImportExportTemplate
+        from testcase_templates.export_service import TestCaseExportService
+
         testcase_ids = None
+        template_id = None
 
         if request.method == 'POST':
-            # POST请求，从请求体获取ids
+            # POST请求，从请求体获取ids和template_id
             ids_data = request.data.get('ids', [])
+            template_id = request.data.get('template_id')
             if ids_data:
                 try:
                     testcase_ids = [int(id) for id in ids_data]
@@ -156,8 +163,9 @@ class TestCaseViewSet(viewsets.ModelViewSet):
                         status=400
                     )
         else:
-            # GET请求，从查询参数获取ids
+            # GET请求，从查询参数获取ids和template_id
             ids_param = request.query_params.get('ids', '')
+            template_id = request.query_params.get('template_id')
             if ids_param:
                 try:
                     testcase_ids = [int(id.strip()) for id in ids_param.split(',') if id.strip()]
@@ -174,60 +182,41 @@ class TestCaseViewSet(viewsets.ModelViewSet):
         else:
             queryset = self.get_queryset()
 
-        # 创建Excel工作簿
-        wb = Workbook()
-        ws = wb.active
-        ws.title = "测试用例"
+        # 获取模版（如果指定）
+        template = None
+        if template_id:
+            try:
+                template = ImportExportTemplate.objects.get(
+                    pk=template_id,
+                    is_active=True,
+                    template_type__in=['export', 'both']
+                )
+            except ImportExportTemplate.DoesNotExist:
+                return Response(
+                    {'error': '指定的导出模版不存在或不可用'},
+                    status=status.HTTP_400_BAD_REQUEST
+                )
 
-        # 设置表头
-        headers = [
-            '用例名称', '所属模块', '标签', '前置条件',
-            '步骤描述', '预期结果', '编辑模式', '备注', '用例等级'
-        ]
+        # 获取项目名称
+        project = get_object_or_404(Project, pk=project_pk)
 
-        # 写入表头
-        for col, header in enumerate(headers, 1):
-            cell = ws.cell(row=1, column=col, value=header)
-            cell.font = Font(bold=True)
-            cell.alignment = Alignment(horizontal='center')
-
-        # 写入数据
-        for row, testcase in enumerate(queryset, 2):
-            # 获取模块路径
-            module_path = self._get_module_path(testcase.module) if testcase.module else ""
-
-            # 获取步骤描述和预期结果
-            steps_desc, expected_results = self._format_steps(testcase.steps.all())
-
-            # 写入数据行
-            ws.cell(row=row, column=1, value=testcase.name)
-            ws.cell(row=row, column=2, value=module_path)
-            ws.cell(row=row, column=3, value="")  # 标签字段，当前数据库中没有
-            ws.cell(row=row, column=4, value=testcase.precondition or "")
-            ws.cell(row=row, column=5, value=steps_desc)
-            ws.cell(row=row, column=6, value=expected_results)
-            ws.cell(row=row, column=7, value="STEP")  # 编辑模式，固定为STEP
-            ws.cell(row=row, column=8, value=testcase.notes or "")
-            ws.cell(row=row, column=9, value=testcase.level)
-
-        # 调整列宽
-        for col in range(1, len(headers) + 1):
-            ws.column_dimensions[chr(64 + col)].width = 20
-
-        # 保存到内存
-        output = io.BytesIO()
-        wb.save(output)
-        output.seek(0)
+        # 使用导出服务
+        export_service = TestCaseExportService(template)
+        try:
+            excel_data, filename = export_service.export(queryset, project.name)
+        except Exception as e:
+            import logging
+            logging.getLogger(__name__).exception("导出Excel失败")
+            return Response(
+                {'error': f'导出失败: {str(e)}'},
+                status=status.HTTP_400_BAD_REQUEST
+            )
 
         # 创建HTTP响应
         response = HttpResponse(
-            output.getvalue(),
+            excel_data,
             content_type='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
         )
-
-        # 获取项目名称用于文件名
-        project = get_object_or_404(Project, pk=project_pk)
-        filename = f"{project.name}_测试用例.xlsx"
         response['Content-Disposition'] = f'attachment; filename="{filename}"'
 
         return response
@@ -259,6 +248,62 @@ class TestCaseViewSet(viewsets.ModelViewSet):
             expected_results.append(f"[{step.step_number}]{step.expected_result}")
 
         return "\n".join(steps_desc), "\n".join(expected_results)
+
+    @action(detail=False, methods=['post'], url_path='import-excel',
+            parser_classes=[MultiPartParser, FormParser])
+    def import_excel(self, request, project_pk=None):
+        """
+        使用模版导入用例
+        POST /api/projects/{project_pk}/testcases/import-excel/
+        请求体: multipart/form-data
+        - file: Excel 文件
+        - template_id: 导入模版ID
+        """
+        from testcase_templates.models import ImportExportTemplate
+        from testcase_templates.import_service import TestCaseImportService
+
+        # 验证参数
+        file = request.FILES.get('file')
+        template_id = request.data.get('template_id')
+
+        if not file:
+            return Response(
+                {'error': '请上传 Excel 文件'},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+
+        if not template_id:
+            return Response(
+                {'error': '请选择导入模版'},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+
+        # 获取模版
+        try:
+            template = ImportExportTemplate.objects.get(id=template_id, is_active=True)
+        except ImportExportTemplate.DoesNotExist:
+            return Response(
+                {'error': '模版不存在或已禁用'},
+                status=status.HTTP_404_NOT_FOUND
+            )
+
+        # 获取项目
+        project = get_object_or_404(Project, pk=project_pk)
+
+        # 执行导入
+        service = TestCaseImportService(template, project, request.user)
+        result = service.import_from_file(file)
+
+        return Response({
+            'success': result.success,
+            'total_rows': result.total_rows,
+            'imported_count': result.imported_count,
+            'skipped_count': result.skipped_count,
+            'error_count': result.error_count,
+            'duplicate_names': result.duplicate_names,
+            'errors': result.errors[:20],  # 只返回前20条错误
+            'created_testcase_ids': result.created_testcases,
+        }, status=status.HTTP_200_OK if result.success else status.HTTP_400_BAD_REQUEST)
 
     @action(detail=False, methods=['post'], url_path='batch-delete')
     def batch_delete(self, request, **kwargs):

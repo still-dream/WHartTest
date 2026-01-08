@@ -22,6 +22,7 @@ import SpecializedReportView from '@/features/requirements/views/SpecializedRepo
 import AiDiagramView from '@/features/diagrams/views/AiDiagramView.vue'; // 导入 AI 图表视图
 import AutomationScriptManagementView from '@/views/AutomationScriptManagementView.vue'; // 导入自动化用例管理视图
 import SkillsManagementView from '@/features/skills/views/SkillsManagementView.vue'; // 导入 Skills 管理视图
+import TemplateManagementView from '@/features/testcase-templates/views/TemplateManagementView.vue'; // 导入用例导入导出模版管理视图
 
 const routes: Array<RouteRecordRaw> = [
   {
@@ -134,6 +135,11 @@ const routes: Array<RouteRecordRaw> = [
         path: 'skills', // Skills 管理
         name: 'SkillsManagement',
         component: SkillsManagementView,
+      },
+      {
+        path: 'testcase-templates', // 用例导入导出模版管理
+        name: 'TemplateManagement',
+        component: TemplateManagementView,
       },
       // 其他受保护的子路由可以加在这里
     ]

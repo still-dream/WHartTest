@@ -29,20 +29,18 @@
           <a-option value="P2">P2 - 中</a-option>
           <a-option value="P3">P3 - 低</a-option>
         </a-select>
-        <a-dropdown @select="handleExportAction" trigger="click" position="bottom">
-          <a-button type="outline">
-            <template #icon>
-              <icon-download />
-            </template>
-            导出
-          </a-button>
-          <template #content>
-            <a-doption value="exportAll">导出所有用例</a-doption>
-            <a-doption value="exportSelected" :disabled="selectedTestCaseIds.length === 0">
-              导出选中用例 ({{ selectedTestCaseIds.length }})
-            </a-doption>
+        <a-button type="outline" @click="handleExport">
+          <template #icon>
+            <icon-download />
           </template>
-        </a-dropdown>
+          导出
+        </a-button>
+        <a-button type="outline" @click="handleImport">
+          <template #icon>
+            <icon-upload />
+          </template>
+          导入
+        </a-button>
         <a-button
           v-if="selectedTestCaseIds.length > 0"
           type="primary"
@@ -122,19 +120,33 @@
         </a-space>
       </template>
     </a-table>
+
+    <ImportModal
+      v-if="currentProjectId"
+      ref="importModalRef"
+      :project-id="currentProjectId"
+      @success="onImportSuccess"
+    />
+
+    <ExportModal
+      v-if="currentProjectId"
+      ref="exportModalRef"
+      :project-id="currentProjectId"
+      :selected-ids="selectedTestCaseIds"
+    />
   </div>
 </template>
 
 <script setup lang="ts">
 import { ref, reactive, onMounted, computed, watch, toRefs } from 'vue';
 import { Message, Modal } from '@arco-design/web-vue';
-import { IconFolder, IconDownload } from '@arco-design/web-vue/es/icon';
+import { IconFolder, IconDownload, IconUpload } from '@arco-design/web-vue/es/icon';
+import ImportModal from '@/features/testcase-templates/components/ImportModal.vue';
+import ExportModal from '@/features/testcase-templates/components/ExportModal.vue';
 import {
   getTestCaseList,
   deleteTestCase as deleteTestCaseService,
   batchDeleteTestCases,
-  exportAllTestCasesToExcel,
-  exportSelectedTestCasesToExcel,
   type TestCase,
 } from '@/services/testcaseService';
 import { formatDate, getLevelColor } from '@/utils/formatters'; // 假设工具函数已移至此处
@@ -167,6 +179,8 @@ const localSearchKeyword = ref('');
 const selectedLevel = ref<string>('');
 const testCaseData = ref<TestCase[]>([]);
 const selectedTestCaseIds = ref<number[]>([]);
+const importModalRef = ref<InstanceType<typeof ImportModal> | null>(null);
+const exportModalRef = ref<InstanceType<typeof ExportModal> | null>(null);
 
 const paginationConfig = reactive({
   total: 0,
@@ -446,38 +460,24 @@ const handleBatchDelete = () => {
 
 
 // 导出处理函数
-const handleExportAction = async (value: string) => {
+const handleExport = () => {
   if (!currentProjectId.value) {
     Message.warning('请先选择一个项目');
     return;
   }
+  exportModalRef.value?.open();
+};
 
-  try {
-    if (value === 'exportAll') {
-      // 导出所有用例
-      const response = await exportAllTestCasesToExcel(currentProjectId.value);
-      if (response.success) {
-        Message.success(response.message || '导出成功');
-      } else {
-        Message.error(response.error || '导出失败');
-      }
-    } else if (value === 'exportSelected') {
-      // 导出选中用例
-      if (selectedTestCaseIds.value.length === 0) {
-        Message.warning('请先选择要导出的用例');
-        return;
-      }
-      const response = await exportSelectedTestCasesToExcel(currentProjectId.value, selectedTestCaseIds.value);
-      if (response.success) {
-        Message.success(response.message || '导出成功');
-      } else {
-        Message.error(response.error || '导出失败');
-      }
-    }
-  } catch (error) {
-    console.error('导出用例出错:', error);
-    Message.error('导出用例时发生错误');
+const handleImport = () => {
+  if (!currentProjectId.value) {
+    Message.warning('请先选择一个项目');
+    return;
   }
+  importModalRef.value?.open();
+};
+
+const onImportSuccess = () => {
+  fetchTestCases();
 };
 
 onMounted(() => {

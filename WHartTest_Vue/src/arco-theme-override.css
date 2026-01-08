@@ -346,3 +346,114 @@
   color: #0090d1 !important;
   background-color: rgba(0, 160, 233, 0.15) !important;
 }
+
+/* 模态框样式优化 */
+.arco-modal {
+  border-radius: 12px;
+  overflow: hidden;
+}
+
+.arco-modal-header {
+  padding: 20px 24px 16px;
+  border-bottom: 1px solid var(--color-border-1);
+}
+
+.arco-modal-title {
+  font-size: 17px;
+  font-weight: 600;
+  color: var(--color-text-1);
+}
+
+.arco-modal-body {
+  padding: 20px 24px;
+  max-height: 70vh;
+  overflow-y: auto;
+}
+
+.arco-modal-footer {
+  padding: 16px 24px 20px;
+  border-top: 1px solid var(--color-border-1);
+  background: var(--color-bg-1);
+}
+
+/* 模板管理相关模态框 */
+.template-form-modal .arco-modal-body {
+  padding: 20px 24px;
+}
+
+/* 导入弹窗特殊处理 */
+.import-modal .arco-modal-body {
+  padding: 20px 24px;
+  display: flex;
+  justify-content: center;
+}
+
+/* 导出弹窗特殊处理 */
+.export-modal .arco-modal-body {
+  padding: 20px 24px;
+  display: flex;
+  justify-content: center;
+}
+
+/* 模态框按钮间距 */
+.arco-modal-footer .arco-space {
+  gap: 12px !important;
+}
+
+.arco-modal-footer .arco-btn {
+  min-width: 80px;
+  height: 36px;
+  border-radius: 6px;
+}
+
+/* 响应式模态框 */
+@media (max-width: 768px) {
+  .arco-modal {
+    width: 95% !important;
+    max-width: 95% !important;
+    margin: 16px auto;
+  }
+
+  .arco-modal-header {
+    padding: 16px 20px 12px;
+  }
+
+  .arco-modal-title {
+    font-size: 16px;
+  }
+
+  .arco-modal-body {
+    padding: 16px 20px;
+    max-height: 60vh;
+  }
+
+  .arco-modal-footer {
+    padding: 12px 20px 16px;
+  }
+
+  .arco-modal-footer .arco-btn {
+    min-width: 70px;
+    height: 34px;
+  }
+}
+
+@media (max-width: 576px) {
+  .arco-modal {
+    width: 100% !important;
+    max-width: 100% !important;
+    margin: 0;
+    border-radius: 12px 12px 0 0;
+    position: fixed;
+    bottom: 0;
+    left: 0;
+    right: 0;
+  }
+
+  .arco-modal-wrapper {
+    align-items: flex-end;
+  }
+
+  .arco-modal-body {
+    max-height: 55vh;
+  }
+}
