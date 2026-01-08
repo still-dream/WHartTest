@@ -64,7 +64,7 @@
       <a-button
         class="brain-button"
         :type="isBrainMode ? 'primary' : 'outline'"
-        :loading="isLoading"
+        :disabled="isLoading"
         @click="toggleBrainMode"
         title="智能规划模式"
       >
@@ -73,14 +73,29 @@
         </template>
       </a-button>
 
+      <!-- 发送/停止按钮 -->
       <a-button
+        v-if="!isLoading"
         type="primary"
-        :loading="isLoading"
         class="send-button"
         @click="handleSendMessage"
       >
-        <i class="icon-send"></i>
-        <span v-if="!isLoading">发送</span>
+        <template #icon>
+          <icon-send />
+        </template>
+        <span>发送</span>
+      </a-button>
+      <a-button
+        v-else
+        type="primary"
+        status="danger"
+        class="stop-button"
+        @click="handleStopGeneration"
+      >
+        <template #icon>
+          <icon-record-stop />
+        </template>
+        <span>停止</span>
       </a-button>
     </div>
   </div>
@@ -93,7 +108,7 @@ import {
   Button as AButton,
   Message
 } from '@arco-design/web-vue';
-import { IconImage, IconClose, IconMindMapping, IconReply } from '@arco-design/web-vue/es/icon';
+import { IconImage, IconClose, IconMindMapping, IconReply, IconSend, IconRecordStop } from '@arco-design/web-vue/es/icon';
 import TokenUsageIndicator from './TokenUsageIndicator.vue';
 
 interface ChatMessage {
@@ -126,6 +141,7 @@ const emit = defineEmits<{
   'send-message': [data: { message: string; image?: string; imageDataUrl?: string; quotedMessage?: ChatMessage | null }];
   'update:brain-mode': [value: boolean];
   'clear-quote': [];
+  'stop-generation': [];
 }>();
 
 // 截断引用文本
@@ -145,6 +161,11 @@ const isBrainMode = ref(props.brainMode);
 const toggleBrainMode = () => {
   isBrainMode.value = !isBrainMode.value;
   emit('update:brain-mode', isBrainMode.value);
+};
+
+// 停止生成
+const handleStopGeneration = () => {
+  emit('stop-generation');
 };
 
 // 移除图片
@@ -510,10 +531,31 @@ const handlePaste = (e: ClipboardEvent) => {
 .send-button {
   display: flex;
   align-items: center;
+  gap: 4px;
   border-radius: 20px;
   padding: 0 16px;
   height: 36px;
   flex-shrink: 0;
+}
+
+.stop-button {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  border-radius: 20px;
+  padding: 0 16px;
+  height: 36px;
+  flex-shrink: 0;
+  animation: pulse-stop 1.5s ease-in-out infinite;
+}
+
+@keyframes pulse-stop {
+  0%, 100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.7;
+  }
 }
 
 .icon-send {

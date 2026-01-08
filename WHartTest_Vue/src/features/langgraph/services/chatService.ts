@@ -139,6 +139,8 @@ export const clearStreamState = (sessionId: string) => {
 const API_BASE_URL = '/lg/chat';
 // Agent Loop API 端点 - 解决 Token 累积问题
 const AGENT_LOOP_API_URL = '/orchestrator/agent-loop';
+// Agent Loop 停止 API 端点
+const AGENT_LOOP_STOP_API_URL = '/orchestrator/agent-loop/stop';
 
 // 获取API基础URL
 function getApiBaseUrl() {
@@ -240,6 +242,23 @@ export async function sendChatMessageStream(
 
   // 错误处理函数，用于更新全局状态
   const handleError = (error: any, sessionId: string | null) => {
+    // 判断是否是用户主动中断（AbortError）
+    const isAbortError = error?.name === 'AbortError' ||
+                         error?.message?.includes('aborted') ||
+                         error?.message?.includes('BodyStreamBuffer') ||
+                         error?.message?.includes('The user aborted');
+
+    if (isAbortError) {
+      // 用户主动中断，静默处理，不显示错误
+      console.log('[ChatService] Stream aborted by user');
+      if (sessionId && activeStreams.value[sessionId]) {
+        activeStreams.value[sessionId].isComplete = true;
+        // 不设置 error，避免显示错误提示
+      }
+      return;
+    }
+
+    // 真正的错误
     console.error('Stream error:', error);
     if (sessionId && activeStreams.value[sessionId]) {
       activeStreams.value[sessionId].error = error.message || '流式请求失败';
@@ -333,8 +352,13 @@ export async function sendChatMessageStream(
           }
         }
         
-        // 流结束时，如果会话仍在进行中，则标记为完成
+        // ⚠️ 流结束但未收到 complete/[DONE] 事件 = 异常中断
+        // 不自动设置 isComplete，让前端保持加载状态直到用户手动刷新
+        // 这避免了网络波动导致停止按钮过早消失的问题
         if (streamSessionId && activeStreams.value[streamSessionId] && !activeStreams.value[streamSessionId].isComplete) {
+            console.warn('[ChatService] Stream ended without complete event, possible network interruption');
+            // 设置错误状态而非完成状态，让用户知道可能需要重试
+            activeStreams.value[streamSessionId].error = '连接意外中断，请重试';
             activeStreams.value[streamSessionId].isComplete = true;
         }
         break;
@@ -746,6 +770,57 @@ export async function batchDeleteChatHistory(
       message: response.error || '批量删除失败',
       data: { deleted_count: 0, processed_sessions: 0, failed_sessions: [] },
       errors: { detail: [response.error || 'Unknown error'] }
+    };
+  }
+}
+
+/**
+ * 停止 Agent Loop 生成
+ * @param sessionId 要停止的会话ID
+ */
+export async function stopAgentLoop(
+  sessionId: string
+): Promise<ApiResponse<{ success: boolean; session_id: string; message: string }>> {
+  const authStore = useAuthStore();
+  const token = authStore.getAccessToken;
+
+  try {
+    const response = await fetch(`${getApiBaseUrl()}${AGENT_LOOP_STOP_API_URL}/`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${token}`
+      },
+      body: JSON.stringify({ session_id: sessionId })
+    });
+
+    const data = await response.json();
+
+    if (response.ok && data.success) {
+      return {
+        status: 'success',
+        code: 200,
+        message: data.message || '已停止生成',
+        data: data,
+        errors: undefined
+      };
+    } else {
+      return {
+        status: 'error',
+        code: response.status,
+        message: data.error || data.message || '停止失败',
+        data: { success: false, session_id: sessionId, message: '' },
+        errors: { detail: [data.error || 'Unknown error'] }
+      };
+    }
+  } catch (error) {
+    console.error('[ChatService] Stop agent loop error:', error);
+    return {
+      status: 'error',
+      code: 500,
+      message: error instanceof Error ? error.message : '停止请求失败',
+      data: { success: false, session_id: sessionId, message: '' },
+      errors: { detail: [error instanceof Error ? error.message : 'Unknown error'] }
     };
   }
 }

@@ -55,6 +55,7 @@
         v-model:brain-mode="isBrainMode"
         @send-message="handleSendMessage"
         @clear-quote="handleClearQuote"
+        @stop-generation="handleStopGeneration"
       />
     </div>
 
@@ -83,7 +84,8 @@ import {
   getChatSessions,
   activeStreams,
   clearStreamState,
-  latestContextUsage
+  latestContextUsage,
+  stopAgentLoop
 } from '@/features/langgraph/services/chatService';
 import { listLlmConfigs, partialUpdateLlmConfig } from '@/features/langgraph/services/llmConfigService';
 import { getUserPrompts } from '@/features/prompts/services/promptService';
@@ -306,6 +308,21 @@ const saveSessionsToStorage = () => {
   localStorage.setItem('langgraph_sessions', JSON.stringify(chatSessions.value));
 };
 
+// ⭐ 安全停止加载状态：只有在没有正在进行的流时才设置 isLoading = false
+const safeStopLoading = () => {
+  const id = sessionId.value;
+  // 检查普通聊天流
+  const stream = id ? activeStreams.value[id] : null;
+  const hasActiveStream = stream && !stream.isComplete;
+  // 检查 Brain 模式流
+  const orchestratorStream = id ? activeOrchestratorStreams.value[id] : null;
+  const hasActiveOrchestratorStream = orchestratorStream && !orchestratorStream.isComplete;
+
+  if (!hasActiveStream && !hasActiveOrchestratorStream) {
+    isLoading.value = false;
+  }
+};
+
 // 从服务器加载会话列表
 const loadSessionsFromServer = async () => {
   if (!projectStore.currentProjectId) {
@@ -360,7 +377,7 @@ const loadSessionsFromServer = async () => {
     console.error('获取会话列表失败:', error);
     Message.error('获取会话列表失败，请稍后重试');
   } finally {
-    isLoading.value = false;
+    safeStopLoading();
   }
 };
 
@@ -510,7 +527,7 @@ const loadChatHistory = async () => {
     localStorage.removeItem('langgraph_session_id');
     sessionId.value = '';
   } finally {
-    isLoading.value = false;
+    safeStopLoading();
   }
 };
 
@@ -743,6 +760,52 @@ const handleClearQuote = () => {
   quotedMessage.value = null;
 };
 
+// 停止生成
+const handleStopGeneration = async () => {
+  // 1. 先中断前端 SSE 连接
+  if (abortController) {
+    abortController.abort();
+  }
+
+  // 2. 调用后端停止 API（真正停止 LLM 调用）
+  if (sessionId.value) {
+    try {
+      const result = await stopAgentLoop(sessionId.value);
+      if (result.status === 'success') {
+        console.log('[LangGraphChatView] Backend stop signal sent:', result.data);
+      } else {
+        console.warn('[LangGraphChatView] Backend stop failed:', result.message);
+      }
+    } catch (error) {
+      console.error('[LangGraphChatView] Stop API error:', error);
+    }
+
+    // ⭐ 强制清除流状态，避免重新加载历史时消息重复
+    clearStreamState(sessionId.value);
+    clearOrchestratorStreamState(sessionId.value);
+
+    // ⭐ 延迟一小段时间后重新加载历史，确保后端已保存完整记录
+    // 后端在收到停止信号后会保存包含 [用户中断] 的完整历史
+    setTimeout(async () => {
+      if (sessionId.value && projectStore.currentProjectId) {
+        try {
+          const response = await getChatHistory(sessionId.value, projectStore.currentProjectId);
+          if (response.status === 'success' && response.data.history) {
+            const tempMessages = enrichMessagesWithSeparators(response.data.history, formatHistoryTime);
+            messages.value = mergeThinkingProcessMessages(tempMessages);
+            console.log('[LangGraphChatView] History reloaded after stop:', messages.value.length, 'messages');
+          }
+        } catch (error) {
+          console.error('[LangGraphChatView] Failed to reload history after stop:', error);
+        }
+      }
+    }, 500);  // 500ms 延迟，给后端足够时间保存历史
+  }
+
+  isLoading.value = false;
+  Message.info('已停止生成');
+};
+
 // 处理重试消息
 const handleRetry = async (message: ChatMessage) => {
   const msgIndex = messages.value.findIndex(m =>
@@ -867,7 +930,7 @@ const handleDeleteMessage = async (message: ChatMessage) => {
         console.error('删除消息失败:', error);
         Message.error('删除消息失败，请稍后重试');
       } finally {
-        isLoading.value = false;
+        safeStopLoading();
       }
     }
   });
@@ -1021,7 +1084,7 @@ const switchSession = async (id: string) => {
     console.error('加载会话历史失败:', error);
     Message.error('加载会话历史失败');
   } finally {
-    isLoading.value = false;
+    safeStopLoading();
   }
 };
 
@@ -1079,7 +1142,7 @@ const deleteSession = async (id: string) => {
         console.error('删除对话失败:', error);
         Message.error('删除对话失败，请稍后重试');
       } finally {
-        isLoading.value = false;
+        safeStopLoading();
       }
     },
   });
@@ -1126,7 +1189,7 @@ const batchDeleteSessions = async (sessionIds: string[]) => {
     console.error('批量删除对话失败:', error);
     Message.error('批量删除对话失败，请稍后重试');
   } finally {
-    isLoading.value = false;
+    safeStopLoading();
   }
 };
 
@@ -1170,7 +1233,7 @@ const clearChat = async () => {
         console.error('删除聊天历史失败:', error);
         Message.error('删除聊天历史失败，请稍后重试');
       } finally {
-        isLoading.value = false;
+        safeStopLoading();
       }
     },
   });

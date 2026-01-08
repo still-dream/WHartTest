@@ -2,7 +2,7 @@
 from django.urls import path, include
 from rest_framework.routers import DefaultRouter
 from .views import OrchestratorTaskViewSet, OrchestratorStreamAPIView
-from .agent_loop_view import AgentLoopStreamAPIView
+from .agent_loop_view import AgentLoopStreamAPIView, AgentLoopStopAPIView
 
 router = DefaultRouter()
 router.register(r'tasks', OrchestratorTaskViewSet, basename='orchestrator-task')
@@ -13,4 +13,6 @@ urlpatterns = [
     path('stream/', OrchestratorStreamAPIView.as_view(), name='orchestrator-stream'),
     # Agent Loop 流式对话接口 - 解决 Token 累积问题
     path('agent-loop/', AgentLoopStreamAPIView.as_view(), name='agent-loop-stream'),
+    # Agent Loop 停止接口 - 中断正在执行的任务
+    path('agent-loop/stop/', AgentLoopStopAPIView.as_view(), name='agent-loop-stop'),
 ]
