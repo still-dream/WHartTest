@@ -8,7 +8,7 @@ from langchain_openai import ChatOpenAI
 from langchain_core.messages import HumanMessage, SystemMessage
 from langchain.text_splitter import RecursiveCharacterTextSplitter
 from langgraph_integration.models import LLMConfig
-from .models import RequirementDocument, RequirementModule
+from .models import RequirementDocument, RequirementModule, DocumentImage
 from prompts.models import UserPrompt
 
 logger = logging.getLogger(__name__)
@@ -209,20 +209,18 @@ class DocumentProcessor:
         try:
             if document.content:
                 return document.content
-            
+
             if document.file:
-                # TODO: 根据文件类型提取内容
-                # 这里先返回模拟内容
-                return self._extract_from_file(document.file)
-            
+                return self._extract_from_file(document.file, document)
+
             return ""
         except Exception as e:
             logger.error(f"提取文档内容失败: {e}")
             return ""
-    
+
     SUPPORTED_EXTENSIONS = {'txt', 'md', 'pdf', 'doc', 'docx'}
 
-    def _extract_from_file(self, file) -> str:
+    def _extract_from_file(self, file, document: RequirementDocument = None) -> str:
         """从文件提取内容"""
         try:
             file_extension = file.name.lower().split('.')[-1] if '.' in file.name else ''
@@ -237,9 +235,9 @@ class DocumentProcessor:
             elif file_extension == 'pdf':
                 return self._extract_from_pdf(file)
             elif file_extension == 'docx':
-                return self._extract_from_word(file)
+                return self._extract_from_word(file, document)
             elif file_extension == 'doc':
-                return self._extract_from_doc(file)
+                return self._extract_from_doc(file, document)
 
         except Exception as e:
             logger.error(f"文件内容提取失败: {e}")
@@ -311,12 +309,13 @@ class DocumentProcessor:
             # 如果PDF解析失败，不要fallback到文本读取
             return ""
 
-    def _extract_from_word(self, file) -> str:
-        """提取Word文件内容，保留标题格式和表格位置"""
+    def _extract_from_word(self, file, document: RequirementDocument = None) -> str:
+        """提取Word文件内容，保留标题格式、表格位置和图片"""
         try:
             from docx import Document
             from docx.table import Table
             from docx.text.paragraph import Paragraph
+            from docx.oxml.ns import qn
 
             # 重置文件指针
             file.seek(0)
@@ -335,16 +334,54 @@ class DocumentProcessor:
             paragraph_map = {p._element: p for p in doc.paragraphs}
             table_map = {t._element: t for t in doc.tables}
 
+            # 图片计数器和收集器（按文档顺序）
+            image_order = 0
+            image_rids = []  # 按文档顺序收集图片的 rId
+
+            # 定义命名空间
+            nsmap = {
+                'a': 'http://schemas.openxmlformats.org/drawingml/2006/main',
+                'r': 'http://schemas.openxmlformats.org/officeDocument/2006/relationships',
+                'v': 'urn:schemas-microsoft-com:vml',
+            }
+
             # 遍历文档的所有元素
             for element in doc.element.body:
                 if element.tag.endswith('p'):  # 段落元素
                     paragraph = paragraph_map.get(element)
                     if paragraph:
+                        # 检查段落中是否包含图片
+                        drawings = element.findall('.//' + qn('w:drawing'))
+                        inline_pics = element.findall('.//' + qn('w:pict'))
+
                         text = paragraph.text.strip()
-                        if text:  # 只处理非空段落
+                        if text:  # 处理非空段落
                             markdown_text = self._convert_paragraph_to_markdown(paragraph)
                             content_parts.append(markdown_text)
                             extracted_paragraphs += 1
+
+                        # 如果段落包含图片，提取 rId 并插入占位符
+                        for drawing in drawings:
+                            # 从 a:blip 元素获取 r:embed 属性
+                            blips = drawing.findall('.//a:blip', nsmap)
+                            for blip in blips:
+                                embed = blip.get('{http://schemas.openxmlformats.org/officeDocument/2006/relationships}embed')
+                                if embed:
+                                    image_id = f"img_{image_order:03d}"
+                                    content_parts.append(f"\n![图片](docimg://{image_id})\n")
+                                    image_rids.append(embed)
+                                    image_order += 1
+
+                        for pict in inline_pics:
+                            # 从 v:imagedata 元素获取 r:id 属性
+                            imagedata = pict.findall('.//v:imagedata', nsmap)
+                            for imgdata in imagedata:
+                                rid = imgdata.get('{http://schemas.openxmlformats.org/officeDocument/2006/relationships}id')
+                                if rid:
+                                    image_id = f"img_{image_order:03d}"
+                                    content_parts.append(f"\n![图片](docimg://{image_id})\n")
+                                    image_rids.append(rid)
+                                    image_order += 1
 
                 elif element.tag.endswith('tbl'):  # 表格元素
                     table = table_map.get(element)
@@ -356,7 +393,11 @@ class DocumentProcessor:
 
             content = "\n\n".join(content_parts)
 
-            logger.info(f"Word文档提取完成 - 提取段落: {extracted_paragraphs}, 提取表格: {extracted_tables}, 总内容长度: {len(content)}")
+            # 按文档顺序保存图片
+            if document and image_rids:
+                self._extract_and_save_images_ordered(doc, document, image_rids)
+
+            logger.info(f"Word文档提取完成 - 提取段落: {extracted_paragraphs}, 提取表格: {extracted_tables}, 图片占位符: {image_order}, 总内容长度: {len(content)}")
             logger.info(f"原始段落数: {len(doc.paragraphs)}, 实际提取: {extracted_paragraphs}, 差异: {len(doc.paragraphs) - extracted_paragraphs}")
 
             # 如果内容长度为0或者提取的段落数明显少于原始段落数，记录警告
@@ -376,6 +417,136 @@ class DocumentProcessor:
             logger.error(f"详细错误: {traceback.format_exc()}")
             # 如果解析失败，使用简化方法
             return self._extract_from_word_simple(file)
+
+    def _extract_and_save_images_ordered(self, doc, document: RequirementDocument, image_rids: list) -> None:
+        """按文档顺序提取并保存图片（基于收集的 rId 列表）"""
+        from django.core.files.base import ContentFile
+        from PIL import Image
+        import io
+
+        ext_map = {
+            'image/png': 'png',
+            'image/jpeg': 'jpg',
+            'image/gif': 'gif',
+            'image/bmp': 'bmp',
+            'image/tiff': 'tiff',
+            'image/x-emf': 'emf',
+            'image/x-wmf': 'wmf',
+        }
+
+        saved_count = 0
+        for order, rid in enumerate(image_rids):
+            try:
+                rel = doc.part.rels.get(rid)
+                if not rel:
+                    logger.warning(f"未找到关系 {rid}")
+                    continue
+
+                image_part = rel.target_part
+                image_id = f"img_{order:03d}"
+                image_blob = image_part.blob
+                content_type = image_part.content_type
+
+                # 获取图片尺寸
+                width, height = None, None
+                try:
+                    img = Image.open(io.BytesIO(image_blob))
+                    width, height = img.size
+                except Exception as e:
+                    logger.warning(f"获取图片尺寸失败: {e}")
+
+                ext = ext_map.get(content_type, 'png')
+
+                doc_image = DocumentImage.objects.create(
+                    document=document,
+                    image_id=image_id,
+                    order=order,
+                    content_type=content_type,
+                    width=width,
+                    height=height,
+                    file_size=len(image_blob),
+                )
+
+                filename = f"{document.id}_{image_id}.{ext}"
+                doc_image.image_file.save(filename, ContentFile(image_blob), save=True)
+
+                logger.info(f"保存图片: {image_id}, rId: {rid}, 类型: {content_type}, 尺寸: {width}x{height}")
+                saved_count += 1
+
+            except Exception as e:
+                logger.error(f"保存图片失败 (rId={rid}): {e}")
+                continue
+
+        if saved_count > 0:
+            document.has_images = True
+            document.image_count = saved_count
+            document.save(update_fields=['has_images', 'image_count'])
+
+    def _extract_and_save_images(self, doc, document: RequirementDocument) -> None:
+        """提取 DOCX 中的图片并保存到 DocumentImage"""
+        from docx.opc.constants import RELATIONSHIP_TYPE as RT
+        from django.core.files.base import ContentFile
+        from PIL import Image
+        import io
+
+        image_order = 0
+        for rel in doc.part.rels.values():
+            if rel.reltype == RT.IMAGE:
+                try:
+                    image_part = rel.target_part
+                    image_id = f"img_{image_order:03d}"
+
+                    # 获取图片二进制数据
+                    image_blob = image_part.blob
+                    content_type = image_part.content_type
+
+                    # 获取图片尺寸
+                    width, height = None, None
+                    try:
+                        img = Image.open(io.BytesIO(image_blob))
+                        width, height = img.size
+                    except Exception as e:
+                        logger.warning(f"获取图片尺寸失败: {e}")
+
+                    # 确定文件扩展名
+                    ext_map = {
+                        'image/png': 'png',
+                        'image/jpeg': 'jpg',
+                        'image/gif': 'gif',
+                        'image/bmp': 'bmp',
+                        'image/tiff': 'tiff',
+                        'image/x-emf': 'emf',
+                        'image/x-wmf': 'wmf',
+                    }
+                    ext = ext_map.get(content_type, 'png')
+
+                    # 创建 DocumentImage 记录
+                    doc_image = DocumentImage.objects.create(
+                        document=document,
+                        image_id=image_id,
+                        order=image_order,
+                        content_type=content_type,
+                        width=width,
+                        height=height,
+                        file_size=len(image_blob),
+                    )
+
+                    # 保存图片文件
+                    filename = f"{document.id}_{image_id}.{ext}"
+                    doc_image.image_file.save(filename, ContentFile(image_blob), save=True)
+
+                    logger.info(f"保存图片: {image_id}, 类型: {content_type}, 尺寸: {width}x{height}")
+                    image_order += 1
+
+                except Exception as e:
+                    logger.error(f"保存图片失败: {e}")
+                    continue
+
+        # 更新文档图片统计
+        if image_order > 0:
+            document.has_images = True
+            document.image_count = image_order
+            document.save(update_fields=['has_images', 'image_count'])
 
     def _extract_from_word_simple(self, file) -> str:
         """简化的Word文档提取方法（备用）"""
@@ -408,7 +579,7 @@ class DocumentProcessor:
             logger.error(f"简化Word文档解析也失败: {e}")
             return ""
 
-    def _extract_from_doc(self, file) -> str:
+    def _extract_from_doc(self, file, document: RequirementDocument = None) -> str:
         """提取旧版Word(.doc)文件内容，优先转换为docx以保留标题样式"""
         import tempfile
         import os
@@ -424,10 +595,10 @@ class DocumentProcessor:
         # ZIP魔数 (PK..) = docx/xlsx/pptx 等 Office Open XML 格式
         if isinstance(header, bytes) and header[:4] == b'PK\x03\x04':
             logger.info("检测到文件实际为 .docx 格式（ZIP魔数），回退到 docx 解析器")
-            return self._extract_from_word(file)
+            return self._extract_from_word(file, document)
         elif isinstance(header, str) and header[:4] == 'PK\x03\x04':
             logger.info("检测到文件实际为 .docx 格式（ZIP魔数-str），回退到 docx 解析器")
-            return self._extract_from_word(file)
+            return self._extract_from_word(file, document)
 
         with tempfile.NamedTemporaryFile(delete=False, suffix='.doc') as tmp:
             tmp.write(file.read())
@@ -451,7 +622,7 @@ class DocumentProcessor:
                         if os.path.exists(docx_file):
                             # 用 python-docx 解析转换后的 docx，保留标题样式
                             with open(docx_file, 'rb') as f:
-                                content = self._extract_from_word(f)
+                                content = self._extract_from_word(f, document)
                             if content:
                                 logger.info(f"成功提取.doc文档(LibreOffice->docx)，内容长度: {len(content)}")
                                 return content
@@ -2016,6 +2187,7 @@ class RequirementReviewEngine:
 
     def __init__(self, user=None):
         self.user = user
+        self.llm_config = None  # 保存当前使用的LLM配置
         self.llm = self._get_llm_instance()
 
     def _get_llm_instance(self):
@@ -2025,11 +2197,98 @@ class RequirementReviewEngine:
             if not active_config:
                 raise Exception("没有可用的LLM配置")
 
+            self.llm_config = active_config  # 保存配置引用
             # 使用新的LLM工厂函数，支持多供应商
             return create_llm_instance(active_config, temperature=0.1)
         except Exception as e:
             logger.error(f"获取LLM实例失败: {e}")
             raise
+
+    def _supports_vision(self) -> bool:
+        """检查当前LLM是否支持视觉/多模态"""
+        return self.llm_config.supports_vision if self.llm_config else False
+
+    def _parse_content_with_images(self, content: str, document: RequirementDocument) -> list:
+        """
+        解析content中的图片占位符，将其转换为多模态消息格式
+        返回包含文本和图片的消息内容列表
+        """
+        import base64
+
+        # 匹配占位符: ![图片](docimg://img_001) 或 ![任意文字](docimg://xxx)
+        pattern = r'!\[.*?\]\(docimg://([^)]+)\)'
+
+        parts = []
+        last_end = 0
+
+        for match in re.finditer(pattern, content):
+            # 添加图片前的文字部分
+            text_before = content[last_end:match.start()].strip()
+            if text_before:
+                parts.append({"type": "text", "text": text_before})
+
+            # 处理图片
+            image_id = match.group(1)
+            try:
+                doc_image = document.images.get(image_id=image_id)
+                with open(doc_image.image_file.path, 'rb') as f:
+                    img_base64 = base64.b64encode(f.read()).decode('utf-8')
+
+                parts.append({
+                    "type": "image_url",
+                    "image_url": {
+                        "url": f"data:{doc_image.content_type};base64,{img_base64}"
+                    }
+                })
+                logger.debug(f"成功加载图片 {image_id} 用于多模态分析")
+            except DocumentImage.DoesNotExist:
+                logger.warning(f"图片 {image_id} 不存在，跳过")
+                parts.append({"type": "text", "text": f"[图片 {image_id} 未找到]"})
+            except Exception as e:
+                logger.error(f"加载图片 {image_id} 失败: {e}")
+                parts.append({"type": "text", "text": f"[图片 {image_id} 加载失败]"})
+
+            last_end = match.end()
+
+        # 添加剩余的文字部分
+        remaining = content[last_end:].strip()
+        if remaining:
+            parts.append({"type": "text", "text": remaining})
+
+        return parts
+
+    def _strip_image_placeholders(self, content: str) -> str:
+        """移除content中的图片占位符，返回纯文本内容"""
+        # 移除 ![xxx](docimg://yyy) 格式的占位符
+        return re.sub(r'!\[.*?\]\(docimg://[^)]+\)\s*', '', content)
+
+    def _prepare_analysis_content(self, content: str, document: RequirementDocument = None) -> tuple:
+        """
+        准备分析内容，根据是否支持多模态返回不同格式
+
+        Returns:
+            tuple: (processed_content, is_multimodal, image_warning)
+            - processed_content: 处理后的内容（纯文本字符串或多模态消息列表）
+            - is_multimodal: 是否使用多模态格式
+            - image_warning: 如果有图片但不支持多模态，返回警告信息
+        """
+        has_images = document and document.has_images if document else False
+        supports_vision = self._supports_vision()
+
+        if has_images and supports_vision:
+            # 多模态模式：返回图文交替的消息内容列表
+            multimodal_parts = self._parse_content_with_images(content, document)
+            logger.info(f"使用多模态分析，包含 {document.image_count} 张图片")
+            return multimodal_parts, True, None
+        elif has_images and not supports_vision:
+            # 有图片但不支持多模态：移除占位符，返回警告
+            text_only = self._strip_image_placeholders(content)
+            warning = f"当前模型 {self.llm_config.name} 不支持图片分析，文档中的 {document.image_count} 张图片未被评审"
+            logger.warning(warning)
+            return text_only, False, warning
+        else:
+            # 无图片：直接返回原内容
+            return content, False, None
 
     def _get_user_prompt(self, prompt_type: str) -> str:
         """获取用户的提示词，如果没有则返回None"""
@@ -2103,163 +2362,229 @@ class RequirementReviewEngine:
             ]
         }
 
-    def analyze_completeness(self, content: str) -> dict:
-        """完整性专项分析 - 分析完整文档的完整性"""
+    def analyze_completeness(self, content: str, document: RequirementDocument = None) -> dict:
+        """完整性专项分析 - 分析完整文档的完整性，支持多模态"""
         logger.info("开始执行完整性分析...")
         completeness_prompt = self._get_user_prompt('completeness_analysis')
         if not completeness_prompt:
             logger.warning("用户未配置完整性分析提示词，返回默认结果")
             return self._get_default_analysis_result('completeness_analysis')
-        
+
         try:
-            formatted_prompt = format_prompt_template(completeness_prompt, document=content)
-            logger.debug(f"完整性分析提示词已格式化，文档长度: {len(content)}")
-            
-            messages = [
-                SystemMessage(content="你是一位资深的需求分析专家。"),
-                HumanMessage(content=formatted_prompt)
-            ]
-            
+            # 准备分析内容（可能是纯文本或多模态）
+            processed_content, is_multimodal, image_warning = self._prepare_analysis_content(content, document)
+
+            if is_multimodal:
+                # 多模态模式：构造图文交替的消息
+                formatted_prompt = format_prompt_template(completeness_prompt, document="[文档内容见上方图文]")
+                # 将提示词追加到多模态内容后面
+                message_content = processed_content + [{"type": "text", "text": f"\n\n{formatted_prompt}"}]
+                messages = [
+                    SystemMessage(content="你是一位资深的需求分析专家，擅长分析包含图片的需求文档。请仔细查看文档中的文字和图片。"),
+                    HumanMessage(content=message_content)
+                ]
+            else:
+                # 纯文本模式
+                formatted_prompt = format_prompt_template(completeness_prompt, document=processed_content)
+                logger.debug(f"完整性分析提示词已格式化，文档长度: {len(processed_content)}")
+                messages = [
+                    SystemMessage(content="你是一位资深的需求分析专家。"),
+                    HumanMessage(content=formatted_prompt)
+                ]
+
             logger.info("调用LLM进行完整性分析...")
             response = safe_llm_invoke(self.llm, messages)
             logger.info(f"LLM响应完成，内容长度: {len(response.content)}")
-            
+
             result = extract_json_from_response(response.content)
             if result:
                 logger.info(f"完整性分析完成，评分: {result.get('overall_score', 'N/A')}, 问题数: {len(result.get('issues', []))}")
+                if image_warning:
+                    result['image_warning'] = image_warning
                 return result
             else:
                 logger.warning("完整性分析响应中未找到JSON格式，使用默认结果")
                 logger.debug(f"AI响应内容前500字符: {response.content[:500]}")
                 return self._get_default_analysis_result('completeness_analysis')
-                
+
         except Exception as e:
             logger.error(f"完整性分析失败: {e}")
             import traceback
             logger.error(f"详细错误: {traceback.format_exc()}")
             return self._get_default_analysis_result('completeness_analysis')
     
-    def analyze_consistency(self, content: str) -> dict:
-        """一致性专项分析 - 分析完整文档的一致性"""
+    def analyze_consistency(self, content: str, document: RequirementDocument = None) -> dict:
+        """一致性专项分析 - 分析完整文档的一致性，支持多模态"""
         logger.info("开始执行一致性分析...")
         consistency_prompt = self._get_user_prompt('consistency_analysis')
         if not consistency_prompt:
             logger.warning("用户未配置一致性分析提示词，返回默认结果")
             return self._get_default_analysis_result('consistency_analysis')
-        
+
         try:
-            formatted_prompt = format_prompt_template(consistency_prompt, document=content)
-            logger.debug(f"一致性分析提示词已格式化，文档长度: {len(content)}")
-            
-            messages = [
-                SystemMessage(content="你是一位资深的需求一致性分析专家。"),
-                HumanMessage(content=formatted_prompt)
-            ]
-            
+            # 准备分析内容（可能是纯文本或多模态）
+            processed_content, is_multimodal, image_warning = self._prepare_analysis_content(content, document)
+
+            if is_multimodal:
+                formatted_prompt = format_prompt_template(consistency_prompt, document="[文档内容见上方图文]")
+                message_content = processed_content + [{"type": "text", "text": f"\n\n{formatted_prompt}"}]
+                messages = [
+                    SystemMessage(content="你是一位资深的需求一致性分析专家，擅长分析包含图片的需求文档。"),
+                    HumanMessage(content=message_content)
+                ]
+            else:
+                formatted_prompt = format_prompt_template(consistency_prompt, document=processed_content)
+                logger.debug(f"一致性分析提示词已格式化，文档长度: {len(processed_content)}")
+                messages = [
+                    SystemMessage(content="你是一位资深的需求一致性分析专家。"),
+                    HumanMessage(content=formatted_prompt)
+                ]
+
             logger.info("调用LLM进行一致性分析...")
             response = safe_llm_invoke(self.llm, messages)
             logger.info(f"LLM响应完成，内容长度: {len(response.content)}")
-            
+
             result = extract_json_from_response(response.content)
             if result:
                 logger.info(f"一致性分析完成，评分: {result.get('overall_score', 'N/A')}, 问题数: {len(result.get('issues', []))}")
+                if image_warning:
+                    result['image_warning'] = image_warning
                 return result
             else:
                 logger.warning("一致性分析响应中未找到JSON格式，使用默认结果")
                 logger.debug(f"AI响应内容前500字符: {response.content[:500]}")
                 return self._get_default_analysis_result('consistency_analysis')
-                
+
         except Exception as e:
             logger.error(f"一致性分析失败: {e}")
             import traceback
             logger.error(f"详细错误: {traceback.format_exc()}")
             return self._get_default_analysis_result('consistency_analysis')
     
-    def analyze_testability(self, content: str) -> dict:
-        """可测性专项分析 - 分析完整文档的可测试性"""
+    def analyze_testability(self, content: str, document: RequirementDocument = None) -> dict:
+        """可测性专项分析 - 分析完整文档的可测试性，支持多模态"""
         logger.info("开始执行可测性分析...")
         testability_prompt = self._get_user_prompt('testability_analysis')
         if not testability_prompt:
             logger.warning("用户未配置可测性分析提示词，返回默认结果")
             return self._get_default_analysis_result('testability_analysis')
-        
+
         try:
-            formatted_prompt = format_prompt_template(testability_prompt, document=content)
-            logger.debug(f"可测性分析提示词已格式化，文档长度: {len(content)}")
-            messages = [
-                SystemMessage(content="你是一位资深的测试专家。"),
-                HumanMessage(content=formatted_prompt)
-            ]
-            
+            # 准备分析内容（可能是纯文本或多模态）
+            processed_content, is_multimodal, image_warning = self._prepare_analysis_content(content, document)
+
+            if is_multimodal:
+                formatted_prompt = format_prompt_template(testability_prompt, document="[文档内容见上方图文]")
+                message_content = processed_content + [{"type": "text", "text": f"\n\n{formatted_prompt}"}]
+                messages = [
+                    SystemMessage(content="你是一位资深的测试专家，擅长分析包含图片的需求文档。"),
+                    HumanMessage(content=message_content)
+                ]
+            else:
+                formatted_prompt = format_prompt_template(testability_prompt, document=processed_content)
+                logger.debug(f"可测性分析提示词已格式化，文档长度: {len(processed_content)}")
+                messages = [
+                    SystemMessage(content="你是一位资深的测试专家。"),
+                    HumanMessage(content=formatted_prompt)
+                ]
+
             response = safe_llm_invoke(self.llm, messages)
             result = extract_json_from_response(response.content)
             if result:
                 logger.info(f"可测性分析完成，评分: {result.get('overall_score', 'N/A')}")
+                if image_warning:
+                    result['image_warning'] = image_warning
                 return result
             else:
                 logger.warning("可测性分析未返回JSON格式，使用默认结果")
                 return self._get_default_analysis_result('testability_analysis')
-                
+
         except Exception as e:
             logger.error(f"可测性分析失败: {e}")
             import traceback
             logger.error(f"详细错误: {traceback.format_exc()}")
             return self._get_default_analysis_result('testability_analysis')
-    
-    def analyze_feasibility(self, content: str) -> dict:
-        """可行性专项分析 - 分析完整文档的可行性"""
+
+    def analyze_feasibility(self, content: str, document: RequirementDocument = None) -> dict:
+        """可行性专项分析 - 分析完整文档的可行性，支持多模态"""
         logger.info("开始执行可行性分析...")
         feasibility_prompt = self._get_user_prompt('feasibility_analysis')
         if not feasibility_prompt:
             logger.warning("用户未配置可行性分析提示词，返回默认结果")
             return self._get_default_analysis_result('feasibility_analysis')
-        
+
         try:
-            formatted_prompt = format_prompt_template(feasibility_prompt, document=content)
-            messages = [
-                SystemMessage(content="你是一位资深的技术架构师。"),
-                HumanMessage(content=formatted_prompt)
-            ]
-            
+            # 准备分析内容（可能是纯文本或多模态）
+            processed_content, is_multimodal, image_warning = self._prepare_analysis_content(content, document)
+
+            if is_multimodal:
+                formatted_prompt = format_prompt_template(feasibility_prompt, document="[文档内容见上方图文]")
+                message_content = processed_content + [{"type": "text", "text": f"\n\n{formatted_prompt}"}]
+                messages = [
+                    SystemMessage(content="你是一位资深的技术架构师，擅长分析包含图片的需求文档。"),
+                    HumanMessage(content=message_content)
+                ]
+            else:
+                formatted_prompt = format_prompt_template(feasibility_prompt, document=processed_content)
+                messages = [
+                    SystemMessage(content="你是一位资深的技术架构师。"),
+                    HumanMessage(content=formatted_prompt)
+                ]
+
             response = safe_llm_invoke(self.llm, messages)
             result = extract_json_from_response(response.content)
             if result:
                 logger.info(f"可行性分析完成，评分: {result.get('overall_score', 'N/A')}")
+                if image_warning:
+                    result['image_warning'] = image_warning
                 return result
             else:
                 logger.warning("可行性分析未返回JSON格式，使用默认结果")
                 return self._get_default_analysis_result('feasibility_analysis')
-                
+
         except Exception as e:
             logger.error(f"可行性分析失败: {e}")
             import traceback
             logger.error(f"详细错误: {traceback.format_exc()}")
             return self._get_default_analysis_result('feasibility_analysis')
     
-    def analyze_clarity(self, content: str) -> dict:
-        """清晰度专项分析 - 分析完整文档的清晰度"""
+    def analyze_clarity(self, content: str, document: RequirementDocument = None) -> dict:
+        """清晰度专项分析 - 分析完整文档的清晰度，支持多模态"""
         logger.info("开始执行清晰度分析...")
         clarity_prompt = self._get_user_prompt('clarity_analysis')
         if not clarity_prompt:
             logger.warning("用户未配置清晰度分析提示词，返回默认结果")
             return self._get_default_analysis_result('clarity_analysis')
-        
+
         try:
-            formatted_prompt = format_prompt_template(clarity_prompt, document=content)
-            messages = [
-                SystemMessage(content="你是一位资深的需求分析专家。"),
-                HumanMessage(content=formatted_prompt)
-            ]
-            
+            # 准备分析内容（可能是纯文本或多模态）
+            processed_content, is_multimodal, image_warning = self._prepare_analysis_content(content, document)
+
+            if is_multimodal:
+                formatted_prompt = format_prompt_template(clarity_prompt, document="[文档内容见上方图文]")
+                message_content = processed_content + [{"type": "text", "text": f"\n\n{formatted_prompt}"}]
+                messages = [
+                    SystemMessage(content="你是一位资深的需求分析专家，擅长分析包含图片的需求文档。"),
+                    HumanMessage(content=message_content)
+                ]
+            else:
+                formatted_prompt = format_prompt_template(clarity_prompt, document=processed_content)
+                messages = [
+                    SystemMessage(content="你是一位资深的需求分析专家。"),
+                    HumanMessage(content=formatted_prompt)
+                ]
+
             response = safe_llm_invoke(self.llm, messages)
             result = extract_json_from_response(response.content)
             if result:
                 logger.info(f"清晰度分析完成，评分: {result.get('overall_score', 'N/A')}")
+                if image_warning:
+                    result['image_warning'] = image_warning
                 return result
             else:
                 logger.warning("清晰度分析未返回JSON格式，使用默认结果")
                 return self._get_default_analysis_result('clarity_analysis')
-                
+
         except Exception as e:
             logger.error(f"清晰度分析失败: {e}")
             import traceback
@@ -2279,23 +2604,31 @@ class RequirementReviewEngine:
         """
         全面分析需求文档 - 新架构：并发执行5个专项分析
         现在5个分析可以并发执行，提高效率
-        
+        支持多模态分析（如果LLM支持视觉且文档包含图片）
+
         Args:
             document: 要分析的文档
             analysis_options: 分析选项，可包含max_workers控制并发数
         """
         analysis_options = analysis_options or {}
         max_workers = analysis_options.get('max_workers', 3)  # 从选项中获取，默认3
-        
+
         try:
             logger.info(f"开始全面分析文档: {document.title}, 内容长度: {len(document.content)}, 并发数: {max_workers}")
-            
+
+            # 检查多模态支持
+            if document.has_images:
+                if self._supports_vision():
+                    logger.info(f"文档包含 {document.image_count} 张图片，将使用多模态分析")
+                else:
+                    logger.warning(f"文档包含 {document.image_count} 张图片，但当前模型不支持多模态，图片将被忽略")
+
             # 使用线程池并发执行5个专项分析（每个都处理完整文档，充分利用200k上下文）
             from concurrent.futures import ThreadPoolExecutor, as_completed
-            
+
             logger.info("开始并发执行5个专项分析...")
-            
-            # 定义5个分析任务
+
+            # 定义5个分析任务 - 传递 document 对象以支持多模态
             analysis_tasks = {
                 'completeness': ('完整性', self.analyze_completeness),
                 'consistency': ('一致性', self.analyze_consistency),
@@ -2303,30 +2636,34 @@ class RequirementReviewEngine:
                 'feasibility': ('可行性', self.analyze_feasibility),
                 'clarity': ('清晰度', self.analyze_clarity),
             }
-            
+
             # 并发执行所有分析
             results = {}
+            image_warning = None
             with ThreadPoolExecutor(max_workers=max_workers) as executor:
-                # 提交所有任务
+                # 提交所有任务 - 传递 document 而非 content
                 future_to_analysis = {
-                    executor.submit(task_func, document.content): (name, display_name)
+                    executor.submit(task_func, document.content, document): (name, display_name)
                     for name, (display_name, task_func) in analysis_tasks.items()
                 }
-                
+
                 # 收集结果
                 for future in as_completed(future_to_analysis):
                     analysis_name, display_name = future_to_analysis[future]
                     try:
                         result = future.result()
                         results[analysis_name] = result
+                        # 收集图片警告（如果有）
+                        if result.get('image_warning') and not image_warning:
+                            image_warning = result.get('image_warning')
                         logger.info(f"{display_name}分析完成，评分: {result.get('overall_score', 0)}")
                     except Exception as e:
                         logger.error(f"{display_name}分析失败: {e}")
                         # 使用默认结果
                         results[analysis_name] = self._get_default_analysis_result(f'{analysis_name}_analysis')
-            
+
             logger.info("所有专项分析并发执行完成")
-            
+
             # 生成综合报告（新版本）
             logger.info("生成综合分析报告...")
             comprehensive_report = self._generate_comprehensive_report_v2({
@@ -2335,9 +2672,10 @@ class RequirementReviewEngine:
                 'testability': results.get('testability', {}),
                 'feasibility': results.get('feasibility', {}),
                 'clarity': results.get('clarity', {}),
-                'document': document
+                'document': document,
+                'image_warning': image_warning
             })
-            
+
             logger.info(f"文档分析完成，总体评分: {comprehensive_report.get('overall_score', 0)}")
             return comprehensive_report
 
@@ -2357,6 +2695,7 @@ class RequirementReviewEngine:
             feasibility = analyses.get('feasibility', {})
             clarity = analyses.get('clarity', {})
             document = analyses.get('document')
+            image_warning = analyses.get('image_warning')  # 图片警告信息
             
             # 计算总体评分（5个维度平均）
             scores = []
@@ -2466,7 +2805,12 @@ class RequirementReviewEngine:
                 'analysis_timestamp': str(document.updated_at) if document else '',
                 'document_length': len(document.content) if document and document.content else 0
             }
-            
+
+            # 如果有图片警告，添加到报告中
+            if image_warning:
+                comprehensive_report['image_warning'] = image_warning
+                logger.info(f"报告包含图片警告: {image_warning}")
+
             return comprehensive_report
             
         except Exception as e:

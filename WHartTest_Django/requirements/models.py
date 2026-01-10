@@ -10,6 +10,11 @@ def requirement_document_upload_path(instance, filename):
     return f'requirement_documents/{instance.project.id}/{filename}'
 
 
+def document_image_upload_path(instance, filename):
+    """文档图片上传路径"""
+    return f'requirement_documents/{instance.document.project.id}/{instance.document.id}/images/{filename}'
+
+
 class RequirementDocument(models.Model):
     """
     需求文档模型
@@ -90,6 +95,10 @@ class RequirementDocument(models.Model):
     word_count = models.IntegerField(_('字数'), default=0)
     page_count = models.IntegerField(_('页数'), default=0)
 
+    # 图片信息
+    has_images = models.BooleanField(_('包含图片'), default=False)
+    image_count = models.IntegerField(_('图片数量'), default=0)
+
     class Meta:
         verbose_name = _('需求文档')
         verbose_name_plural = _('需求文档')
@@ -111,6 +120,53 @@ class RequirementDocument(models.Model):
 
     def __str__(self):
         return f"{self.project.name} - {self.title} v{self.version}"
+
+
+class DocumentImage(models.Model):
+    """
+    文档图片模型 - 存储从需求文档中提取的图片
+    """
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    document = models.ForeignKey(
+        RequirementDocument,
+        on_delete=models.CASCADE,
+        related_name='images',
+        verbose_name=_('所属文档')
+    )
+
+    # 图片文件
+    image_file = models.ImageField(
+        _('图片文件'),
+        upload_to=document_image_upload_path
+    )
+
+    # 图片标识（用于占位符匹配）
+    image_id = models.CharField(_('图片ID'), max_length=50, help_text='如 img_001，用于占位符匹配')
+
+    # 排序
+    order = models.IntegerField(_('排序'), default=0)
+
+    # 图片元数据
+    original_filename = models.CharField(_('原始文件名'), max_length=255, blank=True)
+    content_type = models.CharField(_('MIME类型'), max_length=100, default='image/png')
+    width = models.IntegerField(_('宽度'), null=True, blank=True)
+    height = models.IntegerField(_('高度'), null=True, blank=True)
+    file_size = models.IntegerField(_('文件大小'), default=0)
+
+    # 时间戳
+    created_at = models.DateTimeField(_('创建时间'), auto_now_add=True)
+
+    class Meta:
+        verbose_name = _('文档图片')
+        verbose_name_plural = _('文档图片')
+        ordering = ['document', 'order']
+        indexes = [
+            models.Index(fields=['document', 'order']),
+            models.Index(fields=['document', 'image_id']),
+        ]
+
+    def __str__(self):
+        return f"{self.document.title} - {self.image_id}"
 
 
 class RequirementModule(models.Model):

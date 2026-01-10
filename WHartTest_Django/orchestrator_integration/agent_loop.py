@@ -284,10 +284,24 @@ class AgentOrchestrator:
         start_time = time.time()
 
         # 构建消息（独立上下文）
-        system_prompt = self.STEP_SYSTEM_PROMPT.format(**context)
+        # 过滤掉 image_base64，避免传入 format()
+        format_context = {k: v for k, v in context.items() if k != 'image_base64'}
+        system_prompt = self.STEP_SYSTEM_PROMPT.format(**format_context)
+
+        # 检查是否有图片数据（多模态支持）
+        image_base64 = context.get('image_base64')
+        if image_base64:
+            # 多模态消息格式
+            human_content = [
+                {"type": "text", "text": "请根据图片内容执行下一步操作。"},
+                {"type": "image_url", "image_url": {"url": f"data:image/jpeg;base64,{image_base64}"}}
+            ]
+        else:
+            human_content = "请执行下一步操作。"
+
         messages = [
             SystemMessage(content=system_prompt),
-            HumanMessage(content="请执行下一步操作。")
+            HumanMessage(content=human_content)
         ]
 
         # 记录执行步骤的基本信息

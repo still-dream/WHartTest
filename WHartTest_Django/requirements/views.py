@@ -11,7 +11,7 @@ from wharttest_django.viewsets import BaseModelViewSet
 from prompts.models import UserPrompt
 from .models import (
     RequirementDocument, RequirementModule, ReviewReport,
-    ReviewIssue, ModuleReviewResult
+    ReviewIssue, ModuleReviewResult, DocumentImage
 )
 from .serializers import (
     RequirementDocumentSerializer, RequirementDocumentDetailSerializer,
@@ -45,9 +45,13 @@ class RequirementDocumentViewSet(BaseModelViewSet):
 
     def get_permissions(self):
         """根据操作类型设置不同的权限"""
+        # 图片访问接口公开，无需认证
+        if self.action == 'get_image':
+            return []
+
         # 获取基础权限（用户认证 + Django模型权限）
         base_permissions = super().get_permissions()
-        
+
         # 在基础权限之上添加项目特定的权限检查
         if self.action in ['create', 'update', 'partial_update', 'destroy']:
             return base_permissions + [CanManageRequirementDocument()]
@@ -118,6 +122,50 @@ class RequirementDocumentViewSet(BaseModelViewSet):
                 {'error': f'删除失败: {str(e)}'},
                 status=status.HTTP_500_INTERNAL_SERVER_ERROR
             )
+
+    @action(detail=True, methods=['get'], url_path='images/(?P<image_id>[^/.]+)',
+            authentication_classes=[], permission_classes=[])
+    def get_image(self, request, pk=None, image_id=None):
+        """
+        获取文档中的图片（公开访问，无需认证）
+        GET /api/requirements/documents/{id}/images/{image_id}/
+        """
+        from django.http import FileResponse
+
+        try:
+            document = RequirementDocument.objects.get(pk=pk)
+            image = document.images.get(image_id=image_id)
+            return FileResponse(
+                open(image.image_file.path, 'rb'),
+                content_type=image.content_type
+            )
+        except RequirementDocument.DoesNotExist:
+            return Response({'error': '文档不存在'}, status=status.HTTP_404_NOT_FOUND)
+        except DocumentImage.DoesNotExist:
+            return Response({'error': '图片不存在'}, status=status.HTTP_404_NOT_FOUND)
+        except Exception as e:
+            logger.error(f"获取图片失败: {e}")
+            return Response({'error': str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+    @action(detail=True, methods=['get'], url_path='images-list')
+    def list_images(self, request, pk=None):
+        """
+        获取文档中所有图片的元信息
+        GET /api/requirements/documents/{id}/images-list/
+        """
+        document = self.get_object()
+        images = document.images.all().order_by('order')
+        data = [{
+            'id': str(img.id),
+            'image_id': img.image_id,
+            'order': img.order,
+            'width': img.width,
+            'height': img.height,
+            'content_type': img.content_type,
+            'file_size': img.file_size,
+            'url': f'/api/requirements/documents/{document.id}/images/{img.image_id}/'
+        } for img in images]
+        return Response({'images': data, 'total': len(data)})
 
     @action(detail=True, methods=['post'], url_path='split-modules')
     def split_modules(self, request, pk=None):

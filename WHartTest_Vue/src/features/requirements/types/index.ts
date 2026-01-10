@@ -51,6 +51,8 @@ export interface RequirementDocument {
   word_count: number;
   page_count: number;
   modules_count: number;
+  has_images: boolean;
+  image_count: number;
 }
 
 // 创建文档请求

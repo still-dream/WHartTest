@@ -98,6 +98,10 @@
             <span class="label">模块数：</span>
             <span>{{ document?.modules_count || 0 }} 个</span>
           </div>
+          <div v-if="document?.has_images" class="info-item">
+            <span class="label">图片：</span>
+            <a-tag color="arcoblue">{{ document?.image_count || 0 }} 张</a-tag>
+          </div>
           <div class="info-item">
             <span class="label">上传者：</span>
             <span>{{ document?.uploader_name }}</span>
@@ -268,15 +272,14 @@
               <!-- 内容显示区域 -->
               <div
                 v-else
-                class="segment-content"
+                class="segment-content markdown-body"
                 @dblclick="editModuleContent(module)"
                 :style="{
                   borderLeft: `4px solid ${getModuleColor(index)}`,
                   backgroundColor: selectedModules.includes(module.id) ? getModuleColor(index, 0.1) : 'white'
                 }"
-              >
-                {{ module.content }}
-              </div>
+                v-html="renderMarkdownWithImages(module.content)"
+              />
             </div>
           </div>
 
@@ -426,6 +429,8 @@ import {
   IconRobot,
   IconRefresh
 } from '@arco-design/web-vue/es/icon';
+import { marked } from 'marked';
+import DOMPurify from 'dompurify';
 import { RequirementDocumentService } from '../services/requirementService';
 import type {
   DocumentDetail,
@@ -514,6 +519,34 @@ const getTypeText = (type?: DocumentType) => {
 const formatDateTime = (dateTime?: string) => {
   if (!dateTime) return '';
   return new Date(dateTime).toLocaleString();
+};
+
+// Markdown 渲染并替换图片占位符
+const renderMarkdownWithImages = (content: string): string => {
+  if (!content) return '';
+
+  // 替换图片占位符为实际的 API URL
+  // 格式: ![图片](docimg://img_001) -> ![图片](/api/requirements/documents/{id}/images/img_001/)
+  const withImageUrls = content.replace(
+    /!\[(.*?)\]\(docimg:\/\/([^)]+)\)/g,
+    (_match, alt, imageId) => {
+      const imageUrl = `/api/requirements/documents/${document.value?.id}/images/${imageId}/`;
+      console.log('[Debug] 图片URL替换:', imageId, '->', imageUrl);
+      return `![${alt}](${imageUrl})`;
+    }
+  );
+
+  // 渲染 Markdown
+  const rawHtml = marked.parse(withImageUrls, { async: false }) as string;
+  console.log('[Debug] Markdown渲染结果:', rawHtml.substring(0, 500));
+
+  // 使用 DOMPurify 清理 HTML 防止 XSS
+  const sanitized = DOMPurify.sanitize(rawHtml, {
+    ADD_TAGS: ['img'],
+    ADD_ATTR: ['src', 'alt', 'title']
+  });
+  console.log('[Debug] DOMPurify处理后:', sanitized.substring(0, 500));
+  return sanitized;
 };
 
 // 获取当前工作流程步骤
@@ -1577,6 +1610,108 @@ onMounted(() => {
   color: #333;
   min-height: 40px;
   border: 1px solid rgba(0, 0, 0, 0.05);
+}
+
+/* Markdown 渲染样式 */
+.segment-content.markdown-body {
+  white-space: normal;
+}
+
+.segment-content.markdown-body :deep(p) {
+  margin: 0 0 1em 0;
+}
+
+.segment-content.markdown-body :deep(p:last-child) {
+  margin-bottom: 0;
+}
+
+.segment-content.markdown-body :deep(h1),
+.segment-content.markdown-body :deep(h2),
+.segment-content.markdown-body :deep(h3),
+.segment-content.markdown-body :deep(h4),
+.segment-content.markdown-body :deep(h5),
+.segment-content.markdown-body :deep(h6) {
+  margin: 1em 0 0.5em 0;
+  font-weight: 600;
+  line-height: 1.4;
+}
+
+.segment-content.markdown-body :deep(h1:first-child),
+.segment-content.markdown-body :deep(h2:first-child),
+.segment-content.markdown-body :deep(h3:first-child) {
+  margin-top: 0;
+}
+
+.segment-content.markdown-body :deep(ul),
+.segment-content.markdown-body :deep(ol) {
+  margin: 0.5em 0;
+  padding-left: 2em;
+}
+
+.segment-content.markdown-body :deep(li) {
+  margin: 0.25em 0;
+}
+
+.segment-content.markdown-body :deep(table) {
+  border-collapse: collapse;
+  width: 100%;
+  margin: 1em 0;
+}
+
+.segment-content.markdown-body :deep(th),
+.segment-content.markdown-body :deep(td) {
+  border: 1px solid #e5e6eb;
+  padding: 8px 12px;
+  text-align: left;
+}
+
+.segment-content.markdown-body :deep(th) {
+  background: #f7f8fa;
+  font-weight: 600;
+}
+
+.segment-content.markdown-body :deep(code) {
+  background: #f5f5f5;
+  padding: 2px 6px;
+  border-radius: 4px;
+  font-family: 'Consolas', 'Monaco', monospace;
+  font-size: 0.9em;
+}
+
+.segment-content.markdown-body :deep(pre) {
+  background: #f5f5f5;
+  padding: 12px;
+  border-radius: 6px;
+  overflow-x: auto;
+  margin: 1em 0;
+}
+
+.segment-content.markdown-body :deep(pre code) {
+  background: none;
+  padding: 0;
+}
+
+.segment-content.markdown-body :deep(blockquote) {
+  border-left: 4px solid #e5e6eb;
+  padding-left: 16px;
+  margin: 1em 0;
+  color: #666;
+}
+
+/* 图片样式 */
+.segment-content.markdown-body :deep(img) {
+  max-width: 100%;
+  height: auto;
+  border-radius: 6px;
+  margin: 12px 0;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+  cursor: zoom-in;
+  transition: transform 0.2s, box-shadow 0.2s;
+}
+
+.segment-content.markdown-body :deep(img:hover) {
+  transform: scale(1.02);
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.15);
 }
 
 .inline-content-edit {

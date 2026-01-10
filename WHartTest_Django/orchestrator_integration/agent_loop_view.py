@@ -975,6 +975,10 @@ page.get_by_placeholder("用户名").fill("admin")
                 # 构建上下文
                 step_context = orchestrator._build_step_context(blackboard, goal)
 
+                # ⭐ 第一步时传递图片数据给 LLM
+                if step_count == 1 and image_base64:
+                    step_context['image_base64'] = image_base64
+
                 # ⭐ 使用队列实现真正的流式输出
                 stream_queue = asyncio.Queue()
                 streaming_content = []  # 收集流式内容用于保存

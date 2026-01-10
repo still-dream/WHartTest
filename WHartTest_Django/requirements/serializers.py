@@ -1,8 +1,8 @@
 from rest_framework import serializers
 from django.contrib.auth.models import User
 from .models import (
-    RequirementDocument, RequirementModule, ReviewReport, 
-    ReviewIssue, ModuleReviewResult
+    RequirementDocument, RequirementModule, ReviewReport,
+    ReviewIssue, ModuleReviewResult, DocumentImage
 )
 
 
@@ -11,7 +11,7 @@ class RequirementDocumentSerializer(serializers.ModelSerializer):
     uploader_name = serializers.CharField(source='uploader.username', read_only=True)
     project_name = serializers.CharField(source='project.name', read_only=True)
     modules_count = serializers.SerializerMethodField()
-    
+
     class Meta:
         model = RequirementDocument
         fields = [
@@ -19,10 +19,10 @@ class RequirementDocumentSerializer(serializers.ModelSerializer):
             'status', 'version', 'is_latest', 'parent_document',
             'uploader', 'uploader_name', 'project', 'project_name',
             'uploaded_at', 'updated_at', 'word_count', 'page_count',
-            'modules_count'
+            'has_images', 'image_count', 'modules_count'
         ]
         read_only_fields = ['id', 'uploader', 'uploaded_at', 'updated_at']
-    
+
     def get_modules_count(self, obj):
         """获取模块数量"""
         return obj.modules.count()
@@ -37,9 +37,9 @@ class RequirementDocumentUploadSerializer(serializers.ModelSerializer):
         model = RequirementDocument
         fields = [
             'id', 'title', 'description', 'document_type', 'file', 'content', 'project',
-            'status', 'word_count', 'uploaded_at'
+            'status', 'word_count', 'has_images', 'image_count', 'uploaded_at'
         ]
-        read_only_fields = ['id', 'status', 'word_count', 'uploaded_at']
+        read_only_fields = ['id', 'status', 'word_count', 'has_images', 'image_count', 'uploaded_at']
 
     def validate_file(self, value):
         """验证文件格式"""
