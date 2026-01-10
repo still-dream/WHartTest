@@ -2600,10 +2600,58 @@ class RequirementReviewEngine:
             "issues": []
         }
 
+    def analyze_logic(self, content: str, document: RequirementDocument = None) -> dict:
+        """逻辑分析专项分析 - 分析完整文档的业务逻辑，支持多模态"""
+        logger.info("开始执行逻辑分析...")
+        logic_prompt = self._get_user_prompt('logic_analysis')
+        if not logic_prompt:
+            logger.warning("用户未配置逻辑分析提示词，返回默认结果")
+            return self._get_default_analysis_result('logic_analysis')
+
+        try:
+            # 准备分析内容（可能是纯文本或多模态）
+            processed_content, is_multimodal, image_warning = self._prepare_analysis_content(content, document)
+
+            if is_multimodal:
+                formatted_prompt = format_prompt_template(logic_prompt, document="[文档内容见上方图文]")
+                message_content = processed_content + [{"type": "text", "text": f"\n\n{formatted_prompt}"}]
+                messages = [
+                    SystemMessage(content="你是一位资深的需求分析专家，擅长分析业务流程逻辑、业务规则逻辑和状态转换逻辑。"),
+                    HumanMessage(content=message_content)
+                ]
+            else:
+                formatted_prompt = format_prompt_template(logic_prompt, document=processed_content)
+                logger.debug(f"逻辑分析提示词已格式化，文档长度: {len(processed_content)}")
+                messages = [
+                    SystemMessage(content="你是一位资深的需求分析专家，擅长分析业务流程逻辑、业务规则逻辑和状态转换逻辑。"),
+                    HumanMessage(content=formatted_prompt)
+                ]
+
+            logger.info("调用LLM进行逻辑分析...")
+            response = safe_llm_invoke(self.llm, messages)
+            logger.info(f"LLM响应完成，内容长度: {len(response.content)}")
+
+            result = extract_json_from_response(response.content)
+            if result:
+                logger.info(f"逻辑分析完成，评分: {result.get('overall_score', 'N/A')}, 问题数: {len(result.get('issues', []))}")
+                if image_warning:
+                    result['image_warning'] = image_warning
+                return result
+            else:
+                logger.warning("逻辑分析未返回JSON格式，使用默认结果")
+                logger.debug(f"AI响应内容前500字符: {response.content[:500]}")
+                return self._get_default_analysis_result('logic_analysis')
+
+        except Exception as e:
+            logger.error(f"逻辑分析失败: {e}")
+            import traceback
+            logger.error(f"详细错误: {traceback.format_exc()}")
+            return self._get_default_analysis_result('logic_analysis')
+
     def analyze_document_comprehensive(self, document: RequirementDocument, analysis_options: dict = None) -> dict:
         """
-        全面分析需求文档 - 新架构：并发执行5个专项分析
-        现在5个分析可以并发执行，提高效率
+        全面分析需求文档 - 新架构：并发执行6个专项分析
+        现在6个分析可以并发执行，提高效率
         支持多模态分析（如果LLM支持视觉且文档包含图片）
 
         Args:
@@ -2623,18 +2671,19 @@ class RequirementReviewEngine:
                 else:
                     logger.warning(f"文档包含 {document.image_count} 张图片，但当前模型不支持多模态，图片将被忽略")
 
-            # 使用线程池并发执行5个专项分析（每个都处理完整文档，充分利用200k上下文）
+            # 使用线程池并发执行6个专项分析（每个都处理完整文档，充分利用200k上下文）
             from concurrent.futures import ThreadPoolExecutor, as_completed
 
-            logger.info("开始并发执行5个专项分析...")
+            logger.info("开始并发执行6个专项分析...")
 
-            # 定义5个分析任务 - 传递 document 对象以支持多模态
+            # 定义6个分析任务 - 传递 document 对象以支持多模态
             analysis_tasks = {
                 'completeness': ('完整性', self.analyze_completeness),
                 'consistency': ('一致性', self.analyze_consistency),
                 'testability': ('可测性', self.analyze_testability),
                 'feasibility': ('可行性', self.analyze_feasibility),
                 'clarity': ('清晰度', self.analyze_clarity),
+                'logic': ('逻辑性', self.analyze_logic),
             }
 
             # 并发执行所有分析
@@ -2672,6 +2721,7 @@ class RequirementReviewEngine:
                 'testability': results.get('testability', {}),
                 'feasibility': results.get('feasibility', {}),
                 'clarity': results.get('clarity', {}),
+                'logic': results.get('logic', {}),
                 'document': document,
                 'image_warning': image_warning
             })
@@ -2694,12 +2744,13 @@ class RequirementReviewEngine:
             testability = analyses.get('testability', {})
             feasibility = analyses.get('feasibility', {})
             clarity = analyses.get('clarity', {})
+            logic = analyses.get('logic', {})
             document = analyses.get('document')
             image_warning = analyses.get('image_warning')  # 图片警告信息
-            
-            # 计算总体评分（5个维度平均）
+
+            # 计算总体评分（6个维度平均）
             scores = []
-            for analysis in [completeness, consistency, testability, feasibility, clarity]:
+            for analysis in [completeness, consistency, testability, feasibility, clarity, logic]:
                 score = analysis.get('overall_score', 70)
                 scores.append(score)
             
@@ -2712,7 +2763,8 @@ class RequirementReviewEngine:
                 ('consistency', consistency),
                 ('testability', testability),
                 ('feasibility', feasibility),
-                ('clarity', clarity)
+                ('clarity', clarity),
+                ('logic', logic)
             ]:
                 issues = analysis_data.get('issues', [])
                 for issue in issues:
@@ -2748,7 +2800,7 @@ class RequirementReviewEngine:
             
             # 收集改进建议
             recommendations = []
-            for analysis in [completeness, consistency, testability, feasibility, clarity]:
+            for analysis in [completeness, consistency, testability, feasibility, clarity, logic]:
                 recs = analysis.get('recommendations', [])
                 if isinstance(recs, list):
                     recommendations.extend(recs)
@@ -2770,13 +2822,14 @@ class RequirementReviewEngine:
                 'medium_priority_issues': len(medium_priority),
                 'low_priority_issues': len(low_priority),
                 
-                # 详细评分（5个专项维度）
+                # 详细评分（6个专项维度）
                 'scores': {
                     'completeness': completeness.get('overall_score', 70),
                     'consistency': consistency.get('overall_score', 70),
                     'testability': testability.get('overall_score', 70),
                     'feasibility': feasibility.get('overall_score', 70),
                     'clarity': clarity.get('overall_score', 70),
+                    'logic': logic.get('overall_score', 70),
                 },
                 
                 # 问题详情
@@ -2791,7 +2844,8 @@ class RequirementReviewEngine:
                     'consistency_analysis': consistency,
                     'testability_analysis': testability,
                     'feasibility_analysis': feasibility,
-                    'clarity_analysis': clarity
+                    'clarity_analysis': clarity,
+                    'logic_analysis': logic
                 },
                 
                 # 改进建议
@@ -3288,7 +3342,8 @@ class RequirementReviewService:
         review_report.clarity_score = specialized_analyses.get('clarity_analysis', {}).get('overall_score', 0)
         review_report.testability_score = specialized_analyses.get('testability_analysis', {}).get('overall_score', 0)
         review_report.feasibility_score = specialized_analyses.get('feasibility_analysis', {}).get('overall_score', 0)
-        
+        review_report.logic_score = specialized_analyses.get('logic_analysis', {}).get('overall_score', 0)
+
         review_report.save()
 
     def _create_review_issues(self, review_report: 'ReviewReport', analysis_result: dict):
@@ -3371,9 +3426,13 @@ class RequirementReviewService:
             'completeness': 'completeness',
             'consistency': 'consistency',
             'feasibility': 'feasibility',
+            'logic': 'logic',
             'data_inconsistency': 'consistency',
             'interface_inconsistency': 'consistency',
-            'business_rule_inconsistency': 'consistency'
+            'business_rule_inconsistency': 'consistency',
+            'flow_logic': 'logic',
+            'state_logic': 'logic',
+            'rule_logic': 'logic'
         }
         return type_mapping.get(ai_type, 'clarity')
 

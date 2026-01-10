@@ -283,6 +283,7 @@ class ReviewReport(models.Model):
     completeness_score = models.IntegerField(_('完整性评分'), default=0, help_text='0-100分')
     testability_score = models.IntegerField(_('可测性评分'), default=0, help_text='0-100分')
     feasibility_score = models.IntegerField(_('可行性评分'), default=0, help_text='0-100分')
+    logic_score = models.IntegerField(_('逻辑分析评分'), default=0, help_text='0-100分')
 
     # 问题统计
     total_issues = models.IntegerField(_('问题总数'), default=0)
@@ -299,7 +300,7 @@ class ReviewReport(models.Model):
         _('专项分析详情'),
         default=dict,
         blank=True,
-        help_text='存储完整性、一致性、可测性、可行性、清晰度5个专项分析的详细结果'
+        help_text='存储完整性、一致性、可测性、可行性、清晰度、逻辑分析6个专项分析的详细结果'
     )
 
     # 元数据
@@ -325,6 +326,7 @@ class ReviewIssue(models.Model):
         ('completeness', '完整性'),
         ('consistency', '一致性'),
         ('feasibility', '可行性'),
+        ('logic', '逻辑性'),
     ]
 
     PRIORITY_CHOICES = [

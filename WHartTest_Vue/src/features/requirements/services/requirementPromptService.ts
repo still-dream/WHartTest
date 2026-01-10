@@ -22,7 +22,8 @@ export const REQUIREMENT_PROMPT_TYPES = {
   CONSISTENCY: 'consistency_analysis' as PromptType,
   TESTABILITY: 'testability_analysis' as PromptType,
   FEASIBILITY: 'feasibility_analysis' as PromptType,
-  CLARITY: 'clarity_analysis' as PromptType
+  CLARITY: 'clarity_analysis' as PromptType,
+  LOGIC: 'logic_analysis' as PromptType
 };
 
 /**
@@ -33,7 +34,8 @@ export const REQUIREMENT_PROMPT_TYPE_NAMES = {
   [REQUIREMENT_PROMPT_TYPES.CONSISTENCY]: '一致性分析',
   [REQUIREMENT_PROMPT_TYPES.TESTABILITY]: '可测性分析',
   [REQUIREMENT_PROMPT_TYPES.FEASIBILITY]: '可行性分析',
-  [REQUIREMENT_PROMPT_TYPES.CLARITY]: '清晰度分析'
+  [REQUIREMENT_PROMPT_TYPES.CLARITY]: '清晰度分析',
+  [REQUIREMENT_PROMPT_TYPES.LOGIC]: '逻辑分析'
 };
 
 /**
@@ -45,6 +47,7 @@ export interface RequirementPromptIds {
   testability_analysis?: number;
   feasibility_analysis?: number;
   clarity_analysis?: number;
+  logic_analysis?: number;
 }
 
 /**

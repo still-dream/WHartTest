@@ -204,6 +204,7 @@ export interface StartReviewRequest {
     testability_analysis?: number;
     feasibility_analysis?: number;
     clarity_analysis?: number;
+    logic_analysis?: number;
   };
 }
 
@@ -228,7 +229,7 @@ export interface ModuleProgress {
 export type Rating = 'excellent' | 'good' | 'fair' | 'poor';
 
 // 问题类型
-export type IssueType = 'specification' | 'clarity' | 'completeness' | 'consistency' | 'feasibility';
+export type IssueType = 'specification' | 'clarity' | 'completeness' | 'consistency' | 'feasibility' | 'logic';
 
 // 问题优先级
 export type IssuePriority = 'high' | 'medium' | 'low';

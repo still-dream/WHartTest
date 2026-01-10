@@ -209,7 +209,8 @@ const analysisTypes = [
   { key: 'consistency', title: '一致性分析', icon: '🔗' },
   { key: 'testability', title: '可测性分析', icon: '🧪' },
   { key: 'feasibility', title: '可行性分析', icon: '⚙️' },
-  { key: 'clarity', title: '清晰度分析', icon: '💡' }
+  { key: 'clarity', title: '清晰度分析', icon: '💡' },
+  { key: 'logic', title: '逻辑分析', icon: '🧠' }
 ];
 
 // 计算属性

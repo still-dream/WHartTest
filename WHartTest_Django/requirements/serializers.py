@@ -136,13 +136,14 @@ class ReviewReportSerializer(serializers.ModelSerializer):
         read_only_fields = ['id', 'review_date', 'created_at', 'updated_at']
     
     def get_scores(self, obj):
-        """获取5个专项分数"""
+        """获取6个专项分数"""
         return {
             'completeness': obj.completeness_score,
             'consistency': obj.consistency_score,
             'testability': obj.testability_score,
             'feasibility': obj.feasibility_score,
             'clarity': obj.clarity_score,
+            'logic': obj.logic_score,
         }
     
     def get_specialized_analyses(self, obj):
@@ -184,6 +185,13 @@ class ReviewReportSerializer(serializers.ModelSerializer):
             'clarity_analysis': {
                 'overall_score': obj.clarity_score,
                 'summary': f"清晰度评分: {obj.clarity_score}分",
+                'issues': [],
+                'strengths': [],
+                'recommendations': []
+            },
+            'logic_analysis': {
+                'overall_score': obj.logic_score,
+                'summary': f"逻辑分析评分: {obj.logic_score}分",
                 'issues': [],
                 'strengths': [],
                 'recommendations': []

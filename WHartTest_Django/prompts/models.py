@@ -13,6 +13,7 @@ class PromptType(models.TextChoices):
     TESTABILITY_ANALYSIS = 'testability_analysis', _('可测性分析')
     FEASIBILITY_ANALYSIS = 'feasibility_analysis', _('可行性分析')
     CLARITY_ANALYSIS = 'clarity_analysis', _('清晰度分析')
+    LOGIC_ANALYSIS = 'logic_analysis', _('逻辑分析')
     # 其他类型
     TEST_CASE_EXECUTION = 'test_case_execution', _('测试用例执行')
     BRAIN_ORCHESTRATOR = 'brain_orchestrator', _('智能规划')
@@ -30,6 +31,7 @@ class UserPrompt(models.Model):
         PromptType.TESTABILITY_ANALYSIS,
         PromptType.FEASIBILITY_ANALYSIS,
         PromptType.CLARITY_ANALYSIS,
+        PromptType.LOGIC_ANALYSIS,
         PromptType.TEST_CASE_EXECUTION,
         PromptType.DIAGRAM_GENERATION,
     ]
@@ -104,6 +106,7 @@ class UserPrompt(models.Model):
                     PromptType.TESTABILITY_ANALYSIS.value,
                     PromptType.FEASIBILITY_ANALYSIS.value,
                     PromptType.CLARITY_ANALYSIS.value,
+                    PromptType.LOGIC_ANALYSIS.value,
                     PromptType.TEST_CASE_EXECUTION.value,
                 ]),
                 name='unique_user_program_prompt_type'
