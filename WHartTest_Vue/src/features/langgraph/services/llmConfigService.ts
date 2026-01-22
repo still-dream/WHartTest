@@ -221,6 +221,42 @@ export async function testLlmConnection(id: number): Promise<ApiResponse<{ statu
 }
 
 /**
+ * 从 LLM API 获取可用模型列表（通过后端代理请求）
+ * @param apiUrl API URL（新建时必填）
+ * @param apiKey API Key（可选，编辑模式时从数据库获取）
+ * @param configId 配置ID（编辑模式时传入，从数据库获取 API Key）
+ */
+export async function fetchModels(apiUrl?: string, apiKey?: string, configId?: number): Promise<ApiResponse<{ status: string; models: string[] }>> {
+  const response = await request<{ status: string; models: string[]; message?: string }>({
+    url: `${API_BASE_URL}/fetch_models/`,
+    method: 'POST',
+    data: {
+      api_url: apiUrl || '',
+      api_key: apiKey || '',
+      config_id: configId,
+    }
+  });
+
+  if (response.success && response.data?.status === 'success') {
+    return {
+      status: 'success',
+      code: 200,
+      message: `成功获取 ${response.data.models.length} 个模型`,
+      data: response.data,
+      errors: null
+    };
+  } else {
+    return {
+      status: 'error',
+      code: 500,
+      message: response.data?.message || response.error || '获取模型列表失败',
+      data: null,
+      errors: { detail: response.error }
+    };
+  }
+}
+
+/**
  * 获取所有可用的供应商选项
  */
 // getProviders API 已废弃: 前端不再支持多供应商选择，仅保留 openai_compatible。如果需要恢复，可实现该函数并返回 provider 列表。
