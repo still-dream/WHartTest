@@ -33,14 +33,6 @@ source .venv/bin/activate
 uv pip install -r requirements.txt
 ```
 
-### 2. 配置说明
-
-#### WHartTest 测试用例工具 (WHartTest_tools.py)
-
-- **服务端口**: 8006
-- **API地址**: 后端服务ip+端口
-- **API密钥**: 已内置在代码中
-
 ### 2. 启动服务
 
 #### 启动测试用例工具
