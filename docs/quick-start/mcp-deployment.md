@@ -20,6 +20,8 @@
 ```bash
 cd WHartTest_MCP
 
+cp .env.example .env # 复制env副本使其生效
+
 # 创建虚拟环境
 uv venv --python 3.11
 

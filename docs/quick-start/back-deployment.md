@@ -22,7 +22,7 @@ pip install uv
 #### 2. 克隆项目
 ```bash
 git clone https://github.com/MGdaasLab/WHartTest.git
-cd WHartTest/WHartTest_Django
+cd WHartTest_Django
 ```
 
 #### 3. 创建并激活虚拟环境
