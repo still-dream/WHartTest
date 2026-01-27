@@ -8,7 +8,30 @@ WHartTest 是一个基于 Django REST Framework 构建的AI驱动测试自动化
 ## 文档
 详细文档请访问：https://mgdaaslab.github.io/WHartTest/
 
+
+
 ## 快速开始
+
+### ./ai_install.sh 部署（AI智能部署）
+
+注意！！！win环境需要在 Open Git Bash hrre 中打开
+
+![alt text](img\git_bash.png)
+
+```bash
+# 1. 克隆仓库
+git clone https://github.com/MGdaasLab/WHartTest.git
+cd WHartTest
+
+# 2. 准备配置（配置大模型的url和key还有模型）
+cp .env.example .env
+
+# 3. 一键启动（与 AI 对话，帮你智能部署）
+./ai_install.sh
+
+# 4. 访问系统
+# http://localhost:8913 (admin/admin123456)
+```
 
 ### Docker 部署（推荐 - 开箱即用）
 
