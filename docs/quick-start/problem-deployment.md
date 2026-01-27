@@ -25,16 +25,16 @@
 ## 问题十三：生成的用例如何自动保存
 回答：1.先创建一个key复制出来
 
-<img src="./img_15.png" alt="contact" width="1000">
+<img src="./image-15.png" alt="contact" width="1000">
 
 2.修改env文件这里，重启mcp容器
 
-<img src="./img_16.png" alt="contact" width="1000">
+<img src="./image-16.png" alt="contact" width="1000">
 
 3.按照下图配置即可
 
-<img src="./img_17.png" alt="contact" width="1000">
-<img src="./img_18.png" alt="contact" width="1000">
+<img src="./image-17.png" alt="contact" width="1000">
+<img src="./image-18.png" alt="contact" width="1000">
 
 ## 问题十四：mcp服务对应的.env中的后端url修改成本机ip测试连接失败
 回答：需修改成127.0.0.1，重启mcp服务并新开对话测试
