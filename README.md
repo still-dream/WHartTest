@@ -1,12 +1,8 @@
-# WHartTest - AI驱动的智能测试用例生成平台
+# WGHTest - AI驱动的智能测试用例生成平台
 
 ## 项目简介
 
-WHartTest 是一个基于 Django REST Framework 构建的AI驱动测试自动化平台，核心功能是通过AI智能生成测试用例。平台集成了 LangChain、MCP（Model Context Protocol）工具调用、项目管理、需求评审、测试用例管理以及先进的知识库管理和文档理解功能。利用大语言模型和多种嵌入服务（OpenAI、Azure OpenAI、Ollama等）的能力，自动化生成高质量的测试用例，并结合知识库提供更精准的测试辅助，为测试团队提供一个完整的智能测试管理解决方案。
-
-
-## 文档
-详细文档请访问：https://mgdaaslab.github.io/WHartTest/
+WGHTest 是一个基于 Django REST Framework 构建的AI驱动测试自动化平台，核心功能是通过AI智能生成测试用例。平台集成了 LangChain、MCP（Model Context Protocol）工具调用、项目管理、需求评审、测试用例管理以及先进的知识库管理和文档理解功能。利用大语言模型和多种嵌入服务（OpenAI、Azure OpenAI、Ollama等）的能力，自动化生成高质量的测试用例，并结合知识库提供更精准的测试辅助，为测试团队提供一个完整的智能测试管理解决方案。
 
 
 
@@ -21,8 +17,8 @@ WHartTest 是一个基于 Django REST Framework 构建的AI驱动测试自动化
 
 ```bash
 # 1. 克隆仓库
-git clone https://github.com/MGdaasLab/WHartTest.git
-cd WHartTest
+git clone https://github.com/still-dream/WHartTest.git
+cd WGHTest
 
 # 2. 准备配置（配置大模型的url和key还有模型）
 cp .env.example .env
@@ -38,8 +34,8 @@ cp .env.example .env
 
 ```bash
 # 1. 克隆仓库
-git clone https://github.com/MGdaasLab/WHartTest.git
-cd WHartTest
+git clone https://github.com/still-dream/WHartTest.git
+cd WGHTest
 
 # 2. 准备配置（使用默认配置，包含自动生成的API Key）
 cp .env.example .env
@@ -58,7 +54,6 @@ docker-compose up -d
 详细的部署说明请参考：
 - [快速启动指南](./docs/QUICK_START.md) - **推荐新用户阅读**
 - [GitHub 自动构建部署指南](./docs/github-docker-deployment.md)
-- [完整部署文档](https://mgdaaslab.github.io/WHartTest/)
 
 ## 页面展示
 
@@ -85,7 +80,7 @@ docker-compose up -d
 - 项目讨论区
 ---
 
-**WHartTest** - AI驱动测试用例生成，让测试更智能，让开发更高效！
+**WGHTest** - AI驱动测试用例生成，让测试更智能，让开发更高效！
 
 ## 【重要安全警示】关于 v1.4.0 版本 Skills 权限及部署安全的声明
 
@@ -93,4 +88,4 @@ docker-compose up -d
 
 部署建议：强烈建议仅在内网环境或受信任的私有网络中部署使用。
 访问控制：切勿将服务直接暴露于公网（Public Internet），或授予任何未经身份验证及不可信人员访问权限。
-免责声明：本项目（WHartTest）仅供学习与研究使用。用户需自行承担因违规部署（如开放公网、未做鉴权等）所导致的一切安全风险与后果。对于因不当配置引发的数据泄露、服务器被入侵等安全事故，WHartTest 团队不承担任何法律及连带责任。
+免责声明：本项目（WGHTest）仅供学习与研究使用。用户需自行承担因违规部署（如开放公网、未做鉴权等）所导致的一切安全风险与后果。对于因不当配置引发的数据泄露、服务器被入侵等安全事故，WGHTest 团队不承担任何法律及连带责任。
