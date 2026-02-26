@@ -120,7 +120,7 @@ import { Button as AButton, Tooltip as ATooltip, Message } from '@arco-design/we
 import { IconCopy, IconReply, IconRefresh, IconDelete } from '@arco-design/web-vue/es/icon';
 import DOMPurify from 'dompurify';
 import { marked } from 'marked';
-import logo from '/WHartTest.png';
+import logo from '/WGHTest.png';
 
 // 配置marked以确保代码块正确渲染
 // marked v5+ API发生了变化，许多选项被移除或更改。

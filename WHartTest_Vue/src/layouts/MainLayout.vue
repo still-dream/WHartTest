@@ -4,8 +4,8 @@
     <a-layout-header class="header">
       <div class="left-section">
         <div class="logo" unselectable="on">
-          <img src="/WHartTest.png" alt="WHartTest Logo" class="logo-icon" />
-          <span class="logo-text">WHartTest</span>
+          <img src="/WGHTest.png" alt="WGHTest Logo" class="logo-icon" />
+          <span class="logo-text">WGHTest</span>
         </div>
         <div class="project-selector" v-if="showProjectSelector">
           <a-select

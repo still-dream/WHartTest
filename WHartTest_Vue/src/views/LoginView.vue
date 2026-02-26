@@ -12,14 +12,14 @@
       <!-- 品牌标识区域 -->
       <div class="brand-section">
         <div class="brand-logo">
-          <img src="/WHartTest.png" alt="WHartTest Logo" class="logo-icon" />
+          <img src="/WGHTest.png" alt="WGHTest Logo" class="logo-icon" />
         </div>
-        <h1 class="brand-title">WHartTest</h1>
-        <p class="brand-subtitle">小麦智测自动化平台</p>
+        <h1 class="brand-title">WGHTest</h1>
+        <p class="brand-subtitle">WGH智能测试平台</p>
       </div>
 
       <!-- 登录表单 -->
-      <form @submit.prevent="handleLogin" class="login-form">
+      <form @submit.prevent="handleLogin" class="login-form"> 
         <!-- 用户名输入框 -->
         <div class="input-group">
           <div class="input-wrapper">

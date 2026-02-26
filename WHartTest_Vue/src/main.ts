@@ -11,9 +11,9 @@ import router from './router' // 新增导入
 import 'wired-elements'
 
 // Monaco Editor 配置 - 使用本地资源，无需外网
-import * as monaco from 'monaco-editor'
-import { loader } from '@guolao/vue-monaco-editor'
-loader.config({ monaco })
+// import * as monaco from 'monaco-editor'
+// import { loader } from '@guolao/vue-monaco-editor'
+// loader.config({ monaco })
 
 const app = createApp(App)
 

@@ -15,9 +15,15 @@
   "author": "",
   "license": "ISC",
   "devDependencies": {
+    "@vue/tsconfig": "^0.8.1",
+    "vite-plugin-monaco-editor": "^1.1.0",
     "vitepress": "^1.6.4"
   },
   "dependencies": {
-    "medium-zoom": "^1.1.0"
+    "@arco-design/web-vue": "^2.57.0",
+    "medium-zoom": "^1.1.0",
+    "monaco-editor": "^0.55.1",
+    "pinia": "^3.0.4",
+    "wired-elements": "^3.0.0-rc.6"
   }
 }

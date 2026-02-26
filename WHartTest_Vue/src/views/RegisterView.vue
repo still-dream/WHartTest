@@ -12,10 +12,10 @@
       <!-- 品牌标识区域 -->
       <div class="brand-section">
         <div class="brand-logo">
-          <img src="/WHartTest.png" alt="WHartTest Logo" class="logo-icon" />
+          <img src="/WGHTest.png" alt="WGHTest Logo" class="logo-icon" />
         </div>
         <h1 class="brand-title">注册新账户</h1>
-        <p class="brand-subtitle">欢迎加入WHartTest</p>
+        <p class="brand-subtitle">欢迎加入WGHTest</p>
       </div>
 
       <!-- 注册表单 -->
