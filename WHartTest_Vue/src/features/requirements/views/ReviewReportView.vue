@@ -34,10 +34,27 @@
           <template #icon><icon-book /></template>
           专项分析
         </a-button>
-        <a-button type="outline" @click="exportReport">
-          <template #icon><icon-download /></template>
-          导出报告
-        </a-button>
+        <a-dropdown @select="handleExportFormat">
+          <a-button type="outline">
+            <template #icon><icon-download /></template>
+            导出报告
+            <icon-down style="margin-left: 4px" />
+          </a-button>
+          <template #content>
+            <a-doption value="excel">
+              <template #icon><icon-file style="color: #00b42a" /></template>
+              Excel格式
+            </a-doption>
+            <a-doption value="word">
+              <template #icon><icon-file style="color: #165dff" /></template>
+              Word格式
+            </a-doption>
+            <a-doption value="pdf">
+              <template #icon><icon-file style="color: #f53f3f" /></template>
+              PDF格式
+            </a-doption>
+          </template>
+        </a-dropdown>
         <a-button type="primary" @click="shareReport">
           <template #icon><icon-share-alt /></template>
           分享报告
@@ -286,7 +303,9 @@ import {
   IconCalendar,
   IconCheckCircle,
   IconCloseCircle,
-  IconBulb
+  IconBulb,
+  IconDown,
+  IconFile
 } from '@arco-design/web-vue/es/icon';
 import { RequirementDocumentService, ReviewIssueService } from '../services/requirementService';
 import type { ReviewReport, ReviewIssue, Rating, IssuePriority, IssueType, DocumentDetail } from '../types';
@@ -478,8 +497,40 @@ const switchToSpecializedReport = () => {
   }
 };
 
-const exportReport = () => {
-  Message.info('导出功能开发中...');
+const exportReport = async (format: 'excel' | 'word' | 'pdf' = 'excel') => {
+  if (!selectedReportId.value) {
+    Message.error('请先选择要导出的报告');
+    return;
+  }
+
+  if (!documentDetail.value?.id) {
+    Message.error('文档信息不存在');
+    return;
+  }
+
+  try {
+    Message.loading({
+      content: '正在导出报告...',
+      duration: 0
+    });
+    
+    await RequirementDocumentService.exportReviewReport(
+      documentDetail.value.id,
+      format,
+      selectedReportId.value
+    );
+    
+    Message.success('报告导出成功');
+  } catch (error) {
+    console.error('导出报告失败:', error);
+    Message.error('导出报告失败，请重试');
+  } finally {
+    Message.clear();
+  }
+};
+
+const handleExportFormat = (format: string) => {
+  exportReport(format as 'excel' | 'word' | 'pdf');
 };
 
 // 分享报告

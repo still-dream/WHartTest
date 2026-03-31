@@ -30,10 +30,27 @@
         />
       </div>
       <div class="header-actions">
-        <a-button type="outline" @click="exportReport">
-          <template #icon><icon-download /></template>
-          导出报告
-        </a-button>
+        <a-dropdown @select="handleExportFormat">
+          <a-button type="outline">
+            <template #icon><icon-download /></template>
+            导出报告
+            <icon-down style="margin-left: 4px" />
+          </a-button>
+          <template #content>
+            <a-doption value="excel">
+              <template #icon><icon-file style="color: #00b42a" /></template>
+              Excel格式
+            </a-doption>
+            <a-doption value="word">
+              <template #icon><icon-file style="color: #165dff" /></template>
+              Word格式
+            </a-doption>
+            <a-doption value="pdf">
+              <template #icon><icon-file style="color: #f53f3f" /></template>
+              PDF格式
+            </a-doption>
+          </template>
+        </a-dropdown>
       </div>
     </div>
 
@@ -187,7 +204,9 @@ import { useRoute, useRouter } from 'vue-router';
 import { Message } from '@arco-design/web-vue';
 import {
   IconArrowLeft,
-  IconDownload
+  IconDownload,
+  IconDown,
+  IconFile
 } from '@arco-design/web-vue/es/icon';
 import { RequirementDocumentService } from '../services/requirementService';
 import ReportVersionSelector from '../components/ReportVersionSelector.vue';
@@ -356,8 +375,40 @@ const handleVersionChange = (reportId: string) => {
   priorityFilter.value = '';
 };
 
-const exportReport = () => {
-  Message.info('导出功能开发中...');
+const exportReport = async (format: 'excel' | 'word' | 'pdf' = 'excel') => {
+  if (!selectedReportId.value) {
+    Message.error('请先选择要导出的报告');
+    return;
+  }
+
+  if (!document.value?.id) {
+    Message.error('文档信息不存在');
+    return;
+  }
+
+  try {
+    Message.loading({
+      content: '正在导出报告...',
+      duration: 0
+    });
+    
+    await RequirementDocumentService.exportReviewReport(
+      document.value.id,
+      format,
+      selectedReportId.value
+    );
+    
+    Message.success('报告导出成功');
+  } catch (error) {
+    console.error('导出报告失败:', error);
+    Message.error('导出报告失败，请重试');
+  } finally {
+    Message.clear();
+  }
+};
+
+const handleExportFormat = (format: string) => {
+  exportReport(format as 'excel' | 'word' | 'pdf');
 };
 
 // 生命周期

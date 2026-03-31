@@ -426,6 +426,62 @@ export class RequirementDocumentService {
       };
     }
   }
+
+  /**
+   * 导出评审报告
+   */
+  static async exportReviewReport(
+    documentId: string,
+    format: 'excel' | 'word' | 'pdf' = 'excel',
+    reportId?: string
+  ): Promise<void> {
+    try {
+      const params = new URLSearchParams();
+      params.append('format', format);
+      if (reportId) {
+        params.append('report_id', reportId);
+      }
+
+      const response = await fetch(
+        `/api/requirements/documents/${documentId}/export-report/?${params.toString()}`,
+        {
+          method: 'GET',
+          headers: {
+            'Authorization': `Bearer ${localStorage.getItem('access_token')}`,
+          },
+        }
+      );
+
+      if (!response.ok) {
+        throw new Error(`导出失败: ${response.statusText}`);
+      }
+
+      // 获取文件名
+      const contentDisposition = response.headers.get('Content-Disposition');
+      let filename = `评审报告_${new Date().toISOString().split('T')[0]}.${format === 'excel' ? 'xlsx' : format}`;
+      
+      if (contentDisposition) {
+        const filenameMatch = contentDisposition.match(/filename="?(.+)"?/);
+        if (filenameMatch && filenameMatch[1]) {
+          filename = filenameMatch[1];
+        }
+      }
+
+      // 下载文件
+      const blob = await response.blob();
+      const url = window.URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = filename;
+      document.body.appendChild(a);
+      a.click();
+      window.URL.revokeObjectURL(url);
+      document.body.removeChild(a);
+    } catch (error) {
+      console.error('导出报告失败:', error);
+      throw error;
+    }
+  }
 }
 
 // 评审报告数据通过 RequirementDocumentService.getDocumentDetail 获取

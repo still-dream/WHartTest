@@ -78,6 +78,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     curl \
     nodejs \
     npm \
+    git \
     # Playwright 所需的系统依赖
     libnss3 \
     libnspr4 \

@@ -338,7 +338,7 @@ def add_functional_case(
         notes: str = Field(description='备注'),
         review_status: str = Field(default='pending_review', description='审核状态: pending_review(待审核), approved(通过), needs_optimization(优化), optimization_pending_review(优化待审核), unavailable(不可用)')):
     """
-    保WHartTest平台存WHartTest平台功能测试用例
+    保存WHartTest平台功能测试用例
     """
     try:
         if not project_id:

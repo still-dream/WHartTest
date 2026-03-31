@@ -29,6 +29,7 @@ from .permissions import (
     CanManageRequirementDocument, CanStartReview
 )
 from .services import RequirementModuleService, ModuleOperationService, RequirementReviewService
+from .export_service import ReportExportService
 
 logger = logging.getLogger(__name__)
 
@@ -632,6 +633,61 @@ class RequirementDocumentViewSet(BaseModelViewSet):
                     )
             else:
                 return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+
+    @action(detail=True, methods=['get'], url_path='export-report')
+    def export_report(self, request, pk=None):
+        """
+        导出评审报告
+        GET /api/requirements/documents/{id}/export-report/?format=excel&report_id=xxx
+        
+        参数:
+        - format: 导出格式 (excel/word/pdf)，默认excel
+        - report_id: 评审报告ID（可选，不传则导出最新报告）
+        """
+        document = self.get_object()
+        
+        # 获取导出格式
+        export_format = request.query_params.get('format', 'excel').lower()
+        if export_format not in ['excel', 'word', 'pdf']:
+            return Response(
+                {'error': '不支持的导出格式，仅支持 excel、word、pdf'},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+        
+        # 获取评审报告
+        report_id = request.query_params.get('report_id')
+        if report_id:
+            try:
+                report = ReviewReport.objects.get(id=report_id, document=document)
+            except ReviewReport.DoesNotExist:
+                return Response(
+                    {'error': '指定的评审报告不存在'},
+                    status=status.HTTP_404_NOT_FOUND
+                )
+        else:
+            # 获取最新评审报告
+            report = document.review_reports.order_by('-review_date').first()
+            if not report:
+                return Response(
+                    {'error': '该文档暂无评审报告'},
+                    status=status.HTTP_404_NOT_FOUND
+                )
+        
+        try:
+            # 根据格式导出
+            if export_format == 'excel':
+                return ReportExportService.export_to_excel(report)
+            elif export_format == 'word':
+                return ReportExportService.export_to_word(report)
+            else:  # pdf
+                return ReportExportService.export_to_pdf(report)
+                
+        except Exception as e:
+            logger.error(f'导出报告失败: {e}')
+            return Response(
+                {'error': f'导出失败: {str(e)}'},
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR
+            )
 
 
 class RequirementModuleViewSet(BaseModelViewSet):
