@@ -6,7 +6,7 @@
 # ============================================
 # 第一阶段：构建阶段（包含编译工具）
 # ============================================
-FROM docker.1ms.run/library/python:3.11-slim AS builder
+FROM python:3.11-slim AS builder
 
 WORKDIR /build
 
@@ -37,26 +37,13 @@ RUN uv venv /opt/venv && \
     -i https://pypi.tuna.tsinghua.edu.cn/simple \
     -r requirements.txt
 
-# 预下载 BM25 稀疏编码模型（用于混合检索）
-# 使用 FASTEMBED_CACHE_PATH 环境变量强制指定缓存路径
-# 使用 Hugging Face 国内镜像加速下载
-ENV HOME=/root \
-    FASTEMBED_CACHE_PATH=/root/.cache/fastembed \
-    HF_ENDPOINT=https://hf-mirror.com
-RUN mkdir -p /root/.cache/fastembed && \
-    /opt/venv/bin/python -c "\
-import os; \
-os.environ['FASTEMBED_CACHE_PATH'] = '/root/.cache/fastembed'; \
-os.environ['HF_ENDPOINT'] = 'https://hf-mirror.com'; \
-from fastembed import SparseTextEmbedding; \
-m = SparseTextEmbedding('Qdrant/bm25'); \
-print('BM25 model downloaded to:', os.environ.get('FASTEMBED_CACHE_PATH')); \
-" && ls -la /root/.cache/fastembed/
+# BM25 模型将在首次使用时自动下载
+# 环境变量已在运行阶段设置
 
 # ============================================
 # 第二阶段：运行阶段（仅包含运行时依赖）
 # ============================================
-FROM docker.1ms.run/library/python:3.11-slim
+FROM python:3.11-slim
 
 WORKDIR /app
 
@@ -119,8 +106,7 @@ RUN /opt/venv/bin/playwright install chromium
 RUN npm install -g agent-browser && \
     agent-browser install
 
-# 从构建阶段复制预下载的 BM25 模型缓存
-COPY --from=builder /root/.cache/fastembed /root/.cache/fastembed
+# BM25 模型缓存目录将在运行时自动创建
 
 # 复制启动脚本和配置文件
 COPY entrypoint.sh /app/entrypoint.sh

@@ -66,6 +66,7 @@ services:
       - "8912:8000"
     volumes:
       - ./data:/app/data
+      - ./WHartTest_Django:/app  # 挂载本地代码到容器
       - backend-static:/app/static
     environment:
       # 数据库配置
