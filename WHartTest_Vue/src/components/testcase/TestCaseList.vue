@@ -82,11 +82,11 @@
       :scroll="{ x: 900 }"
       :bordered="{ cell: true }"
       :sticky-header="true"
+      column-resizable
       class="test-case-table"
       @page-change="onPageChange"
       @page-size-change="onPageSizeChange"
-
-
+      @column-resize="handleColumnResize"
     >
       <template #selection="{ record }">
         <div data-checkbox>
@@ -178,7 +178,7 @@ import {
   type ReviewStatus,
 } from '@/services/testcaseService';
 import { formatDate, getLevelColor, getReviewStatusLabel, getReviewStatusColor, REVIEW_STATUS_OPTIONS } from '@/utils/formatters';
-import type { TreeNodeData } from '@arco-design/web-vue';
+import type { TreeNodeData, TableColumnData } from '@arco-design/web-vue';
 
 const props = defineProps<{
   currentProjectId: number | null;
@@ -292,7 +292,9 @@ const handleSelectCurrentPage = (checked: boolean) => {
   }
 };
 
-const columns = [
+const TEST_CASE_TABLE_COLUMN_WIDTH_STORAGE_KEY = 'wharttest:testcase-list-column-widths';
+
+const defaultColumns: TableColumnData[] = [
   {
     title: '选择',
     slotName: 'selection',
@@ -323,6 +325,70 @@ const columns = [
   },
   { title: '操作', slotName: 'operations', width: 200, fixed: 'right', align: 'center' },
 ];
+
+const getStoredColumnWidths = () => {
+  if (typeof window === 'undefined') {
+    return {} as Record<string, number>;
+  }
+
+  try {
+    const storedValue = window.localStorage.getItem(TEST_CASE_TABLE_COLUMN_WIDTH_STORAGE_KEY);
+    if (!storedValue) {
+      return {} as Record<string, number>;
+    }
+
+    const parsed = JSON.parse(storedValue) as Record<string, unknown>;
+    return Object.entries(parsed).reduce((acc, [key, value]) => {
+      if (typeof value === 'number' && Number.isFinite(value)) {
+        acc[key] = value;
+      }
+      return acc;
+    }, {} as Record<string, number>);
+  } catch (error) {
+    return {} as Record<string, number>;
+  }
+};
+
+const buildColumnsWithStoredWidths = () => {
+  const storedWidths = getStoredColumnWidths();
+  return defaultColumns.map((column) => {
+    const dataIndex = typeof column.dataIndex === 'string' ? column.dataIndex : '';
+    const storedWidth = dataIndex ? storedWidths[dataIndex] : undefined;
+
+    return {
+      ...column,
+      width: storedWidth ?? column.width,
+    };
+  });
+};
+
+const columns = ref<TableColumnData[]>(buildColumnsWithStoredWidths());
+
+const persistColumnWidths = () => {
+  if (typeof window === 'undefined') {
+    return;
+  }
+
+  const columnWidths = columns.value.reduce((acc, column) => {
+    if (typeof column.dataIndex === 'string' && typeof column.width === 'number') {
+      acc[column.dataIndex] = column.width;
+    }
+    return acc;
+  }, {} as Record<string, number>);
+
+  window.localStorage.setItem(
+    TEST_CASE_TABLE_COLUMN_WIDTH_STORAGE_KEY,
+    JSON.stringify(columnWidths)
+  );
+};
+
+const handleColumnResize = (dataIndex: string, width: number) => {
+  const targetColumn = columns.value.find((column) => column.dataIndex === dataIndex);
+  if (targetColumn) {
+    targetColumn.width = width;
+    persistColumnWidths();
+  }
+};
 
 const fetchTestCases = async () => {
   if (!currentProjectId.value) {

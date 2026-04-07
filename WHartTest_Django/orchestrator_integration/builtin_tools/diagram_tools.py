@@ -8,12 +8,60 @@ Drawio 图表工具
 
 import json
 import logging
+from xml.etree import ElementTree as ET
 from langchain_core.tools import tool as langchain_tool
+
 
 logger = logging.getLogger('orchestrator_integration')
 
 
+def _build_xml_error_message(error: str) -> str:
+    return (
+        f"XML格式错误: {error}。"
+        "请确保所有属性值中的 &, <, >, \" 和 ' 都已正确转义，"
+        "例如 & 要写成 &amp;，双引号要写成 &quot;。"
+    )
+
+
+def _parse_xml(xml: str):
+    try:
+        return ET.fromstring(xml.strip()), None
+    except ET.ParseError as exc:
+        return None, _build_xml_error_message(str(exc))
+
+
+def _get_local_tag(tag: str) -> str:
+    return tag.split('}', 1)[-1] if '}' in tag else tag
+
+
+def _validate_mxgraphmodel_xml(xml: str):
+    root, error = _parse_xml(xml)
+    if error:
+        return error
+
+    if root is None or _get_local_tag(root.tag) != 'mxGraphModel':
+        return '无效的drawio XML格式，根元素必须是 mxGraphModel'
+
+    has_root = any(_get_local_tag(child.tag) == 'root' for child in root)
+    if not has_root:
+        return '无效的drawio XML格式，必须包含 root 元素'
+
+    return None
+
+
+def _validate_mxcell_xml(xml: str):
+    root, error = _parse_xml(xml)
+    if error:
+        return error
+
+    if root is None or _get_local_tag(root.tag) != 'mxCell':
+        return '无效的元素XML格式，根元素必须是 mxCell'
+
+    return None
+
+
 def get_diagram_tools() -> list:
+
     """获取 Drawio 图表工具列表"""
 
     @langchain_tool
@@ -39,11 +87,14 @@ def get_diagram_tools() -> list:
                 "error": "XML内容不能为空"
             }, ensure_ascii=False)
 
-        if "<mxGraphModel" not in xml or "<root>" not in xml:
+        validation_error = _validate_mxgraphmodel_xml(xml)
+        if validation_error:
+            logger.warning(f"[display_diagram] XML 校验失败: {validation_error}")
             return json.dumps({
                 "success": False,
-                "error": "无效的drawio XML格式，必须包含mxGraphModel和root元素"
+                "error": validation_error
             }, ensure_ascii=False)
+
 
         result = {
             "success": True,
@@ -142,6 +193,14 @@ def get_diagram_tools() -> list:
                         "success": False,
                         "error": f"第{i+1}个操作(replace_page)缺少page_xml字段"
                     }, ensure_ascii=False)
+
+                validation_error = _validate_mxgraphmodel_xml(op["page_xml"])
+                if validation_error:
+                    return json.dumps({
+                        "success": False,
+                        "error": f"第{i+1}个操作(replace_page)的page_xml无效: {validation_error}"
+                    }, ensure_ascii=False)
+
                 validated_op["pageXml"] = op["page_xml"]
                 if "page_name" in op:
                     validated_op["pageName"] = op["page_name"]
@@ -152,7 +211,16 @@ def get_diagram_tools() -> list:
                         "success": False,
                         "error": f"第{i+1}个操作(add)缺少element字段"
                     }, ensure_ascii=False)
+
+                validation_error = _validate_mxcell_xml(op["element"])
+                if validation_error:
+                    return json.dumps({
+                        "success": False,
+                        "error": f"第{i+1}个操作(add)的element无效: {validation_error}"
+                    }, ensure_ascii=False)
+
                 validated_op["element"] = op["element"]
+
 
             elif action == "delete":
                 if "element_id" not in op:

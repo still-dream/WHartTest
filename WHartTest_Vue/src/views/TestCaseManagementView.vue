@@ -1,12 +1,24 @@
 <template>
   <div class="testcase-management-container">
     <!-- 始终显示模块管理面板 -->
-    <div class="list-view-layout">
+    <div
+      ref="listViewLayoutRef"
+      class="list-view-layout"
+      :class="{ 'is-resizing': isResizing }"
+    >
       <ModuleManagementPanel
         :current-project-id="currentProjectId"
+        :style="modulePanelStyle"
         @module-selected="handleModuleSelected"
         @module-updated="handleModuleUpdated"
         ref="modulePanelRef"
+      />
+
+      <div
+        v-if="!isStackedLayout"
+        class="resize-handle"
+        :class="{ 'is-resizing': isResizing }"
+        @mousedown.prevent="startResize"
       />
 
       <!-- 右侧内容区域 - 根据视图模式动态切换 -->
@@ -80,7 +92,7 @@
 </template>
 
 <script setup lang="ts">
-import { h, ref, computed, watch, onMounted } from 'vue';
+import { h, ref, computed, watch, onMounted, onBeforeUnmount } from 'vue';
 import { useRouter } from 'vue-router';
 import { useProjectStore } from '@/store/projectStore';
 import type { TestCase } from '@/services/testcaseService';
@@ -117,12 +129,35 @@ const pendingExecuteTestCase = ref<TestCase | null>(null);
 const pendingOptimizationTestCase = ref<TestCase | null>(null);
 const testCaseIdsForNavigation = ref<number[]>([]); // 用于编辑页面导航的用例ID列表
 
+const PANEL_MIN_WIDTH = 220;
+const PANEL_DEFAULT_WIDTH = 280;
+const RIGHT_CONTENT_MIN_WIDTH = 520;
+const RESIZE_HANDLE_WIDTH = 12;
+
 const modulePanelRef = ref<InstanceType<typeof ModuleManagementPanel> | null>(null);
 const testCaseListRef = ref<InstanceType<typeof TestCaseList> | null>(null);
+const listViewLayoutRef = ref<HTMLElement | null>(null);
+const modulePanelWidth = ref(PANEL_DEFAULT_WIDTH);
+const isResizing = ref(false);
+const isStackedLayout = ref(typeof window !== 'undefined' ? window.innerWidth <= 768 : false);
+
+const modulePanelStyle = computed(() => {
+  if (isStackedLayout.value) {
+    return undefined;
+  }
+
+  return {
+    width: `${modulePanelWidth.value}px`,
+  };
+});
+
+let dragStartX = 0;
+let dragStartWidth = PANEL_DEFAULT_WIDTH;
 
 // 存储所有模块数据，用于传递给详情页和表单
 const allModules = ref<TestCaseModule[]>([]);
 const moduleTreeForForm = ref<TreeNodeData[]>([]); // 用于表单的模块树
+
 
 const startAutomationTask = (
   requestData: ChatRequest,
@@ -610,6 +645,67 @@ ${data.suggestion || '请根据测试最佳实践进行全面优化'}
   pendingOptimizationTestCase.value = null;
 };
 
+const clampModulePanelWidth = (width: number) => {
+  const layoutWidth = listViewLayoutRef.value?.clientWidth;
+  if (!layoutWidth) {
+    return Math.max(PANEL_MIN_WIDTH, width);
+  }
+
+  const maxWidth = Math.max(
+    PANEL_MIN_WIDTH,
+    layoutWidth - RIGHT_CONTENT_MIN_WIDTH - RESIZE_HANDLE_WIDTH
+  );
+
+  return Math.min(Math.max(width, PANEL_MIN_WIDTH), maxWidth);
+};
+
+const stopResize = () => {
+  if (!isResizing.value) {
+    return;
+  }
+
+  isResizing.value = false;
+  document.body.style.cursor = '';
+  document.body.style.userSelect = '';
+  window.removeEventListener('mousemove', handleResize);
+  window.removeEventListener('mouseup', stopResize);
+};
+
+const handleResize = (event: MouseEvent) => {
+  if (!isResizing.value) {
+    return;
+  }
+
+  modulePanelWidth.value = clampModulePanelWidth(
+    dragStartWidth + event.clientX - dragStartX
+  );
+};
+
+const startResize = (event: MouseEvent) => {
+  if (isStackedLayout.value) {
+    return;
+  }
+
+  dragStartX = event.clientX;
+  dragStartWidth = modulePanelWidth.value;
+  isResizing.value = true;
+  document.body.style.cursor = 'col-resize';
+  document.body.style.userSelect = 'none';
+  window.addEventListener('mousemove', handleResize);
+  window.addEventListener('mouseup', stopResize);
+};
+
+const syncLayoutState = () => {
+  isStackedLayout.value = window.innerWidth <= 768;
+
+  if (isStackedLayout.value) {
+    stopResize();
+    return;
+  }
+
+  modulePanelWidth.value = clampModulePanelWidth(modulePanelWidth.value);
+};
+
 watch(currentProjectId, (newVal) => {
   selectedModuleId.value = null; // 项目切换时清空已选模块
   // 列表和模块面板会各自 watch projectId 并刷新
@@ -625,7 +721,16 @@ onMounted(() => {
   if (currentProjectId.value) {
     fetchAllModulesForForm();
   }
+
+  syncLayoutState();
+  window.addEventListener('resize', syncLayoutState);
 });
+
+onBeforeUnmount(() => {
+  stopResize();
+  window.removeEventListener('resize', syncLayoutState);
+});
+
 
 </script>
 
@@ -639,21 +744,56 @@ onMounted(() => {
 
 .list-view-layout {
   display: flex;
+  align-items: stretch;
   width: 100%;
   height: 100%;
-  gap: 10px;
+  min-width: 0;
   overflow: hidden;
+}
+
+.list-view-layout.is-resizing {
+  cursor: col-resize;
+}
+
+.resize-handle {
+  position: relative;
+  flex: 0 0 12px;
+  cursor: col-resize;
+  user-select: none;
+}
+
+.resize-handle::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: 50%;
+  width: 4px;
+  transform: translateX(-50%);
+  border-radius: 999px;
+  background-color: rgba(22, 93, 255, 0.12);
+  transition: background-color 0.2s ease;
+}
+
+.resize-handle:hover::before,
+.resize-handle.is-resizing::before {
+  background-color: rgba(22, 93, 255, 0.32);
 }
 
 @media (max-width: 768px) {
   .list-view-layout {
     flex-direction: column;
   }
+
+  .resize-handle {
+    display: none;
+  }
 }
 
 /* 右侧内容区域样式 */
 .right-content-area {
-  flex: 1;
+  flex: 1 1 auto;
+  min-width: 0;
   height: 100%;
   overflow: hidden;
   display: flex;
@@ -663,6 +803,7 @@ onMounted(() => {
   box-shadow: 4px 0 10px rgba(0, 0, 0, 0.2), 0 4px 10px rgba(0, 0, 0, 0.2), 0 0 10px rgba(0, 0, 0, 0.15);
   padding: 20px; /* 添加内边距，与其他卡片保持一致 */
 }
+
 
 /* 确保右侧内容区域中的所有组件都能正确显示 */
 .right-content-area > * {

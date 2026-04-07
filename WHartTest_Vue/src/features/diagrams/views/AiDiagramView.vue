@@ -796,32 +796,67 @@ const applyOperations = (operations: EditOperation[]): { success: boolean; messa
   };
 };
 
+const parseDiagramXml = (xml: string): Document | null => {
+  const doc = new DOMParser().parseFromString(xml, 'application/xml');
+  return doc.querySelector('parsererror') ? null : doc;
+};
+
+const serializeDiagramXml = (doc: Document): string => {
+  return new XMLSerializer()
+    .serializeToString(doc)
+    .replace(/^<\?xml[^?]*\?>\s*/, '');
+};
+
 // 添加新页面到现有图表
 const addNewPage = (newPageXml: string, pageName: string) => {
-  // 生成唯一 ID
-  const pageId = `page-${Date.now()}`;
-  
-  // 将 mxGraphModel 包装成 diagram 元素
-  const diagramElement = `<diagram name="${pageName}" id="${pageId}">${newPageXml}</diagram>`;
-  
-  let finalXml = '';
-  
-  if (!currentXml.value) {
-    // 没有现有图表，创建新的 mxfile
-    finalXml = `<mxfile>${diagramElement}</mxfile>`;
-  } else if (currentXml.value.includes('<mxfile')) {
-    // 已有 mxfile 结构，在 </mxfile> 前插入新页面
-    finalXml = currentXml.value.replace('</mxfile>', `${diagramElement}</mxfile>`);
-  } else if (currentXml.value.includes('<mxGraphModel')) {
-    // 只有单个 mxGraphModel，转换为多页面结构
-    const firstPageId = `page-${Date.now() - 1}`;
-    finalXml = `<mxfile><diagram name="Page-1" id="${firstPageId}">${currentXml.value}</diagram>${diagramElement}</mxfile>`;
-  } else {
-    // 未知格式，直接替换
-    finalXml = `<mxfile>${diagramElement}</mxfile>`;
+  const newPageDoc = parseDiagramXml(newPageXml);
+  const newPageModel = newPageDoc?.querySelector('mxGraphModel');
+  if (!newPageDoc || !newPageModel) {
+    Message.error('生成的图表 XML 无效，无法添加到新页面');
+    return;
   }
-  
-  updateDiagram(finalXml);
+
+  const pageId = `page-${Date.now()}`;
+  let targetDoc: Document | null = null;
+  let mxfileElement: Element | null = null;
+
+  if (!currentXml.value) {
+    targetDoc = parseDiagramXml('<mxfile></mxfile>');
+    mxfileElement = targetDoc?.documentElement ?? null;
+  } else if (currentXml.value.includes('<mxfile')) {
+    targetDoc = parseDiagramXml(currentXml.value);
+    mxfileElement = targetDoc?.querySelector('mxfile') ?? null;
+  } else if (currentXml.value.includes('<mxGraphModel')) {
+    const existingDoc = parseDiagramXml(currentXml.value);
+    const existingModel = existingDoc?.querySelector('mxGraphModel');
+
+    targetDoc = parseDiagramXml('<mxfile></mxfile>');
+    mxfileElement = targetDoc?.documentElement ?? null;
+
+    if (targetDoc && mxfileElement && existingModel) {
+      const firstDiagram = targetDoc.createElement('diagram');
+      firstDiagram.setAttribute('id', `page-${Date.now() - 1}`);
+      firstDiagram.setAttribute('name', 'Page-1');
+      firstDiagram.appendChild(targetDoc.importNode(existingModel, true));
+      mxfileElement.appendChild(firstDiagram);
+    }
+  } else {
+    targetDoc = parseDiagramXml('<mxfile></mxfile>');
+    mxfileElement = targetDoc?.documentElement ?? null;
+  }
+
+  if (!targetDoc || !mxfileElement) {
+    Message.error('当前图表结构无效，无法添加新页面');
+    return;
+  }
+
+  const diagramElement = targetDoc.createElement('diagram');
+  diagramElement.setAttribute('id', pageId);
+  diagramElement.setAttribute('name', pageName || `Page-${mxfileElement.querySelectorAll('diagram').length + 1}`);
+  diagramElement.appendChild(targetDoc.importNode(newPageModel, true));
+  mxfileElement.appendChild(diagramElement);
+
+  updateDiagram(serializeDiagramXml(targetDoc));
   Message.success(`已添加新页面: ${pageName}`);
 };
 
