@@ -122,7 +122,7 @@ const modalVisible = computed({
 
 const testCaseColumns = [
   { title: 'ID', dataIndex: 'id', width: 80, align: 'center' as const },
-  { title: '用例名称', dataIndex: 'name', ellipsis: true, tooltip: true, align: 'center' as const },
+  { title: '用例名称', dataIndex: 'name', width: 250, ellipsis: true, tooltip: true, align: 'center' as const },
   { title: '优先级', dataIndex: 'level', slotName: 'level', width: 100, align: 'center' as const },
   { title: '模块', dataIndex: 'module_detail', ellipsis: true, tooltip: true, width: 180, align: 'center' as const },
 ];

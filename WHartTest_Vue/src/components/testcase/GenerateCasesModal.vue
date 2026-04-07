@@ -284,7 +284,7 @@ const paginationConfig = reactive({
 const testCaseColumns = [
   { title: '选择', slotName: 'selection', width: 50, titleSlotName: 'selectAll', align: 'center' as const },
   { title: 'ID', dataIndex: 'id', width: 60 },
-  { title: '用例名称', dataIndex: 'name', width: 180, ellipsis: true, tooltip: true },
+  { title: '用例名称', dataIndex: 'name', width: 250, ellipsis: true, tooltip: true },
   { title: '优先级', dataIndex: 'level', slotName: 'level', width: 70 },
   { title: '所属模块', dataIndex: 'module_detail', width: 100, ellipsis: true },
 ];
@@ -417,7 +417,7 @@ const fetchRequirementDocuments = async () => {
     const response = await RequirementDocumentService.getDocumentList({ project: String(projectStore.currentProjectId) });
     if (response.status === 'success' && Array.isArray(response.data)) {
       requirementDocuments.value = response.data;
-    } else if (response.status === 'success' && 'results' in response.data) {
+    } else if (response.status === 'success' && response.data && 'results' in response.data) {
        requirementDocuments.value = response.data.results;
     } else {
       Message.error('加载需求文档列表失败');

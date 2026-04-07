@@ -79,7 +79,7 @@
       :data="testCaseData"
       :pagination="paginationConfig"
       :loading="loading"
-      :scroll="{ x: 900 }"
+      :scroll="{ x: 1500 }"
       :bordered="{ cell: true }"
       :sticky-header="true"
       column-resizable
@@ -304,10 +304,10 @@ const defaultColumns: TableColumnData[] = [
     align: 'center'
   },
   { title: 'ID', dataIndex: 'id', width: 50, align: 'center' },
-  { title: '用例名称', dataIndex: 'name', slotName: 'name', width: 180, ellipsis: false, tooltip: false, align: 'center' },
+  { title: '用例名称', dataIndex: 'name', slotName: 'name', width: 200, ellipsis: true, tooltip: true, align: 'center' },
   { title: '前置条件', dataIndex: 'precondition', width: 120, ellipsis: true, tooltip: true, align: 'center' },
-  { title: '优先级', dataIndex: 'level', slotName: 'level', width: 80, align: 'center' },
-  { title: '审核状态', dataIndex: 'review_status', slotName: 'reviewStatus', width: 120, align: 'center' },
+  { title: '优先级', dataIndex: 'level', slotName: 'level', width: 60, align: 'center' },
+  { title: '审核状态', dataIndex: 'review_status', slotName: 'reviewStatus', width: 100, align: 'center' },
   { title: '所属模块', dataIndex: 'module_detail', slotName: 'module', width: 100, ellipsis: true, tooltip: true, align: 'center' },
   {
     title: '创建者',
@@ -323,7 +323,7 @@ const defaultColumns: TableColumnData[] = [
     width: 100,
     align: 'center',
   },
-  { title: '操作', slotName: 'operations', width: 200, fixed: 'right', align: 'center' },
+  { title: '操作', slotName: 'operations', width: 200, align: 'center' },
 ];
 
 const getStoredColumnWidths = () => {
@@ -358,6 +358,7 @@ const buildColumnsWithStoredWidths = () => {
     return {
       ...column,
       width: storedWidth ?? column.width,
+      fixed: column.fixed,
     };
   });
 };
@@ -369,7 +370,7 @@ const persistColumnWidths = () => {
     return;
   }
 
-  const columnWidths = columns.value.reduce((acc, column) => {
+  const columnWidths = columns.value.reduce((acc: Record<string, number>, column: TableColumnData) => {
     if (typeof column.dataIndex === 'string' && typeof column.width === 'number') {
       acc[column.dataIndex] = column.width;
     }
@@ -383,7 +384,7 @@ const persistColumnWidths = () => {
 };
 
 const handleColumnResize = (dataIndex: string, width: number) => {
-  const targetColumn = columns.value.find((column) => column.dataIndex === dataIndex);
+  const targetColumn = columns.value.find((column: TableColumnData) => column.dataIndex === dataIndex);
   if (targetColumn) {
     targetColumn.width = width;
     persistColumnWidths();
@@ -765,6 +766,7 @@ defineExpose({
 
 :deep(.test-case-table .arco-table-content-scroll) {
   overflow-x: auto !important;
+  position: relative;
 }
 
 .text-gray {
@@ -779,6 +781,7 @@ defineExpose({
   height: 100% !important;
   display: flex;
   flex-direction: column;
+  position: relative;
 }
 
 :deep(.test-case-table .arco-table-header) {
@@ -816,10 +819,6 @@ defineExpose({
   box-shadow: 0 -2px 8px rgba(0, 0, 0, 0.04);
 }
 
-:deep(.test-case-table .arco-table-cell-fixed-right) {
-  padding: 6px 4px;
-}
-
 :deep(.test-case-table .arco-space-compact) {
   display: flex;
   flex-wrap: nowrap;
@@ -847,9 +846,9 @@ defineExpose({
   cursor: pointer;
   text-decoration: none;
   transition: color 0.2s;
-  white-space: normal;
-  word-break: break-word;
-  overflow-wrap: anywhere;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
   line-height: 1.5;
 }
 

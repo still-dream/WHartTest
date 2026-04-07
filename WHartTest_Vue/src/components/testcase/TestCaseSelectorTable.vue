@@ -134,7 +134,7 @@ const columns = [
     align: 'center' as const,
   },
   { title: 'ID', dataIndex: 'id', width: 60 },
-  { title: '用例名称', dataIndex: 'name', width: 200, ellipsis: true, tooltip: true },
+  { title: '用例名称', dataIndex: 'name', width: 250, ellipsis: true, tooltip: true },
   { title: '前置条件', dataIndex: 'precondition', width: 150, ellipsis: true, tooltip: true },
   { title: '优先级', dataIndex: 'level', slotName: 'level', width: 80 },
   {
