@@ -638,16 +638,16 @@ class RequirementDocumentViewSet(BaseModelViewSet):
     def export_report(self, request, pk=None):
         """
         导出评审报告
-        GET /api/requirements/documents/{id}/export-report/?format=excel&report_id=xxx
+        GET /api/requirements/documents/{id}/export-report/?export_format=excel&report_id=xxx
         
         参数:
-        - format: 导出格式 (excel/word/pdf)，默认excel
+        - export_format: 导出格式 (excel/word/pdf)，默认excel
         - report_id: 评审报告ID（可选，不传则导出最新报告）
         """
         document = self.get_object()
         
         # 获取导出格式
-        export_format = request.query_params.get('format', 'excel').lower()
+        export_format = request.query_params.get('export_format', 'excel').lower()
         if export_format not in ['excel', 'word', 'pdf']:
             return Response(
                 {'error': '不支持的导出格式，仅支持 excel、word、pdf'},

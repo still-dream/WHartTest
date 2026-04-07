@@ -437,7 +437,7 @@ export class RequirementDocumentService {
   ): Promise<void> {
     try {
       const params = new URLSearchParams();
-      params.append('format', format);
+      params.append('export_format', format);
       if (reportId) {
         params.append('report_id', reportId);
       }
@@ -447,7 +447,7 @@ export class RequirementDocumentService {
         {
           method: 'GET',
           headers: {
-            'Authorization': `Bearer ${localStorage.getItem('access_token')}`,
+            'Authorization': `Bearer ${localStorage.getItem('auth-accessToken')}`,
           },
         }
       );

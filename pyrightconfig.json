@@ -1,0 +1,11 @@
+{
+  "include": [
+    "WHartTest_Django"
+  ],
+  "exclude": [
+    "**/__pycache__",
+    "**/migrations",
+    "**/node_modules"
+  ],
+  "typeCheckingMode": "off"
+}

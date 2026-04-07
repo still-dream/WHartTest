@@ -5,7 +5,8 @@ export interface ApiResponse<T = any> {
   status: 'success' | 'error';
   code: number;
   message: string;
-  data: T;
+  data: T | null;  // 成功时为数据，错误时为 null
+  errors?: Record<string, any> | null;  // 错误详情（仅 error 状态时使用）
 }
 
 // 分页响应类型
