@@ -37,6 +37,9 @@ RUN uv venv /opt/venv && \
     -i https://pypi.tuna.tsinghua.edu.cn/simple \
     -r requirements.txt
 
+# 安装 Playwright 浏览器（Chromium）- 放在构建阶段以利用缓存
+RUN /opt/venv/bin/playwright install chromium
+
 # BM25 模型将在首次使用时自动下载
 # 环境变量已在运行阶段设置
 
@@ -97,14 +100,6 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 
 # 从构建阶段复制虚拟环境（不包含构建工具）
 COPY --from=builder /opt/venv /opt/venv
-
-# 安装 Playwright 浏览器（Chromium）
-RUN /opt/venv/bin/playwright install chromium
-
-# 安装 agent-browser CLI 工具及其浏览器
-# agent-browser 是 AI Agent 专用的浏览器自动化工具
-RUN npm install -g agent-browser && \
-    agent-browser install
 
 # BM25 模型缓存目录将在运行时自动创建
 

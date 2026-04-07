@@ -304,7 +304,7 @@ const defaultColumns: TableColumnData[] = [
     align: 'center'
   },
   { title: 'ID', dataIndex: 'id', width: 50, align: 'center' },
-  { title: '用例名称', dataIndex: 'name', slotName: 'name', width: 180, ellipsis: true, tooltip: false, align: 'center' },
+  { title: '用例名称', dataIndex: 'name', slotName: 'name', width: 180, ellipsis: false, tooltip: false, align: 'center' },
   { title: '前置条件', dataIndex: 'precondition', width: 120, ellipsis: true, tooltip: true, align: 'center' },
   { title: '优先级', dataIndex: 'level', slotName: 'level', width: 80, align: 'center' },
   { title: '审核状态', dataIndex: 'review_status', slotName: 'reviewStatus', width: 120, align: 'center' },
@@ -841,15 +841,16 @@ defineExpose({
 }
 
 .testcase-name-link {
-  display: inline-block;
-  max-width: 160px;
+  display: block;
+  width: 100%;
   color: #1890ff;
   cursor: pointer;
   text-decoration: none;
   transition: color 0.2s;
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
+  white-space: normal;
+  word-break: break-word;
+  overflow-wrap: anywhere;
+  line-height: 1.5;
 }
 
 .testcase-name-link:hover {
