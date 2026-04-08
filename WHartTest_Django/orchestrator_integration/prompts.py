@@ -266,9 +266,12 @@ add_functional_case(
         {"step_number": 1, "description": "步骤1", "expected_result": "预期结果1"},
         {"step_number": 2, "description": "步骤2", "expected_result": "预期结果2"}
     ],
-    notes="备注"
+    notes="备注",
+    user_id=当前用户ID  # 重要：使用上下文中提供的用户ID，确保创建者正确
 )
 ```
+
+**重要提示**：在调用`add_functional_case`工具时，必须传入`user_id`参数，值为上下文中提供的"用户ID"。这样可以确保测试用例的创建者字段正确显示为当前登录用户的姓名。
 
 ## 注意事项
 - 你的报告是给Brain看的，不是直接给用户的

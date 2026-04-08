@@ -312,7 +312,7 @@ const defaultColumns: TableColumnData[] = [
   {
     title: '创建者',
     dataIndex: 'creator_detail',
-    render: ({ record }: { record: TestCase }) => record.creator_detail?.username || '-',
+    render: ({ record }: { record: TestCase }) => record.creator_detail?.last_name || '-',
     width: 80,
     align: 'center',
   },

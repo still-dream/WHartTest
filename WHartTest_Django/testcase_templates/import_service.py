@@ -14,6 +14,7 @@ from django.db import transaction
 from testcases.models import TestCase, TestCaseStep, TestCaseModule
 from projects.models import Project
 from .models import ImportExportTemplate
+from django.contrib.auth.models import User
 
 logger = logging.getLogger(__name__)
 
@@ -41,6 +42,7 @@ class TestCaseImportService:
         self.result = ImportResult()
         self._module_cache: Dict[str, TestCaseModule] = {}
         self._existing_names: Dict[str, List[int]] = {}  # {(module_id, name): [testcase_ids]}
+        self._user_cache: Dict[str, User] = {}  # {last_name: User}
 
     def import_from_file(self, file) -> ImportResult:
         """从文件导入用例"""
@@ -157,7 +159,38 @@ class TestCaseImportService:
             self._module_cache[current_path] = module
             parent = module
 
-        return parent
+        return module
+
+    def _get_user_by_last_name(self, last_name: str) -> Optional[User]:
+        """根据 last_name 查找用户
+        
+        注意：last_name 字段不是唯一的，可能存在重复用户的情况。
+        如果找到多个匹配的用户，会记录警告并返回第一个匹配的用户。
+        """
+        if not last_name:
+            return None
+
+        # 检查缓存
+        if last_name in self._user_cache:
+            return self._user_cache[last_name]
+
+        # 查找用户（使用 filter 而不是 get，处理重复情况）
+        users = User.objects.filter(last_name=last_name)
+        
+        if not users.exists():
+            logger.warning(f"导入用例时未找到 last_name='{last_name}' 的用户，将使用当前导入用户作为创建者")
+            return None
+        
+        if users.count() > 1:
+            user_names = list(users.values_list('username', flat=True))
+            logger.warning(
+                f"导入用例时发现多个用户具有相同的 last_name='{last_name}' "
+                f"(用户名: {user_names})，将使用第一个匹配的用户 '{users.first().username}'"
+            )
+        
+        user = users.first()
+        self._user_cache[last_name] = user
+        return user
 
     def _parse_steps_single_cell(self, steps_text: str, expected_text: str) -> List[Dict[str, str]]:
         """
@@ -265,11 +298,15 @@ class TestCaseImportService:
                 level = self._get_field_value(row, headers, 'level') or 'P2'
                 precondition = self._get_field_value(row, headers, 'precondition')
                 notes = self._get_field_value(row, headers, 'notes')
+                last_name = self._get_field_value(row, headers, 'last_name')
 
                 # 获取步骤
                 steps_text = self._get_cell_value(row, headers, step_column)
                 expected_text = self._get_cell_value(row, headers, expected_column)
                 steps = self._parse_steps_single_cell(steps_text, expected_text)
+
+                # 根据 last_name 查找创建者，如果找不到则使用当前导入用户
+                creator = self._get_user_by_last_name(last_name) or self.user
 
                 # 创建用例
                 with transaction.atomic():
@@ -280,7 +317,7 @@ class TestCaseImportService:
                         level=level,
                         precondition=precondition,
                         notes=notes,
-                        creator=self.user,
+                        creator=creator,
                     )
 
                     # 创建步骤
@@ -341,6 +378,7 @@ class TestCaseImportService:
                     'level': self._get_field_value(row, headers, 'level') or 'P2',
                     'precondition': self._get_field_value(row, headers, 'precondition'),
                     'notes': self._get_field_value(row, headers, 'notes'),
+                    'last_name': self._get_field_value(row, headers, 'last_name'),
                     'steps': [],
                 }
 
@@ -383,6 +421,10 @@ class TestCaseImportService:
                         'existing_ids': self._existing_names[key],
                     })
 
+                # 根据 last_name 查找创建者，如果找不到则使用当前导入用户
+                last_name = case_data.get('last_name', '')
+                creator = self._get_user_by_last_name(last_name) or self.user
+
                 with transaction.atomic():
                     testcase = TestCase.objects.create(
                         project=self.project,
@@ -391,7 +433,7 @@ class TestCaseImportService:
                         level=case_data['level'],
                         precondition=case_data['precondition'],
                         notes=case_data['notes'],
-                        creator=self.user,
+                        creator=creator,
                     )
 
                     for step_data in case_data['steps']:

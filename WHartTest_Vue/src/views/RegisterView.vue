@@ -194,6 +194,23 @@ const handleSubmit = async () => {
     return;
   }
 
+  if (!/^[a-zA-Z0-9]+$/.test(formState.username)) {
+    Message.warning('用户名只能包含英文和数字');
+    return;
+  }
+
+  if (formState.username.length < 3) {
+    Message.warning('用户名长度不能少于3个字符');
+    return;
+  }
+
+  const { checkUsernameExists } = await import('@/services/userService');
+  const usernameExists = await checkUsernameExists(formState.username);
+  if (usernameExists) {
+    Message.warning('用户名已存在');
+    return;
+  }
+
   if (!validatePasswordConfirm()) {
     Message.warning('两次输入的密码不一致');
     return;

@@ -240,10 +240,11 @@ PERMISSION_NAME_TRANSLATIONS = {
 class UserSerializer(serializers.ModelSerializer):
     password = serializers.CharField(write_only=True, required=True, style={'input_type': 'password'})
     email = serializers.EmailField(required=True)
+    last_name = serializers.CharField(required=False, allow_blank=True)
 
     class Meta:
         model = User
-        fields = ('id', 'username', 'email', 'password', 'is_staff', 'is_active') # 添加管理员相关字段
+        fields = ('id', 'username', 'email', 'password', 'last_name', 'is_staff', 'is_active')
 
     def create(self, validated_data):
         # 信号处理器会自动处理管理员权限分配，这里只需要正常创建用户
@@ -251,10 +252,11 @@ class UserSerializer(serializers.ModelSerializer):
             username=validated_data['username'],
             email=validated_data['email'],
             password=validated_data['password'],
+            last_name=validated_data.get('last_name', ''),
             is_staff=validated_data.get('is_staff', False),
             is_active=validated_data.get('is_active', True)
         )
-        
+
         return user
 
 class UserDetailSerializer(serializers.ModelSerializer):

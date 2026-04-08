@@ -336,7 +336,8 @@ def add_functional_case(
         module_id: int = Field(description='模块id'),
         steps: list = Field(description='用例步骤,示例：,[{"step_number": 1,"description": "步骤描述1","expected_result": "预期结果1"},{"step_number": 2,"description": "步骤描述2","expected_result": "预期结果2"}]'),
         notes: str = Field(description='备注'),
-        review_status: str = Field(default='pending_review', description='审核状态: pending_review(待审核), approved(通过), needs_optimization(优化), optimization_pending_review(优化待审核), unavailable(不可用)')):
+        review_status: str = Field(default='pending_review', description='审核状态: pending_review(待审核), approved(通过), needs_optimization(优化), optimization_pending_review(优化待审核), unavailable(不可用)'),
+        user_id: int = Field(default=0, description='用户id（可选，用于指定创建者）')):
     """
     保存WHartTest平台功能测试用例
     """
@@ -370,8 +371,13 @@ def add_functional_case(
             "review_status": review_status
         }
 
+        # 如果提供了 user_id，添加到请求头
+        request_headers = headers.copy()
+        if user_id and user_id > 0:
+            request_headers["X-User-ID"] = str(user_id)
+
         # 发起请求
-        response = requests.post(url, headers=headers, json=data)
+        response = requests.post(url, headers=request_headers, json=data)
         print("status =", response.status_code)
         print("content-type =", response.headers.get("Content-Type"))
         print("body-preview =", response.text[:200])

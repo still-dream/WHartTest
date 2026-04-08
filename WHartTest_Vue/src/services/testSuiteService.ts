@@ -36,6 +36,7 @@ export interface TestSuite {
     id: number;
     username: string;
     email: string;
+    last_name?: string;
   };
   created_at: string;
   updated_at: string;

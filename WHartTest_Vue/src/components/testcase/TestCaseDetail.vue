@@ -57,7 +57,7 @@
             </a-option>
           </a-select>
         </a-descriptions-item>
-        <a-descriptions-item label="创建者">{{ testCaseDetail.creator_detail?.username || '-' }}</a-descriptions-item>
+        <a-descriptions-item label="创建者">{{ testCaseDetail.creator_detail?.last_name || '-' }}</a-descriptions-item>
         <a-descriptions-item label="更新时间">{{ formatDate(testCaseDetail.updated_at) }}</a-descriptions-item>
       </a-descriptions>
 

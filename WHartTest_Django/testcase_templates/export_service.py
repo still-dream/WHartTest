@@ -22,6 +22,7 @@ class TestCaseExportService:
         'notes': '备注',
         'steps': '步骤描述',
         'expected_results': '预期结果',
+        'last_name': '创建者',
     }
 
     def __init__(self, template=None):
@@ -125,7 +126,7 @@ class TestCaseExportService:
         row_idx = data_start_row
         for testcase in queryset:
             values_by_header = {}
-            for field in ['name', 'module', 'precondition', 'steps', 'expected_results', 'level', 'notes']:
+            for field in ['name', 'module', 'precondition', 'steps', 'expected_results', 'level', 'notes', 'last_name']:
                 if field not in field_mappings:
                     continue
                 header_name = field_mappings.get(field)
@@ -199,7 +200,7 @@ class TestCaseExportService:
 
     def _write_testcase_row(self, ws, row: int, testcase, field_mappings: dict, value_transformations: dict, header_to_col: dict | None = None):
         """写入单个用例行"""
-        field_order = ['name', 'module', 'precondition', 'steps', 'expected_results', 'level', 'notes']
+        field_order = ['name', 'module', 'precondition', 'steps', 'expected_results', 'level', 'notes', 'last_name']
         col = 1
 
         for field in field_order:
@@ -240,6 +241,8 @@ class TestCaseExportService:
             return self._format_steps_desc(testcase.steps.all())
         elif field == 'expected_results':
             return self._format_expected_results(testcase.steps.all())
+        elif field == 'last_name':
+            return testcase.creator.last_name if testcase.creator else ''
         return ''
 
     def _get_module_path(self, module) -> str:

@@ -19,7 +19,7 @@
               {{ suiteDetail.id }}
             </a-descriptions-item>
             <a-descriptions-item label="创建者">
-              {{ suiteDetail.creator_detail?.username || '-' }}
+              {{ suiteDetail.creator_detail?.last_name || '-' }}
             </a-descriptions-item>
             <a-descriptions-item label="测试内容">
               <a-space :size="4">

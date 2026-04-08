@@ -193,6 +193,7 @@ class ImportExportTemplateViewSet(viewsets.ModelViewSet):
             {'value': 'notes', 'label': '备注', 'required': False},
             {'value': 'steps', 'label': '步骤描述', 'required': False, 'is_step_field': True},
             {'value': 'expected_results', 'label': '预期结果', 'required': False, 'is_step_field': True},
+            {'value': 'last_name', 'label': '创建者', 'required': False},
         ]
 
         level_options = [

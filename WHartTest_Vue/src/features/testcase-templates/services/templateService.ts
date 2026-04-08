@@ -30,6 +30,7 @@ export interface FieldMappings {
   notes?: string;
   steps?: string;
   expected_results?: string;
+  last_name?: string;
   [key: string]: string | undefined;
 }
 

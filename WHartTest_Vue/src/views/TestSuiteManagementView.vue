@@ -159,7 +159,7 @@ const columns = [
   {
     title: '创建者',
     dataIndex: 'creator_detail',
-    render: ({ record }: { record: TestSuite }) => record.creator_detail?.username || '-',
+    render: ({ record }: { record: TestSuite }) => record.creator_detail?.last_name || '-',
     width: 100,
     align: 'center' as const,
   },

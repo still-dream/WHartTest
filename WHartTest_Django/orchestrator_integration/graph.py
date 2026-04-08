@@ -651,11 +651,21 @@ class AgentNodes:
         requirement_analysis = state.get('requirement_analysis', {})
         knowledge_docs = state.get('knowledge_docs', [])
         
+        # 添加用户信息到上下文
+        user_info = ""
+        if self.user:
+            user_info = f"""
+当前用户信息：
+- 用户ID: {self.user.id}
+- 用户名: {self.user.username}
+- 姓名: {self.user.last_name or self.user.username}
+"""
+        
         context = f"""需求分析:
 {json.dumps(requirement_analysis, ensure_ascii=False, indent=2)}
 
 知识文档: {len(knowledge_docs)}个
-
+{user_info}
 请生成测试用例(JSON格式)。
 """
         

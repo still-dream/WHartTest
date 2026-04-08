@@ -91,13 +91,8 @@
 
         <a-row :gutter="16">
           <a-col :span="12">
-            <a-form-item field="first_name" label="名">
-              <a-input v-model="addUserForm.first_name" placeholder="请输入名" />
-            </a-form-item>
-          </a-col>
-          <a-col :span="12">
-            <a-form-item field="last_name" label="姓">
-              <a-input v-model="addUserForm.last_name" placeholder="请输入姓" />
+            <a-form-item field="last_name" label="姓名">
+              <a-input v-model="addUserForm.last_name" placeholder="请输入姓名" />
             </a-form-item>
           </a-col>
         </a-row>
@@ -144,13 +139,8 @@
 
             <a-row :gutter="16">
               <a-col :span="12">
-                <a-form-item field="first_name" label="名">
-                  <a-input v-model="editUserForm.first_name" placeholder="请输入名" />
-                </a-form-item>
-              </a-col>
-              <a-col :span="12">
-                <a-form-item field="last_name" label="姓">
-                  <a-input v-model="editUserForm.last_name" placeholder="请输入姓" />
+                <a-form-item field="last_name" label="姓名">
+                  <a-input v-model="editUserForm.last_name" placeholder="请输入姓名" />
                 </a-form-item>
               </a-col>
             </a-row>
@@ -207,6 +197,7 @@ import {
   createUser,
   deleteUser as deleteUserService,
   updateUser,
+  checkUsernameExists,
   type User,
   type CreateUserRequest,
   type UpdateUserRequest
@@ -244,8 +235,7 @@ const columns = [
     dataIndex: 'name',
     align: 'center',
     render: ({ record }: { record: User }) => {
-      const fullName = [record.first_name, record.last_name].filter(Boolean).join(' ');
-      return fullName || '-';
+      return record.last_name || '-';
     },
   },
   {
@@ -378,7 +368,6 @@ const addUserForm = reactive<CreateUserRequest & { confirmPassword: string }>({
   email: '',
   password: '',
   confirmPassword: '',
-  first_name: '',
   last_name: '',
   is_staff: false,
   is_active: true
@@ -389,7 +378,32 @@ const addUserRules = {
   username: [
     { required: true, message: '请输入用户名' },
     { minLength: 3, message: '用户名长度不能小于3个字符' },
-    { maxLength: 150, message: '用户名长度不能超过150个字符' }
+    { maxLength: 150, message: '用户名长度不能超过150个字符' },
+    {
+      validator: (value: string, callback: (error?: string) => void) => {
+        if (!/^[a-zA-Z0-9]+$/.test(value)) {
+          callback('用户名只能包含英文和数字');
+        } else {
+          callback();
+        }
+      },
+      trigger: 'blur'
+    },
+    {
+      validator: async (value: string, callback: (error?: string) => void) => {
+        if (value && value.length >= 3) {
+          const exists = await checkUsernameExists(value);
+          if (exists) {
+            callback('用户名已存在');
+          } else {
+            callback();
+          }
+        } else {
+          callback();
+        }
+      },
+      trigger: 'blur'
+    }
   ],
   email: [
     { required: true, message: '请输入邮箱' },
@@ -421,7 +435,6 @@ const showAddUserModal = () => {
     email: '',
     password: '',
     confirmPassword: '',
-    first_name: '',
     last_name: '',
     is_staff: false,
     is_active: true
@@ -454,7 +467,6 @@ const handleAddUser = async (done: (closed: boolean) => void) => {
     username: addUserForm.username,
     email: addUserForm.email,
     password: addUserForm.password,
-    first_name: addUserForm.first_name,
     last_name: addUserForm.last_name,
     is_staff: addUserForm.is_staff,
     is_active: addUserForm.is_active
@@ -489,7 +501,6 @@ const editUserForm = reactive<UpdateUserRequest & { confirmPassword: string, id:
   email: '',
   password: '',
   confirmPassword: '',
-  first_name: '',
   last_name: '',
   is_staff: false,
   is_active: true
@@ -497,6 +508,36 @@ const editUserForm = reactive<UpdateUserRequest & { confirmPassword: string, id:
 
 // 编辑用户表单验证规则
 const editUserRules = {
+  username: [
+    { required: true, message: '请输入用户名' },
+    { minLength: 3, message: '用户名长度不能小于3个字符' },
+    { maxLength: 150, message: '用户名长度不能超过150个字符' },
+    {
+      validator: (value: string, callback: (error?: string) => void) => {
+        if (!/^[a-zA-Z0-9]+$/.test(value)) {
+          callback('用户名只能包含英文和数字');
+        } else {
+          callback();
+        }
+      },
+      trigger: 'blur'
+    },
+    {
+      validator: async (value: string, callback: (error?: string) => void) => {
+        if (value && value.length >= 3) {
+          const exists = await checkUsernameExists(value);
+          if (exists) {
+            callback('用户名已存在');
+          } else {
+            callback();
+          }
+        } else {
+          callback();
+        }
+      },
+      trigger: 'blur'
+    }
+  ],
   email: [
     { type: 'email', message: '请输入有效的邮箱地址' }
   ],
@@ -530,7 +571,6 @@ const editUser = async (user: User) => {
     email: user.email,
     password: '',
     confirmPassword: '',
-    first_name: user.first_name || '',
     last_name: user.last_name || '',
     is_staff: user.is_staff,
     is_active: user.is_active
@@ -563,7 +603,6 @@ const handleEditUser = async (done: (closed: boolean) => void) => {
 
   // 只包含已修改的字段
   if (editUserForm.email) updateData.email = editUserForm.email;
-  if (editUserForm.first_name !== undefined) updateData.first_name = editUserForm.first_name;
   if (editUserForm.last_name !== undefined) updateData.last_name = editUserForm.last_name;
   if (editUserForm.is_staff !== undefined) updateData.is_staff = editUserForm.is_staff;
   if (editUserForm.is_active !== undefined) updateData.is_active = editUserForm.is_active;

@@ -349,7 +349,7 @@ const columns = [
     title: '创建者',
     dataIndex: 'creator_detail',
     render: ({ record }: { record: Project }) => {
-      return record.creator_detail?.username || '-';
+      return record.creator_detail?.last_name || '-';
     }
   },
   {

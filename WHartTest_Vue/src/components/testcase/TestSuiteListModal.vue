@@ -169,7 +169,7 @@ const columns = [
   {
     title: '创建者',
     dataIndex: 'creator_detail',
-    render: ({ record }: { record: TestSuite }) => record.creator_detail?.username || '-',
+    render: ({ record }: { record: TestSuite }) => record.creator_detail?.last_name || '-',
     width: 100,
   },
   { title: '创建时间', dataIndex: 'created_at', slotName: 'created_at', width: 150 },
@@ -240,7 +240,7 @@ const handleEdit = (suite: TestSuite) => {
 };
 
 // 查看详情
-const handleViewDetail = (suite: TestSuite) => {
+const handleViewDetail = (_suite: TestSuite) => {
   // TODO: 实现详情查看
   Message.info('详情查看功能开发中');
 };
@@ -287,7 +287,7 @@ const handleFormSuccess = () => {
 };
 
 // 执行成功
-const handleExecutionSuccess = (executionId: number) => {
+const handleExecutionSuccess = (_executionId: number) => {
   Message.success('测试执行已启动');
   // 可以在这里直接打开报告,或者提示用户去历史记录查看
   showExecutionList.value = true;

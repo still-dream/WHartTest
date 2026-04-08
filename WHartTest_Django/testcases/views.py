@@ -89,11 +89,28 @@ class TestCaseViewSet(viewsets.ModelViewSet):
     def perform_create(self, serializer):
         """
         在创建用例时，自动关联项目和创建人。
+        支持 API Key 认证时通过 X-User-ID 头指定实际用户。
         """
         project_pk = self.kwargs.get('project_pk')
         project = get_object_or_404(Project, pk=project_pk)
+        
+        # 确定创建者
+        creator = self.request.user
+        
+        # 如果是 API Key 认证，检查是否有 X-User-ID 头
+        from api_keys.models import APIKey
+        if isinstance(self.request.auth, APIKey):
+            user_id_header = self.request.META.get('HTTP_X_USER_ID')
+            if user_id_header:
+                try:
+                    from django.contrib.auth import get_user_model
+                    User = get_user_model()
+                    creator = User.objects.get(id=int(user_id_header))
+                except (ValueError, User.DoesNotExist):
+                    pass  # 如果用户 ID 无效，使用 API Key 关联的用户
+        
         # 权限类 IsProjectMemberForTestCase 已经确保用户是项目成员
-        serializer.save(creator=self.request.user, project=project)
+        serializer.save(creator=creator, project=project)
 
     # create 和 update 方法将使用序列化器中定义的嵌套写入逻辑。
     # DRF 的 ModelViewSet 会自动调用 serializer.save()，
