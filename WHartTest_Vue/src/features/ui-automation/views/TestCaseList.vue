@@ -760,7 +760,7 @@ const batchDeleteTestCases = async () => {
 
   try {
     const res = await testCaseApi.batchDelete(selectedRowKeys.value)
-    const result = extractResponseData(res)
+    const result = extractResponseData<{ message?: string }>(res)
     
     if (result) {
       Message.success(result.message || pageText.value.batchDeleteSuccess(selectedRowKeys.value.length))
