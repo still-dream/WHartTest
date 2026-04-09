@@ -154,6 +154,13 @@ export interface DocumentInfo {
   page_count: number;
 }
 
+export interface DocxEditorLaunchResult {
+  bindingId?: string;
+  documentId?: string;
+  launch_url: string;
+  expires_at?: string;
+}
+
 // 上下文检测响应
 export interface ContextCheckResponse {
   document_info: DocumentInfo;

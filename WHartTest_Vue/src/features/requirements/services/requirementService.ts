@@ -16,7 +16,8 @@ import type {
   SplitModulesRequest,
   SplitModulesResponse,
   ContextCheckResponse,
-  DocumentStructureResponse
+  DocumentStructureResponse,
+  DocxEditorLaunchResult
 } from '../types';
 
 // API基础路径
@@ -121,6 +122,34 @@ export class RequirementDocumentService {
         status: 'error',
         code: 500,
         message: response.error || 'Failed to get document detail',
+        data: null,
+        errors: { detail: response.error }
+      };
+    }
+  }
+
+  /**
+   * 发起在线编辑
+   */
+  static async launchOnlineEditor(id: string): Promise<ApiResponse<DocxEditorLaunchResult>> {
+    const response = await request<DocxEditorLaunchResult>({
+      url: `${BASE_URL}/documents/${id}/launch-online-editor/`,
+      method: 'POST'
+    }) as any;
+
+    if (response.success) {
+      return {
+        status: 'success',
+        code: 200,
+        message: response.message || 'Online editor launched successfully',
+        data: response.data!,
+        errors: null
+      };
+    } else {
+      return {
+        status: 'error',
+        code: response.status || 500,
+        message: response.error || 'Failed to launch online editor',
         data: null,
         errors: { detail: response.error }
       };

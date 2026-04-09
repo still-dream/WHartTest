@@ -1,5 +1,6 @@
 from rest_framework import viewsets, status, filters, permissions
 from rest_framework.decorators import action
+from rest_framework.parsers import FormParser, MultiPartParser
 from rest_framework.response import Response
 from rest_framework.permissions import IsAuthenticated
 from django_filters.rest_framework import DjangoFilterBackend
@@ -35,6 +36,12 @@ from .filters import (
     ReviewReportFilter,
     ReviewIssueFilter,
     ModuleReviewResultFilter,
+)
+from .docx_editor_integration import (
+    DocxEditorIntegrationError,
+    DocxEditorNotConfiguredError,
+    launch_requirement_document_in_docx_editor,
+    replace_requirement_document_with_edited_file,
 )
 from .permissions import (
     IsProjectMemberForRequirement,
@@ -76,7 +83,14 @@ class RequirementDocumentViewSet(BaseModelViewSet):
         base_permissions = super().get_permissions()
 
         # 在基础权限之上添加项目特定的权限检查
-        if self.action in ["create", "update", "partial_update", "destroy"]:
+        if self.action in [
+            "create",
+            "update",
+            "partial_update",
+            "destroy",
+            "launch_online_editor",
+            "upload_edited_file",
+        ]:
             return base_permissions + [CanManageRequirementDocument()]
         else:
             return base_permissions + [IsProjectMemberForRequirement()]
@@ -199,6 +213,91 @@ class RequirementDocumentViewSet(BaseModelViewSet):
             for img in images
         ]
         return Response({"images": data, "total": len(data)})
+
+    @action(detail=True, methods=["post"], url_path="launch-online-editor")
+    def launch_online_editor(self, request, pk=None):
+        """
+        发起 docx-editor 在线编辑
+        POST /api/requirements/documents/{id}/launch-online-editor/
+        """
+        document = self.get_object()
+
+        try:
+            launch_payload = launch_requirement_document_in_docx_editor(document)
+        except DocxEditorNotConfiguredError as exc:
+            return Response(
+                {"detail": str(exc)},
+                status=status.HTTP_503_SERVICE_UNAVAILABLE,
+            )
+        except DocxEditorIntegrationError as exc:
+            return Response(
+                {"detail": str(exc)},
+                status=status.HTTP_502_BAD_GATEWAY,
+            )
+        except Exception as exc:
+            logger.exception("发起在线编辑失败")
+            return Response(
+                {"detail": f"发起在线编辑失败: {str(exc)}"},
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            )
+
+        return Response(
+            {
+                "status": "success",
+                "code": status.HTTP_200_OK,
+                "message": "在线编辑链接已生成",
+                "data": launch_payload,
+            }
+        )
+
+    @action(
+        detail=True,
+        methods=["post"],
+        url_path="upload-edited-file",
+        parser_classes=[MultiPartParser, FormParser],
+    )
+    def upload_edited_file(self, request, pk=None):
+        """
+        接收 docx-editor 回传的编辑结果
+        POST /api/requirements/documents/{id}/upload-edited-file/
+        """
+        document = self.get_object()
+        upload = request.FILES.get("file")
+
+        if not upload:
+            return Response(
+                {"detail": "缺少回传文件，请检查 docx-editor 回调参数。"},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        try:
+            document = replace_requirement_document_with_edited_file(document, upload)
+        except ValueError as exc:
+            return Response(
+                {"detail": str(exc)},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+        except Exception as exc:
+            logger.exception("同步在线编辑结果失败")
+            return Response(
+                {"detail": f"同步在线编辑结果失败: {str(exc)}"},
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            )
+
+        return Response(
+            {
+                "status": "success",
+                "code": status.HTTP_200_OK,
+                "message": "编辑稿已同步到主项目",
+                "data": {
+                    "document_id": str(document.id),
+                    "status": document.status,
+                    "updated_at": document.updated_at,
+                    "word_count": document.word_count,
+                    "page_count": document.page_count,
+                },
+            }
+        )
 
     @action(detail=True, methods=["post"], url_path="split-modules")
     def split_modules(self, request, pk=None):

@@ -26,6 +26,7 @@
           v-if="supportsDocxEditor"
           type="outline"
           @click="goToDocxEditor"
+          :loading="docxEditorLoading"
         >
           <template #icon><icon-edit /></template>
           {{ pageText.openOnlineEditor }}
@@ -501,6 +502,8 @@ const pageText = computed(() => (
         backToList: 'Back to list',
         documentDetails: 'Document details',
         openOnlineEditor: 'Open online editor',
+        docxEditorNotIntegrated: 'The online editor is not integrated yet. Configure the docx-editor connection first.',
+        docxEditorOpenFailed: 'Failed to open the online editor',
         splitModules: 'Split modules',
         confirmModuleSplit: 'Confirm split',
         startReview: 'Start review',
@@ -606,6 +609,8 @@ const pageText = computed(() => (
         backToList: '返回列表',
         documentDetails: '文档详情',
         openOnlineEditor: '进入在线编辑',
+        docxEditorNotIntegrated: '在线编辑功能未接入，请先配置 docx-editor 连接。',
+        docxEditorOpenFailed: '打开在线编辑失败',
         splitModules: '模块拆分',
         confirmModuleSplit: '确认模块拆分',
         startReview: '开始评审',
@@ -771,6 +776,7 @@ const reviewWorkerOptions = computed(() => (
 const loading = ref(false);
 const splitLoading = ref(false);
 const reviewLoading = ref(false);
+const docxEditorLoading = ref(false);
 const document = ref<DocumentDetail | null>(null);
 const expandedModules = ref<string[]>([]);
 
@@ -967,9 +973,43 @@ const goBack = () => {
   router.push('/requirements');
 };
 
-const goToDocxEditor = () => {
-  if (!document.value?.id) return;
-  router.push(`/requirements/${document.value.id}/docx-editor`);
+const goToDocxEditor = async () => {
+  if (!document.value?.id || docxEditorLoading.value) return;
+
+  const pendingWindow = window.open('', '_blank');
+  if (pendingWindow) {
+    pendingWindow.document.write(`<title>${pageText.value.openOnlineEditor}</title><p>${pageText.value.processingText}</p>`);
+  }
+
+  docxEditorLoading.value = true;
+  try {
+    const response = await RequirementDocumentService.launchOnlineEditor(document.value.id);
+    if (response.status !== 'success' || !response.data?.launch_url) {
+      throw new Error(response.message || pageText.value.docxEditorOpenFailed);
+    }
+
+    const launchUrl = response.data.launch_url;
+    if (pendingWindow && !pendingWindow.closed) {
+      pendingWindow.opener = null;
+      pendingWindow.location.href = launchUrl;
+    } else {
+      window.location.href = launchUrl;
+    }
+  } catch (error) {
+    if (pendingWindow && !pendingWindow.closed) {
+      pendingWindow.close();
+    }
+
+    const message = error instanceof Error ? error.message : pageText.value.docxEditorOpenFailed;
+    if (message.includes('未接入') || message.toLowerCase().includes('not integrated')) {
+      Message.warning(message || pageText.value.docxEditorNotIntegrated);
+      return;
+    }
+
+    Message.error(message || pageText.value.docxEditorOpenFailed);
+  } finally {
+    docxEditorLoading.value = false;
+  }
 };
 
 // 查看评审报告

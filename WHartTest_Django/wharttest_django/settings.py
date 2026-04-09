@@ -698,3 +698,11 @@ CELERY_WORKER_TASK_LOG_FORMAT = "[%(asctime)s: %(levelname)s/%(processName)s][%(
 # 在本地开发环境中可以使用 http://localhost:8000
 # 内部服务调用基础地址。
 BASE_URL = os.environ.get("DJANGO_BASE_URL", "http://localhost:8000")
+
+# DOCX Editor 集成配置
+# 主项目后端服务端访问 docx-editor 的地址，例如 http://127.0.0.1:18080
+DOCX_EDITOR_BASE_URL = os.environ.get("DOCX_EDITOR_BASE_URL", "").rstrip("/")
+# 可选：覆盖 docx-editor 返回给浏览器的外部地址，例如 http://172.16.3.183:18080
+DOCX_EDITOR_PUBLIC_BASE_URL = os.environ.get("DOCX_EDITOR_PUBLIC_BASE_URL", "").rstrip("/")
+# 主项目调用 docx-editor 集成接口时使用的服务密钥。
+DOCX_EDITOR_SERVICE_KEY = os.environ.get("DOCX_EDITOR_SERVICE_KEY", "").strip()
