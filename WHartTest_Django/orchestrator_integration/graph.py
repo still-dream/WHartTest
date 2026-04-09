@@ -286,7 +286,13 @@ class AgentNodes:
             prompt = f"测试需求：{requirement}\n请生成详细的需求分析指令，包括要分析的测试点和业务规则。"
         elif next_agent == 'testcase':
             analysis = state.get('requirement_analysis', {})
-            prompt = f"需求分析结果：{json.dumps(analysis, ensure_ascii=False)}\n请生成测试用例生成指令，明确测试场景和覆盖范围。"
+            prompt = f"""需求分析结果：{json.dumps(analysis, ensure_ascii=False)}
+
+请生成测试用例生成指令。重要要求：
+1. 必须先调用 get_current_user_info 工具获取当前用户信息
+2. 必须先调用 module_to_which_it_belongs 工具获取项目模块列表
+3. 创建测试用例时必须传入 user_id 参数
+4. 明确测试场景和覆盖范围"""
         else:
             return requirement
         
@@ -524,7 +530,12 @@ class AgentNodes:
             logger.error(f"[Brain] 决策失败: {e}", exc_info=True)
             # fallback到状态机决策
             next_agent, reason = self._determine_next_agent(state)
-            instruction = state.get('requirement', '')
+            
+            # 为 testcase Agent 添加获取用户信息的指令
+            if next_agent == 'testcase':
+                instruction = f"{state.get('requirement', '')}\n\n重要：创建用例前必须先完成两个前置步骤：1) 调用 get_current_user_info 工具获取用户信息；2) 调用 module_to_which_it_belongs 获取模块列表。然后使用 user_id 参数创建测试用例。"
+            else:
+                instruction = state.get('requirement', '')
             
             brain_decision = AIMessage(
                 content=f"🧠 Brain决策（fallback状态机）: {next_agent}\n\n📝 推理: {reason}\n\n⚠️ 注意：LLM决策失败，使用状态机fallback",
@@ -650,18 +661,26 @@ class AgentNodes:
         prompt = await get_agent_prompt('testcase')
         requirement_analysis = state.get('requirement_analysis', {})
         knowledge_docs = state.get('knowledge_docs', [])
+        instruction = state.get('instruction', '')
+        requirement = state.get('requirement', '')
         
         # 添加用户信息到上下文
         user_info = ""
         if self.user:
             user_info = f"""
-当前用户信息：
+
+【重要：当前登录用户信息】
 - 用户ID: {self.user.id}
-- 用户名: {self.user.username}
-- 姓名: {self.user.last_name or self.user.username}
+- 用户姓名: {self.user.last_name or self.user.username}
+
+⚠️ 创建测试用例前必须完成两个前置步骤：
+1. 调用 get_current_user_info 工具获取用户信息，然后使用 user_id={self.user.id} 参数
+2. 调用 module_to_which_it_belongs 工具获取项目模块列表
 """
         
-        context = f"""需求分析:
+        context = f"""任务指令: {instruction or requirement}
+
+需求分析:
 {json.dumps(requirement_analysis, ensure_ascii=False, indent=2)}
 
 知识文档: {len(knowledge_docs)}个
@@ -672,7 +691,8 @@ class AgentNodes:
         try:
             if self.all_tools:
                 logger.info(f"TestCase Agent使用 {len(self.all_tools)} 个工具")
-                messages_with_prompt = [SystemMessage(content=prompt)] + compression.messages
+                # 将系统提示词和上下文一起传递给 AI
+                messages_with_prompt = [SystemMessage(content=prompt), HumanMessage(content=context)] + compression.messages
                 agent = create_react_agent(self.llm, self.all_tools)
                 result = await agent.ainvoke({"messages": messages_with_prompt})
                 

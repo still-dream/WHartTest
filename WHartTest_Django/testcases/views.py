@@ -94,10 +94,8 @@ class TestCaseViewSet(viewsets.ModelViewSet):
         project_pk = self.kwargs.get('project_pk')
         project = get_object_or_404(Project, pk=project_pk)
         
-        # 确定创建者
         creator = self.request.user
         
-        # 如果是 API Key 认证，检查是否有 X-User-ID 头
         from api_keys.models import APIKey
         if isinstance(self.request.auth, APIKey):
             user_id_header = self.request.META.get('HTTP_X_USER_ID')
@@ -105,11 +103,15 @@ class TestCaseViewSet(viewsets.ModelViewSet):
                 try:
                     from django.contrib.auth import get_user_model
                     User = get_user_model()
-                    creator = User.objects.get(id=int(user_id_header))
+                    target_user = User.objects.get(id=int(user_id_header))
+                    if self.request.user.is_superuser or self.request.user.id == target_user.id:
+                        creator = target_user
+                    else:
+                        from rest_framework.exceptions import PermissionDenied
+                        raise PermissionDenied('无权以该用户身份创建用例')
                 except (ValueError, User.DoesNotExist):
-                    pass  # 如果用户 ID 无效，使用 API Key 关联的用户
+                    pass
         
-        # 权限类 IsProjectMemberForTestCase 已经确保用户是项目成员
         serializer.save(creator=creator, project=project)
 
     # create 和 update 方法将使用序列化器中定义的嵌套写入逻辑。

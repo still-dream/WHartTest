@@ -72,6 +72,79 @@ def generate_custom_id():
     return str(generate_custom_id.last_ts) + "00000"
 
 
+@mcp.tool(description='获取当前用户信息，包括用户ID、用户名、姓名等')
+def get_current_user_info(
+        user_id: int = Field(default=0, description='用户id（可选，用于指定要获取的用户信息）')) -> str:
+    """
+    获取当前用户信息
+    
+    返回用户的详细信息，包括：
+    - id: 用户ID
+    - username: 用户名
+    - last_name: 姓名（用于测试用例创建者字段）
+    - email: 邮箱
+    - groups: 用户所属组
+    
+    在创建测试用例之前，应该先调用此工具获取用户信息，
+    然后在调用 add_functional_case 时传入 user_id 参数。
+    """
+    url = base_url + "/api/me/"
+    
+    try:
+        request_headers = headers.copy()
+        if user_id and user_id > 0:
+            request_headers["X-User-ID"] = str(user_id)
+        
+        response = requests.get(url, headers=request_headers)
+        
+        if response.status_code != 200:
+            error_info = {
+                "error": f"API 请求失败",
+                "status_code": response.status_code,
+                "url": url,
+                "response_text": response.text[:500]
+            }
+            return json.dumps(error_info, indent=4, ensure_ascii=False)
+        
+        data_dict = response.json()
+        
+        result = {
+            "success": True,
+            "user_info": {
+                "id": data_dict.get("id"),
+                "username": data_dict.get("username"),
+                "last_name": data_dict.get("last_name") or data_dict.get("username"),
+                "email": data_dict.get("email"),
+                "groups": data_dict.get("groups", [])
+            },
+            "hint": f"创建测试用例时，请使用 user_id={data_dict.get('id')} 参数，创建者将显示为: {data_dict.get('last_name') or data_dict.get('username')}"
+        }
+        return json.dumps(result, indent=4, ensure_ascii=False)
+        
+    except requests.exceptions.ConnectionError:
+        error_info = {
+            "error": "无法连接到 API 服务器",
+            "url": url,
+            "base_url": base_url,
+            "suggestion": "请检查后端服务是否启动，或检查 WHARTTEST_BACKEND_URL 环境变量配置"
+        }
+        return json.dumps(error_info, indent=4, ensure_ascii=False)
+    except requests.exceptions.JSONDecodeError:
+        error_info = {
+            "error": "API 返回的不是有效的 JSON 格式",
+            "status_code": response.status_code,
+            "url": url,
+            "response_text": response.text[:500]
+        }
+        return json.dumps(error_info, indent=4, ensure_ascii=False)
+    except Exception as e:
+        error_info = {
+            "error": f"未知错误: {str(e)}",
+            "url": url
+        }
+        return json.dumps(error_info, indent=4, ensure_ascii=False)
+
+
 @mcp.tool(description="获取WHartTest平台项目的名称和对应id")
 def get_project_name_and_id() -> str:
     """获取WHartTest平台项目的名称和对应id"""
@@ -226,7 +299,7 @@ def obtain_use_case_level() -> list:
 @mcp.tool(description="获取WHartTest平台用例名称和对应id")
 def get_the_list_of_use_cases(
         project_id: int = Field(description='项目id'),
-        module_id: int= Field(description='模块id')):
+        module_id: int = Field(description='模块id')):
     """获取WHartTest平台用例"""
     url = base_url + f"/api/projects/{project_id}/testcases/?page=1&page_size=1000&search=&module_id={module_id}"
 
@@ -243,7 +316,7 @@ def get_the_list_of_use_cases(
 @mcp.tool(description="获取WHartTest平台用例详情")
 def get_case_details(
         project_id: int = Field(description='项目id'),
-        case_id: int= Field(description='用例id')):
+        case_id: int = Field(description='用例id')):
     """获取WHartTest平台用例详情"""
     url = base_url + f"/api/projects/{project_id}/testcases/{case_id}/"
 
@@ -336,10 +409,13 @@ def add_functional_case(
         module_id: int = Field(description='模块id'),
         steps: list = Field(description='用例步骤,示例：,[{"step_number": 1,"description": "步骤描述1","expected_result": "预期结果1"},{"step_number": 2,"description": "步骤描述2","expected_result": "预期结果2"}]'),
         notes: str = Field(description='备注'),
-        review_status: str = Field(default='pending_review', description='审核状态: pending_review(待审核), approved(通过), needs_optimization(优化), optimization_pending_review(优化待审核), unavailable(不可用)'),
-        user_id: int = Field(default=0, description='用户id（可选，用于指定创建者）')):
+        user_id: int = Field(description='用户id（必填，从get_current_user_info获取，用于指定创建者）'),
+        review_status: str = Field(default='pending_review', description='审核状态: pending_review(待审核), approved(通过), needs_optimization(优化), optimization_pending_review(优化待审核), unavailable(不可用)')):
     """
     保存WHartTest平台功能测试用例
+    
+    重要：调用此工具前必须先调用 get_current_user_info 获取用户信息，
+    然后将返回的 user_info.id 作为 user_id 参数传入。
     """
     try:
         if not project_id:
@@ -665,6 +741,8 @@ update 操作：
 
 if __name__ == "__main__":
     # 使用 streamable-http 传输方式
-    # host="0.0.0.0" 允许从其他容器访问
-    # port=8006 指定端口
-    mcp.run(transport="streamable-http", host="0.0.0.0", port=8006)
+    # FastMCP 3.0+ 使用 settings.set_setting() 设置 host 和 port
+    import fastmcp.settings
+    fastmcp.settings.set_setting("host", "0.0.0.0")
+    fastmcp.settings.set_setting("port", 8006)
+    mcp.run(transport="streamable-http")

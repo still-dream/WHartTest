@@ -395,4 +395,8 @@ def add_functional_case(
         return e
 
 if __name__ == "__main__":
-    mcp.run(transport="streamable-http", host="0.0.0.0", port=8007)
+    # FastMCP 3.0+ 使用 settings.set_setting() 设置 host 和 port
+    import fastmcp.settings
+    fastmcp.settings.set_setting("host", "0.0.0.0")
+    fastmcp.settings.set_setting("port", 8007)
+    mcp.run(transport="streamable-http")

@@ -72,6 +72,24 @@ def get_levels():
     return ["P0", "P1", "P2", "P3"]
 
 
+def get_current_user():
+    """获取当前登录用户信息"""
+    url = f"{BASE_URL}/api/me/"
+    try:
+        resp = requests.get(url, headers=HEADERS)
+        resp.raise_for_status()
+        data = resp.json()
+        return {
+            "id": data.get("id"),
+            "username": data.get("username"),
+            "last_name": data.get("last_name") or data.get("username"),
+            "email": data.get("email"),
+            "groups": data.get("groups", [])
+        }
+    except Exception as e:
+        return {"error": str(e)}
+
+
 def get_testcases(project_id: int, module_id: int):
     """获取用例列表"""
     url = f"{BASE_URL}/api/projects/{project_id}/testcases/?page=1&page_size=1000&module_id={module_id}"
@@ -282,6 +300,7 @@ ACTIONS = {
     "get_projects": lambda args: get_projects(),
     "get_modules": lambda args: get_modules(args.project_id),
     "get_levels": lambda args: get_levels(),
+    "get_current_user": lambda args: get_current_user(),
     "get_testcases": lambda args: get_testcases(args.project_id, args.module_id),
     "get_testcase_detail": lambda args: get_testcase_detail(args.project_id, args.case_id),
     "add_testcase": lambda args: (

@@ -2404,7 +2404,8 @@ class RequirementReviewEngine:
                 return result
             else:
                 logger.warning("完整性分析响应中未找到JSON格式，使用默认结果")
-                logger.debug(f"AI响应内容前500字符: {response.content[:500]}")
+                logger.warning(f"AI响应内容前1000字符: {response.content[:1000]}")
+                logger.warning(f"AI响应内容长度: {len(response.content)}")
                 return self._get_default_analysis_result('completeness_analysis')
 
         except Exception as e:

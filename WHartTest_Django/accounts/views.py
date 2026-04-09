@@ -36,12 +36,31 @@ class UserCreateAPIView(generics.CreateAPIView):
 class CurrentUserAPIView(APIView):
     """
     API endpoint to get current authenticated user's details.
+    支持 API Key 认证时通过 X-User-ID 头指定实际用户。
     """
     permission_classes = [IsAuthenticated]
     serializer_class = UserDetailSerializer # For schema generation
 
     def get(self, request):
-        serializer = UserDetailSerializer(request.user)
+        user = request.user
+        
+        from api_keys.models import APIKey
+        if isinstance(request.auth, APIKey):
+            user_id_header = request.META.get('HTTP_X_USER_ID')
+            if user_id_header:
+                try:
+                    target_user = User.objects.get(id=int(user_id_header))
+                    if request.user.is_superuser or request.user.id == target_user.id:
+                        user = target_user
+                    else:
+                        return Response(
+                            {'error': '无权访问该用户信息'},
+                            status=status.HTTP_403_FORBIDDEN
+                        )
+                except (ValueError, User.DoesNotExist):
+                    pass
+        
+        serializer = UserDetailSerializer(user)
         return Response(serializer.data)
 
 

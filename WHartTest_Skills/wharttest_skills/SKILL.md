@@ -30,6 +30,7 @@ python whart_tools.py --action <action_name> [--参数名 参数值]
 | Action | 描述 | 参数 |
 |--------|------|------|
 | `get_levels` | 获取用例等级列表 | 无 |
+| `get_current_user` | 获取当前登录用户信息 | 无 |
 | `get_testcases` | 获取模块下的用例列表 | `--project_id`, `--module_id` |
 | `get_testcase_detail` | 获取用例详情 | `--project_id`, `--case_id` |
 | `add_testcase` | 新增测试用例 | `--project_id`, `--module_id`, `--name`, `--level`, `--precondition`, `--steps`, `--notes`, `--review_status` |
@@ -76,6 +77,9 @@ python whart_tools.py --action get_projects
 # 获取项目1的模块
 python whart_tools.py --action get_modules --project_id 1
 
+# 获取当前登录用户信息
+python whart_tools.py --action get_current_user
+
 # 获取用例列表
 python whart_tools.py --action get_testcases --project_id 1 --module_id 5
 
@@ -108,3 +112,15 @@ python whart_tools.py --action upload_screenshots \
 ## 输出格式
 
 所有操作返回 JSON 格式结果，便于解析处理。
+
+### get_current_user 返回格式
+
+```json
+{
+  "id": 7,
+  "username": "yuansuping",
+  "last_name": "袁素平",
+  "email": "yuansuping@test.com",
+  "groups": ["终端测试"]
+}
+```

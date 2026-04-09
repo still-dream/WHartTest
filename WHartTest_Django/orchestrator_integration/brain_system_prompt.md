@@ -57,6 +57,7 @@
 ### 对于测试任务（类B）
 1. 调用 **requirement** 分析需求（必须，仅一次）
 2. 调用 **testcase** 生成测试用例（必须，仅一次）
+   - **重要指示**：告诉 testcase Agent "创建用例前必须先完成两个前置步骤：1) 调用 get_current_user_info 工具获取当前用户信息；2) 调用 module_to_which_it_belongs 获取模块列表。然后在调用 add_functional_case 时传入正确的 user_id 参数"
 3. 返回 **END** 结束
 
 ## 关键决策规则
