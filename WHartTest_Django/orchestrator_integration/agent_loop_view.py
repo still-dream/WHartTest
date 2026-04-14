@@ -650,13 +650,22 @@ async def _sanitize_history_before_model_call(
 
 
 def calculate_context_tokens(
-    messages: List[Any], model_name: str = "gpt-4o"
+    messages: List[Any],
+    model_name: str = "gpt-4o",
+    tools: Optional[list] = None,
+    system_prompt: Optional[str] = None,
 ) -> tuple[int, int, int]:
     """
     计算当前上下文 Token
 
     优先使用最后一条带 usage_metadata 的消息；
-    如果 provider 未返回 usage_metadata，则回退到内容估算（与中间件保持一致的 3x 系数）。
+    如果 provider 未返回 usage_metadata，则回退到内容估算 + 真实开销。
+
+    Args:
+        messages: 消息列表
+        model_name: 模型名称
+        tools: 工具对象列表，用于精确计算开销
+        system_prompt: 系统提示词，用于精确计算开销
     """
     # 1) 优先使用 usage_metadata（最准确）
     for msg in reversed(messages):
@@ -671,14 +680,18 @@ def calculate_context_tokens(
             if total_tokens > 0:
                 return input_tokens, output_tokens, total_tokens
 
-    # 2) 回退到内容估算（避免 context_update 始终为 0）
+    # 2) 回退到内容估算 + 真实开销（避免 context_update 始终为 0）
+    from orchestrator_integration.middleware_config import _calculate_overhead_tokens
+
+    overhead = _calculate_overhead_tokens(model_name, tools, system_prompt)
+
     content_tokens = 0
     for msg in messages:
         if hasattr(msg, "content") and msg.content:
             content = msg.content if isinstance(msg.content, str) else str(msg.content)
             content_tokens += context_checker.count_tokens(content, model_name)
 
-    estimated_total = content_tokens * 3
+    estimated_total = content_tokens + overhead
     return 0, 0, estimated_total
 
 
@@ -1022,6 +1035,8 @@ class AgentLoopStreamAPIView(View):
                     user=request.user,
                     session_id=session_id,
                     all_tool_names=tool_names,
+                    tools=tools,
+                    system_prompt=effective_prompt,
                 )
 
                 agent = create_agent(
@@ -1344,7 +1359,10 @@ class AgentLoopStreamAPIView(View):
 
                     # 获取当前上下文 token 使用量（优先 usage_metadata，回退估算）
                     input_tokens, output_tokens, total_tokens = (
-                        calculate_context_tokens(all_messages, model_name)
+                        calculate_context_tokens(
+                            all_messages, model_name,
+                            tools=tools, system_prompt=effective_prompt,
+                        )
                     )
 
                     yield create_sse_data(
@@ -1900,6 +1918,17 @@ class AgentLoopResumeAPIView(View):
                     )
 
                 # 5. 获取工具名列表和中间件配置
+                # 尝试从 ChatSession 关联的 prompt 获取系统提示词，用于精确计算 overhead
+                resume_system_prompt = None
+                try:
+                    chat_session = await sync_to_async(
+                        ChatSession.objects.filter(session_id=session_id).select_related("prompt").first
+                    )()
+                    if chat_session and chat_session.prompt and chat_session.prompt.content:
+                        resume_system_prompt = chat_session.prompt.content
+                except Exception:
+                    pass
+
                 tool_names = [t.name for t in tools] if tools else []
                 middleware = await sync_to_async(get_middleware_from_config)(
                     active_config,
@@ -1907,6 +1936,8 @@ class AgentLoopResumeAPIView(View):
                     user=user,
                     session_id=session_id,
                     all_tool_names=tool_names,
+                    tools=tools,
+                    system_prompt=resume_system_prompt,
                 )
 
                 # 6. 创建 agent
@@ -2156,7 +2187,10 @@ class AgentLoopResumeAPIView(View):
 
                     # 获取当前上下文 token 使用量（优先 usage_metadata，回退估算）
                     input_tokens, output_tokens, total_tokens = (
-                        calculate_context_tokens(all_messages, model_name)
+                        calculate_context_tokens(
+                            all_messages, model_name,
+                            tools=tools, system_prompt=resume_system_prompt,
+                        )
                     )
 
                     yield create_sse_data(
