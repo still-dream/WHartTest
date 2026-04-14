@@ -153,13 +153,20 @@ export async function sendOrchestratorStreamMessage(
   }
 
   try {
+    const userStr = localStorage.getItem('auth-user');
+    const headers: Record<string, string> = {
+      'Content-Type': 'application/json',
+      'Accept': 'text/event-stream',
+      'Authorization': `Bearer ${token}`
+    };
+    
+    if (userStr) {
+      headers['X-Auth-User'] = userStr;
+    }
+    
     const response = await fetch('/api/orchestrator/stream/', {
       method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'Accept': 'text/event-stream',
-        'Authorization': `Bearer ${token}`
-      },
+      headers,
       body: JSON.stringify({
         message,
         project_id: projectId,

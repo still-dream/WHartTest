@@ -138,11 +138,11 @@ services:
 
   # MCP 服务（独立容器）
   mcp:
-    image: ghcr.io/mgdaaslab/wharttest-mcp:latest
+    # image: ghcr.io/mgdaaslab/wharttest-mcp:latest
     # 如果需要本地构建，注释掉上面的image行，取消注释下面的build部分
-    # build:
-    #   context: ./WHartTest_MCP
-    #   dockerfile: Dockerfile
+    build:
+      context: ./WHartTest_MCP
+      dockerfile: Dockerfile
     container_name: wharttest-mcp
     user: root
     environment:

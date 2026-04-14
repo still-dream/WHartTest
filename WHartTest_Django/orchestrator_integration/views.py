@@ -83,7 +83,7 @@ class OrchestratorStreamAPIView(View):
             return None
     
     async def _create_sse_generator(self, request, user_message_content, session_id, 
-                                   project_id, project, prompt_id=None):
+                                   project_id, project, prompt_id=None, auth_user_info=None):
         """创建SSE数据生成器,集成StateGraph with checkpointer"""
         try:
             # 1. 获取活跃的LLM配置
@@ -129,10 +129,18 @@ class OrchestratorStreamAPIView(View):
                         config_key = r_config.name or f"remote_config_{r_config.id}"
                         client_mcp_config[config_key] = {
                             "url": r_config.url,
-                            "transport": (r_config.transport or "streamable_http").replace('-', '_'),
+                            "transport": (r_config.transport or "streamable-http").replace('-', '_'),
                         }
                         if r_config.headers and isinstance(r_config.headers, dict) and r_config.headers:
-                            client_mcp_config[config_key]["headers"] = r_config.headers
+                            client_mcp_config[config_key]["headers"] = r_config.headers.copy()
+                        else:
+                            client_mcp_config[config_key]["headers"] = {}
+                        
+                        # 将 auth_user_info 添加到 headers 中
+                        if auth_user_info:
+                            import json
+                            client_mcp_config[config_key]["headers"]["X-Auth-User"] = json.dumps(auth_user_info)
+                            logger.info(f"OrchestratorStream: Added X-Auth-User header to MCP config: {config_key}")
                     
                     if client_mcp_config:
                         logger.info(f"OrchestratorStream: 加载MCP配置: {list(client_mcp_config.keys())}")
@@ -599,6 +607,17 @@ class OrchestratorStreamAPIView(View):
         project_id = body_data.get('project_id')
         prompt_id = body_data.get('prompt_id')
         
+        # 从 X-Auth-User 头中提取用户信息
+        auth_user_header = request.META.get('HTTP_X_AUTH_USER')
+        auth_user_info = None
+        if auth_user_header:
+            try:
+                import json
+                auth_user_info = json.loads(auth_user_header)
+                logger.info(f"OrchestratorStream: Received auth-user info: id={auth_user_info.get('id')}, username={auth_user_info.get('username')}")
+            except (json.JSONDecodeError, Exception) as e:
+                logger.warning(f"OrchestratorStream: Failed to parse X-Auth-User header: {e}")
+        
         if not project_id:
             error_data = create_sse_data({
                 'type': 'error',
@@ -643,7 +662,7 @@ class OrchestratorStreamAPIView(View):
         async def async_generator():
             async for chunk in self._create_sse_generator(
                 request, user_message_content, session_id,
-                project_id, project, prompt_id
+                project_id, project, prompt_id, auth_user_info
             ):
                 yield chunk
         

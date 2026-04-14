@@ -23,6 +23,9 @@ import time
 from pydantic import Field
 from pydantic.v1.networks import host_regex
 import os
+import logging
+
+logger = logging.getLogger(__name__)
 
 # mcp 初始化
 mcp = FastMCP(
@@ -74,6 +77,7 @@ def generate_custom_id():
 
 @mcp.tool(description='获取当前用户信息，包括用户ID、用户名、姓名等')
 def get_current_user_info(
+        ctx,
         user_id: int = Field(default=0, description='用户id（可选，用于指定要获取的用户信息）')) -> str:
     """
     获取当前用户信息
@@ -87,13 +91,48 @@ def get_current_user_info(
     
     在创建测试用例之前，应该先调用此工具获取用户信息，
     然后在调用 add_functional_case 时传入 user_id 参数。
+    
+    用户信息获取优先级：
+    1. 优先从客户端浏览器的 Local Storage 中的 auth-user 获取（通过 X-Auth-User 头传递）
+    2. 如果没有，则通过 API 调用获取（使用 X-User-ID 头指定用户）
+    3. 如果都没有，则返回当前认证用户的信息
     """
-    url = base_url + "/api/me/"
+    url = base_url + "/api/accounts/me/"
     
     try:
         request_headers = headers.copy()
+        
+        # 方式1：优先从客户端浏览器的 Local Storage 中的 auth-user 获取用户信息
+        # 流程：前端 localStorage.getItem('auth-user') -> 后端 X-Auth-User 头 -> MCP 工具
+        http_headers = ctx.get_http_headers() if hasattr(ctx, 'get_http_headers') else {}
+        auth_user_header = http_headers.get('x-auth-user') or http_headers.get('X-Auth-User')
+        
+        if auth_user_header:
+            try:
+                auth_user_info = json.loads(auth_user_header)
+                logger.info(f"✅ get_current_user_info: 从客户端 Local Storage (auth-user) 获取用户信息: id={auth_user_info.get('id')}, username={auth_user_info.get('username')}")
+                
+                result = {
+                    "success": True,
+                    "user_info": {
+                        "id": auth_user_info.get("id"),
+                        "username": auth_user_info.get("username"),
+                        "last_name": auth_user_info.get("last_name") or auth_user_info.get("username"),
+                        "email": auth_user_info.get("email"),
+                        "groups": auth_user_info.get("groups", [])
+                    },
+                    "hint": f"创建测试用例时，请使用 user_id={auth_user_info.get('id')} 参数，创建者将显示为: {auth_user_info.get('last_name') or auth_user_info.get('username')}",
+                    "source": "client_local_storage"
+                }
+                return json.dumps(result, indent=4, ensure_ascii=False)
+            except (json.JSONDecodeError, Exception) as e:
+                logger.warning(f"⚠️ get_current_user_info: 解析 X-Auth-User 头失败: {e}，将降级到 API 调用")
+        
+        # 方式2：降级方案 - 使用传统的 X-User-ID 方式通过 API 获取
+        logger.info(f"📡 get_current_user_info: 未从 Local Storage 获取到用户信息，通过 API 调用获取")
         if user_id and user_id > 0:
             request_headers["X-User-ID"] = str(user_id)
+            logger.info(f"   使用 X-User-ID 头: {user_id}")
         
         response = requests.get(url, headers=request_headers)
         
@@ -108,16 +147,19 @@ def get_current_user_info(
         
         data_dict = response.json()
         
+        data = data_dict.get("data", {})
+        
         result = {
             "success": True,
             "user_info": {
-                "id": data_dict.get("id"),
-                "username": data_dict.get("username"),
-                "last_name": data_dict.get("last_name") or data_dict.get("username"),
-                "email": data_dict.get("email"),
-                "groups": data_dict.get("groups", [])
+                "id": data.get("id"),
+                "username": data.get("username"),
+                "last_name": data.get("last_name") or data.get("username"),
+                "email": data.get("email"),
+                "groups": data.get("groups", [])
             },
-            "hint": f"创建测试用例时，请使用 user_id={data_dict.get('id')} 参数，创建者将显示为: {data_dict.get('last_name') or data_dict.get('username')}"
+            "hint": f"创建测试用例时，请使用 user_id={data.get('id')} 参数，创建者将显示为: {data.get('last_name') or data.get('username')}",
+            "source": "api_call"
         }
         return json.dumps(result, indent=4, ensure_ascii=False)
         
@@ -402,6 +444,7 @@ def save_operation_screenshots_to_the_application_case(
 
 @mcp.tool(description='保存WHartTest平台功能测试用例')
 def add_functional_case(
+        ctx,
         project_id: int = Field(description='项目id'),
         name: str = Field(description='用例名称'),
         precondition: str = Field(description='前置条件'),
@@ -447,10 +490,28 @@ def add_functional_case(
             "review_status": review_status
         }
 
-        # 如果提供了 user_id，添加到请求头
+        # 优先从客户端 Local Storage (auth-user) 获取 user_id
+        # 流程：前端 localStorage.getItem('auth-user') -> 后端 X-Auth-User 头 -> MCP 工具
         request_headers = headers.copy()
-        if user_id and user_id > 0:
+        
+        # 方式1：优先从 X-Auth-User 头获取（来自客户端 Local Storage）
+        http_headers = ctx.get_http_headers() if hasattr(ctx, 'get_http_headers') else {}
+        auth_user_header = http_headers.get('x-auth-user') or http_headers.get('X-Auth-User')
+        
+        if auth_user_header:
+            try:
+                auth_user_info = json.loads(auth_user_header)
+                user_id_from_header = auth_user_info.get('id')
+                if user_id_from_header and user_id_from_header > 0:
+                    request_headers["X-User-ID"] = str(user_id_from_header)
+                    logger.info(f"✅ add_functional_case: 从客户端 Local Storage (auth-user) 获取 user_id={user_id_from_header}")
+            except (json.JSONDecodeError, Exception) as e:
+                logger.warning(f"⚠️ add_functional_case: 解析 X-Auth-User 头失败: {e}")
+        
+        # 方式2：如果参数中提供了 user_id，使用参数值（优先级低于 Local Storage）
+        if user_id and user_id > 0 and "X-User-ID" not in request_headers:
             request_headers["X-User-ID"] = str(user_id)
+            logger.info(f"📡 add_functional_case: 使用参数中的 user_id={user_id}")
 
         # 发起请求
         response = requests.post(url, headers=request_headers, json=data)
