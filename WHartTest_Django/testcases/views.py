@@ -169,8 +169,6 @@ class TestCaseViewSet(viewsets.ModelViewSet):
                 try:
                     testcase_ids = [int(id) for id in ids_data]
                 except (ValueError, TypeError):
-                    from rest_framework.response import Response
-
                     return Response(
                         {"error": "ids参数格式错误，应为数字列表"}, status=400
                     )
@@ -192,8 +190,6 @@ class TestCaseViewSet(viewsets.ModelViewSet):
                         int(id.strip()) for id in ids_param.split(",") if id.strip()
                     ]
                 except ValueError:
-                    from rest_framework.response import Response
-
                     return Response(
                         {"error": "ids参数格式错误，应为逗号分隔的数字列表"}, status=400
                     )
