@@ -168,6 +168,7 @@
                   <div class="token-sub">
                     <span class="token-detail">{{ dashboardText.input }} {{ formatTokenCount(tokenStats?.total?.input_tokens || 0) }}</span>
                     <span class="token-detail">{{ dashboardText.output }} {{ formatTokenCount(tokenStats?.total?.output_tokens || 0) }}</span>
+                    <span class="token-detail">{{ dashboardText.cache }} {{ formatTokenCount(tokenStats?.total?.cache_read_tokens || 0) }}</span>
                   </div>
                 </div>
                 <div class="resource-block">
@@ -292,6 +293,7 @@ const dashboardText = computed(() => (
         totalConsumption: 'Total usage',
         input: 'In',
         output: 'Out',
+        cache: 'Cache',
         usage: 'Usage',
         requestCount: 'Requests',
         sessionCount: 'Sessions',
@@ -334,6 +336,7 @@ const dashboardText = computed(() => (
         totalConsumption: '总消耗',
         input: '入',
         output: '出',
+        cache: '缓存',
         usage: '使用情况',
         requestCount: '请求次数',
         sessionCount: '会话数',
@@ -852,6 +855,7 @@ onMounted(() => {
   font-size: 12px;
   color: var(--theme-text-tertiary);
 }
+
 
 /* 趋势图 */
 .trend-section {

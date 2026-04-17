@@ -191,6 +191,7 @@
 
 
     <div v-if="showLatestDocumentContent" class="modules-section">
+
       <a-card class="modules-card">
         <template #title>
           <div class="modules-header">
@@ -1001,7 +1002,7 @@ const goToDocxEditor = async () => {
     }
 
     const message = error instanceof Error ? error.message : pageText.value.docxEditorOpenFailed;
-    if (message.includes('未接入') || message.toLowerCase().includes('not integrated')) {
+    if (message.includes('未接入') || message.includes('未配置') || message.includes('不可用') || message.includes('未部署') || message.toLowerCase().includes('not integrated')) {
       Message.warning(message || pageText.value.docxEditorNotIntegrated);
       return;
     }
@@ -2182,6 +2183,18 @@ onBeforeUnmount(() => {
   color: #333;
   min-height: 40px;
   border: 1px solid rgba(0, 0, 0, 0.05);
+  text-align: left;
+}
+
+.segment-collapsed-placeholder {
+  margin-top: 18px;
+  padding: 16px 12px 8px;
+  color: #86909c;
+  font-size: 13px;
+}
+
+.latest-document-content {
+  margin-top: 0;
 }
 
 .segment-collapsed-placeholder {

@@ -61,6 +61,22 @@ def _extract_message(payload: Any, fallback: str) -> str:
     return fallback
 
 
+def _ensure_source_file_exists(document: RequirementDocument) -> None:
+    file_name = str(getattr(document.file, "name", "") or "").strip()
+    if not file_name:
+        raise DocxEditorIntegrationError("当前文档没有源文件，无法发起在线编辑。")
+
+    try:
+        exists = document.file.storage.exists(file_name)
+    except Exception:
+        exists = False
+
+    if not exists:
+        raise DocxEditorIntegrationError(
+            "主项目中的源文件不存在，可能已被删除或丢失，请重新上传该文档后再试。"
+        )
+
+
 def _extract_launch_payload(payload: Any) -> dict[str, Any]:
     if isinstance(payload, dict):
         nested = payload.get("data")
@@ -87,6 +103,7 @@ def launch_requirement_document_in_docx_editor(
 
     if not document.file:
         raise DocxEditorIntegrationError("当前文档没有源文件，无法发起在线编辑。")
+    _ensure_source_file_exists(document)
 
     request_url = f"{base_url}/api/integration/external-documents/upsert-and-launch"
     filename = Path(document.file.name).name
@@ -134,8 +151,13 @@ def launch_requirement_document_in_docx_editor(
         payload = response.text
 
     if response.status_code >= 400:
+        detail = _extract_message(payload, "")
+        if not detail and response.status_code in (502, 503):
+            raise DocxEditorIntegrationError(
+                "在线编辑服务不可用，请确认 DOCX Editor 服务已部署并正常运行。"
+            )
         raise DocxEditorIntegrationError(
-            _extract_message(payload, f"docx-editor 返回异常状态码: {response.status_code}")
+            detail or f"docx-editor 返回异常状态码: {response.status_code}"
         )
 
     launch_payload = _extract_launch_payload(payload)

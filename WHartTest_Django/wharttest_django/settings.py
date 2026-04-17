@@ -374,10 +374,6 @@ REST_FRAMEWORK = {
         # 可以取消下面这行注释。但请注意，它的输出不会经过 UnifiedResponseRenderer。
         # 可按需启用 BrowsableAPIRenderer。
     ),
-    # 'DEFAULT_PARSER_CLASSES': [ # 如需显式声明，可保留 JSONParser
-    #     # 可按需显式启用 JSONParser。
-    # ],
-    # 'EXCEPTION_HANDLER': 'your_project_name.utils.custom_exception_handler', # 如果需要更细致的异常处理
 }
 
 # CORS 配置

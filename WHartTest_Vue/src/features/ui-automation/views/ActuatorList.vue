@@ -3,13 +3,13 @@
     <!-- 头部 -->
     <div class="header">
       <div class="title">
-        <h3>{{ pageText.title }}</h3>
-        <span class="count">{{ pageText.count(actuators.length) }}</span>
+        <h3>在线执行器</h3>
+        <span class="count">共 {{ actuators.length }} 个</span>
       </div>
       <div class="actions">
         <a-button @click="loadActuators" :loading="loading">
           <template #icon><icon-refresh /></template>
-          {{ pageText.refresh }}
+          刷新
         </a-button>
       </div>
     </div>
@@ -20,38 +20,37 @@
       type="warning"
       class="mb-4"
     >
-      <template #title>{{ pageText.emptyTitle }}</template>
-      {{ pageText.startServiceHint }}
+      <template #title>暂无在线执行器</template>
+      请先启动执行器服务：cd WHartTest_Actuator && python main.py
     </a-alert>
 
     <!-- 执行器表格 -->
     <a-table
-      :key="`actuator-table-${locale}`"
       :data="actuators"
       :loading="loading"
       :pagination="false"
       stripe
     >
       <template #columns>
-        <a-table-column :title="pageText.status" :width="70" align="center">
+        <a-table-column title="状态" :width="70" align="center">
           <template #cell>
             <div class="online-dot"></div>
           </template>
         </a-table-column>
-        <a-table-column :title="pageText.name" data-index="name" :width="160" />
-        <a-table-column :title="pageText.ipAddress" data-index="ip" :width="150" />
-        <a-table-column :title="pageText.type" :width="100">
+        <a-table-column title="名称" data-index="name" :width="160" />
+        <a-table-column title="IP地址" data-index="ip" :width="150" />
+        <a-table-column title="类型" :width="100">
           <template #cell="{ record }">
             <a-tag :color="getTypeTagColor(record.type)" size="small">
               {{ getTypeLabel(record.type) }}
             </a-tag>
           </template>
         </a-table-column>
-        <a-table-column :title="pageText.browser" data-index="browser_type" :width="100" />
-        <a-table-column :title="pageText.headlessMode" :width="90" align="center">
+        <a-table-column title="浏览器" data-index="browser_type" :width="100" />
+        <a-table-column title="无头模式" :width="90" align="center">
           <template #cell="{ record }">
             <a-tag :color="record.headless ? 'orangered' : 'green'" size="small">
-              {{ record.headless ? pageText.yes : pageText.no }}
+              {{ record.headless ? '是' : '否' }}
             </a-tag>
           </template>
         </a-table-column>
@@ -65,7 +64,7 @@
             <a-switch v-model="record.debug" size="small" disabled />
           </template>
         </a-table-column>
-        <a-table-column :title="pageText.connectedAt" :width="170">
+        <a-table-column title="连接时间" :width="170">
           <template #cell="{ record }">
             <span class="time-text">{{ formatTime(record.connected_at) }}</span>
           </template>
@@ -76,51 +75,12 @@
 </template>
 
 <script setup lang="ts">
-import { ref, onMounted, onUnmounted, computed } from 'vue'
+import { ref, onMounted, onUnmounted } from 'vue'
 import { IconRefresh } from '@arco-design/web-vue/es/icon'
-import { useAppI18n } from '@/composables/useAppI18n'
 import { actuatorApi, type ActuatorInfo } from '../api'
 import { extractResponseData } from '../types'
 
 void IconRefresh
-
-const { locale, isEnglish } = useAppI18n()
-
-const pageText = computed(() => (
-  isEnglish.value
-    ? {
-        title: 'Online actuators',
-        count: (count: number) => `${count} total`,
-        refresh: 'Refresh',
-        emptyTitle: 'No online actuators',
-        startServiceHint: 'Start the actuator service first: cd WHartTest_Actuator && python main.py',
-        status: 'Status',
-        name: 'Name',
-        ipAddress: 'IP address',
-        type: 'Type',
-        browser: 'Browser',
-        headlessMode: 'Headless',
-        yes: 'Yes',
-        no: 'No',
-        connectedAt: 'Connected at',
-      }
-    : {
-        title: '在线执行器',
-        count: (count: number) => `共 ${count} 个`,
-        refresh: '刷新',
-        emptyTitle: '暂无在线执行器',
-        startServiceHint: '请先启动执行器服务：cd WHartTest_Actuator && python main.py',
-        status: '状态',
-        name: '名称',
-        ipAddress: 'IP地址',
-        type: '类型',
-        browser: '浏览器',
-        headlessMode: '无头模式',
-        yes: '是',
-        no: '否',
-        connectedAt: '连接时间',
-      }
-))
 
 const actuators = ref<ActuatorInfo[]>([])
 const loading = ref(false)
@@ -130,8 +90,8 @@ const loadActuators = async () => {
   loading.value = true
   try {
     const res = await actuatorApi.list()
-    const innerData = extractResponseData<{ count: number; items: ActuatorInfo[] }>(res)
-    actuators.value = innerData?.items || []
+    const data = extractResponseData<{ count: number; items: ActuatorInfo[] }>(res)
+    actuators.value = data?.items || []
   } catch (e) {
     console.error('Load actuators error:', e)
     actuators.value = []
@@ -163,7 +123,7 @@ const getTypeTagColor = (type: string) => {
 const formatTime = (isoString: string) => {
   if (!isoString) return '-'
   const date = new Date(isoString)
-  return date.toLocaleString(isEnglish.value ? 'en-US' : 'zh-CN', {
+  return date.toLocaleString('zh-CN', {
     month: '2-digit',
     day: '2-digit',
     hour: '2-digit',

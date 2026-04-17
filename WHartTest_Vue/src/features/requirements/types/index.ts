@@ -66,6 +66,12 @@ export interface CreateDocumentRequest {
   content?: string;
 }
 
+export interface DocxEditorSession {
+  iframe_url: string;
+  expires_at?: string;
+  document_id: string;
+  title: string;
+}
 // 文档模块接口
 export interface DocumentModule {
   id: string;
