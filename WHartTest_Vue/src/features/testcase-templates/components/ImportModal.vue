@@ -9,7 +9,7 @@
     @cancel="handleClose"
   >
     <template #footer>
-      <a-space>
+      <a-space v-if="!importResult">
         <a-button @click="handleClose">取消</a-button>
         <a-button
           type="primary"

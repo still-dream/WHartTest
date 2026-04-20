@@ -45,13 +45,16 @@ class TestCaseImportService:
     def import_from_file(self, file) -> ImportResult:
         """从文件导入用例"""
         try:
-            workbook = load_workbook(filename=io.BytesIO(file.read()), read_only=True, data_only=True)
+            workbook = load_workbook(filename=io.BytesIO(file.read()), data_only=True)
 
             # 选择工作表
             if self.template.sheet_name and self.template.sheet_name in workbook.sheetnames:
                 worksheet = workbook[self.template.sheet_name]
             else:
                 worksheet = workbook.active
+
+            # 解析合并单元格，将值填充到合并区域内所有单元格
+            self._resolve_merged_cells(worksheet)
 
             # 读取表头
             headers = self._read_headers(worksheet)
@@ -85,6 +88,19 @@ class TestCaseImportService:
             if cell.value:
                 headers[str(cell.value).strip()] = col_idx
         return headers
+
+    @staticmethod
+    def _resolve_merged_cells(worksheet):
+        """将合并单元格的值填充到合并区域内所有单元格，然后取消合并"""
+        merged_ranges = list(worksheet.merged_cells.ranges)
+        for merged_range in merged_ranges:
+            top_left_value = worksheet.cell(
+                row=merged_range.min_row, column=merged_range.min_col
+            ).value
+            worksheet.unmerge_cells(str(merged_range))
+            for row in range(merged_range.min_row, merged_range.max_row + 1):
+                for col in range(merged_range.min_col, merged_range.max_col + 1):
+                    worksheet.cell(row=row, column=col).value = top_left_value
 
     def _load_existing_names(self):
         """预加载项目中现有的用例名称"""
@@ -179,15 +195,19 @@ class TestCaseImportService:
         expected_matches = re.findall(step_pattern, expected_text or '')
 
         if step_matches:
-            # 将预期结果按编号索引
             expected_dict = {int(num): content.strip() for num, content in expected_matches}
+            # 预期结果无编号时，整段文本赋给最后一个步骤
+            fallback_expected = (expected_text or '').strip() if not expected_matches else ''
 
-            for num, content in step_matches:
+            for idx, (num, content) in enumerate(step_matches):
                 step_num = int(num)
+                expected = expected_dict.get(step_num, '')
+                if not expected and fallback_expected and idx == len(step_matches) - 1:
+                    expected = fallback_expected
                 steps.append({
                     'step_number': step_num,
                     'description': content.strip(),
-                    'expected_result': expected_dict.get(step_num, ''),
+                    'expected_result': expected,
                 })
         else:
             # 尝试匹配 n. 内容 格式
@@ -197,12 +217,18 @@ class TestCaseImportService:
 
             if step_matches2:
                 expected_dict = {int(num): content.strip() for num, content in expected_matches2}
-                for num, content in step_matches2:
+                # 预期结果无编号时，整段文本赋给最后一个步骤
+                fallback_expected = (expected_text or '').strip() if not expected_matches2 else ''
+
+                for idx, (num, content) in enumerate(step_matches2):
                     step_num = int(num)
+                    expected = expected_dict.get(step_num, '')
+                    if not expected and fallback_expected and idx == len(step_matches2) - 1:
+                        expected = fallback_expected
                     steps.append({
                         'step_number': step_num,
                         'description': content.strip(),
-                        'expected_result': expected_dict.get(step_num, ''),
+                        'expected_result': expected,
                     })
             elif steps_text:
                 # 按换行分割，每行一个步骤
