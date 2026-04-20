@@ -3,6 +3,7 @@ from django.contrib.contenttypes.models import ContentType
 from rest_framework import serializers
 from django.utils.translation import gettext_lazy as _
 from rest_framework_simplejwt.serializers import TokenObtainPairSerializer as BaseTokenObtainPairSerializer
+from .models import OperationLog
 
 # 权限名称翻译映射
 # 您可以根据实际的权限名称进行扩展
@@ -736,3 +737,24 @@ class MyTokenObtainPairSerializer(BaseTokenObtainPairSerializer):
         data['user'] = user_serializer.data
 
         return data
+
+
+class OperationLogSerializer(serializers.ModelSerializer):
+    username = serializers.CharField(source='user.username', read_only=True)
+    user_email = serializers.EmailField(source='user.email', read_only=True)
+    
+    class Meta:
+        model = OperationLog
+        fields = [
+            'id',
+            'user',
+            'username',
+            'user_email',
+            'feature',
+            'path',
+            'method',
+            'ip_address',
+            'user_agent',
+            'created_at'
+        ]
+        read_only_fields = ['id', 'created_at']

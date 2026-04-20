@@ -156,6 +156,10 @@
               <template #icon><icon-apps /></template>
               <a href="#" @click="checkProjectAndNavigate($event, '/skills')">Skills管理</a>
             </a-menu-item>
+            <a-menu-item key="operation-logs" v-if="hasSystemMenuItems">
+              <template #icon><icon-history /></template>
+              <a href="#" @click="checkProjectAndNavigate($event, '/operation-logs')">操作日志</a>
+            </a-menu-item>
           </a-sub-menu>
         </a-menu>
         <!-- 侧边栏底部收起/展开按钮 -->

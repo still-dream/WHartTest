@@ -22,12 +22,6 @@ class OperationLog(models.Model):
             models.Index(fields=['-created_at']),
             models.Index(fields=['user', '-created_at']),
         ]
-        permissions = [
-            ('view_operation_logs', '查看操作日志'),
-            ('manage_operation_logs', '管理操作日志'),
-            ('export_operation_logs', '导出操作日志'),
-            ('delete_operation_logs', '删除操作日志'),
-        ]
     
     user = models.ForeignKey(
         User,

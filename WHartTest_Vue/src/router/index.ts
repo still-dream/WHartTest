@@ -23,6 +23,7 @@ import AiDiagramView from '@/features/diagrams/views/AiDiagramView.vue'; // 导�
 import AutomationScriptManagementView from '@/views/AutomationScriptManagementView.vue'; // 导入自动化用例管理视图
 import SkillsManagementView from '@/features/skills/views/SkillsManagementView.vue'; // 导入 Skills 管理视图
 import TemplateManagementView from '@/features/testcase-templates/views/TemplateManagementView.vue'; // 导入用例导入导出模版管理视图
+import OperationLogsViewManagement from '@/views/OperationLogsViewManagement.vue'; // 导入操作日志管理视图
 
 const routes: Array<RouteRecordRaw> = [
   {
@@ -140,6 +141,11 @@ const routes: Array<RouteRecordRaw> = [
         path: 'testcase-templates', // 用例导入导出模版管理
         name: 'TemplateManagement',
         component: TemplateManagementView,
+      },
+      {
+        path: 'operation-logs', // 操作日志管理
+        name: 'OperationLogsManagement',
+        component: OperationLogsViewManagement,
       },
       // 其他受保护的子路由可以加在这里
     ]

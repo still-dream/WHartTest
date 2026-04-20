@@ -2,7 +2,8 @@ from django.urls import path, include # Added include
 from rest_framework.routers import DefaultRouter
 from .views import (
     UserCreateAPIView, CurrentUserAPIView,
-    GroupViewSet, PermissionViewSet, UserViewSet, ContentTypeViewSet
+    GroupViewSet, PermissionViewSet, UserViewSet, ContentTypeViewSet,
+    OperationLogViewSet
 )
 
 # Create a router and register our viewsets with it.
@@ -11,9 +12,10 @@ router.register(r'users', UserViewSet, basename='user') # Registered UserViewSet
 router.register(r'groups', GroupViewSet, basename='group')
 router.register(r'permissions', PermissionViewSet, basename='permission')
 router.register(r'content-types', ContentTypeViewSet, basename='content-type')
+router.register(r'operation-logs', OperationLogViewSet, basename='operation-logs')
 
-# The API URLs are now determined automatically by the router.
-# Additionally, we include the existing paths for user registration and 'me' endpoint.
+# The API URLs are now determined automatically by router.
+# Additionally, we include existing paths for user registration and 'me' endpoint.
 urlpatterns = [
     path('', include(router.urls)),
     path('register/', UserCreateAPIView.as_view(), name='user-register'),
