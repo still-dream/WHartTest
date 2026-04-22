@@ -58,7 +58,7 @@
 }
 
 /* ===== App.vue: 表格样式覆盖 ===== */
-.arco-table {
+body.api-testing-theme .api-testing-container .arco-table {
   --color-bg-2: rgb(31, 41, 55) !important;
   --color-neutral-2: rgb(31, 41, 55) !important;
   --color-neutral-3: rgb(55, 65, 81) !important;
@@ -66,27 +66,27 @@
   color: rgb(243, 244, 246) !important;
 }
 
-.arco-table-th {
+body.api-testing-theme .api-testing-container .arco-table-th {
   background-color: rgb(31, 41, 55) !important;
   border-bottom: 1px solid rgba(75, 85, 99, 0.2) !important;
   color: rgb(209, 213, 219) !important;
 }
 
-.arco-table-th .arco-table-cell {
+body.api-testing-theme .api-testing-container .arco-table-th .arco-table-cell {
   color: rgb(209, 213, 219) !important;
 }
 
-.arco-table-td {
+body.api-testing-theme .api-testing-container .arco-table-td {
   background-color: transparent !important;
   border-bottom: 1px solid rgba(75, 85, 99, 0.1) !important;
 }
 
-.arco-table-tr:hover .arco-table-td {
+body.api-testing-theme .api-testing-container .arco-table-tr:hover .arco-table-td {
   background-color: rgba(55, 65, 81, 0.3) !important;
 }
 
 /* ===== App.vue: 卡片样式覆盖 ===== */
-.arco-card {
+body.api-testing-theme .api-testing-container .arco-card {
   background-color: rgb(31, 41, 55) !important;
   border: 1px solid rgba(75, 85, 99, 0.2) !important;
 }
@@ -103,7 +103,7 @@
 }
 
 /* ===== main.css: 自定义工具类 ===== */
-.page-container {
+body.api-testing-theme .api-testing-container .page-container {
   max-width: 100%;
   margin-left: auto;
   margin-right: auto;
@@ -114,7 +114,7 @@
 }
 
 /* ===== main.css: 全局 Modal 样式 ===== */
-.arco-modal-container .arco-modal {
+body.api-testing-theme .arco-modal-container .arco-modal {
   background-color: rgb(31, 41, 55) !important;
   border: none !important;
   box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.4) !important;
@@ -122,19 +122,19 @@
   animation: modalSlide 0.25s cubic-bezier(0.4, 0, 0.2, 1);
 }
 
-.arco-modal-container .arco-modal .arco-modal-header {
+body.api-testing-theme .arco-modal-container .arco-modal .arco-modal-header {
   background-color: transparent;
   border: none !important;
   padding: 20px 20px 0 !important;
 }
 
-.arco-modal-container .arco-modal .arco-modal-header .arco-modal-title {
+body.api-testing-theme .arco-modal-container .arco-modal .arco-modal-header .arco-modal-title {
   color: rgb(243, 244, 246);
   font-size: 1rem;
   font-weight: 500;
 }
 
-.arco-modal-container .arco-modal .arco-modal-header .arco-btn-text {
+body.api-testing-theme .arco-modal-container .arco-modal .arco-modal-header .arco-btn-text {
   width: 1.75rem;
   height: 1.75rem;
   border-radius: 9999px;
@@ -145,17 +145,17 @@
   transition: all 0.2s ease !important;
 }
 
-.arco-modal-container .arco-modal .arco-modal-header .arco-btn-text .arco-icon {
+body.api-testing-theme .arco-modal-container .arco-modal .arco-modal-header .arco-btn-text .arco-icon {
   font-size: 16px !important;
 }
 
-.arco-modal-container .arco-modal .arco-modal-header .arco-btn-text:hover {
+body.api-testing-theme .arco-modal-container .arco-modal .arco-modal-header .arco-btn-text:hover {
   background-color: rgb(55, 65, 81);
   color: white;
   transform: rotate(90deg);
 }
 
-.arco-modal-container .arco-modal .arco-modal-body {
+body.api-testing-theme .arco-modal-container .arco-modal .arco-modal-body {
   background-color: transparent;
   color: rgb(209, 213, 219);
   padding: 16px 20px !important;
@@ -163,13 +163,13 @@
   font-size: 14px !important;
 }
 
-.arco-modal-container .arco-modal .arco-modal-footer {
+body.api-testing-theme .arco-modal-container .arco-modal .arco-modal-footer {
   background-color: transparent;
   border: none !important;
   padding: 0 20px 20px !important;
 }
 
-.arco-modal-container .arco-modal .arco-modal-footer .arco-btn {
+body.api-testing-theme .arco-modal-container .arco-modal .arco-modal-footer .arco-btn {
   height: 2.25rem;
   font-weight: 500;
   border-radius: 0.5rem;
@@ -177,30 +177,30 @@
   transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1) !important;
 }
 
-.arco-modal-container .arco-modal .arco-modal-footer .arco-btn-secondary {
+body.api-testing-theme .arco-modal-container .arco-modal .arco-modal-footer .arco-btn-secondary {
   color: rgb(209, 213, 219);
   background-color: rgba(55, 65, 81, 0.5);
   border: none !important;
 }
 
-.arco-modal-container .arco-modal .arco-modal-footer .arco-btn-secondary:hover {
+body.api-testing-theme .arco-modal-container .arco-modal .arco-modal-footer .arco-btn-secondary:hover {
   background-color: rgb(55, 65, 81);
   color: white;
   transform: translateY(-1px);
 }
 
-.arco-modal-container .arco-modal .arco-modal-footer .arco-btn-primary {
+body.api-testing-theme .arco-modal-container .arco-modal .arco-modal-footer .arco-btn-primary {
   background-color: rgb(239, 68, 68);
   color: white;
   border: none !important;
 }
 
-.arco-modal-container .arco-modal .arco-modal-footer .arco-btn-primary:hover {
+body.api-testing-theme .arco-modal-container .arco-modal .arco-modal-footer .arco-btn-primary:hover {
   background-color: rgb(220, 38, 38);
   transform: translateY(-1px);
 }
 
-.arco-modal-container .arco-modal .arco-modal-footer .arco-btn-primary:active {
+body.api-testing-theme .arco-modal-container .arco-modal .arco-modal-footer .arco-btn-primary:active {
   transform: translateY(0);
 }
 
@@ -216,59 +216,59 @@
 }
 
 /* ===== main.css: 全局 Drawer 样式 ===== */
-.arco-drawer {
+body.api-testing-theme .arco-drawer {
   background-color: rgb(31, 41, 55) !important;
 }
 
-.arco-drawer-container {
+body.api-testing-theme .arco-drawer-container {
   background-color: transparent !important;
 }
 
-.arco-drawer-header {
+body.api-testing-theme .arco-drawer-header {
   background-color: rgb(31, 41, 55) !important;
   border-bottom: 1px solid rgba(148, 163, 184, 0.1) !important;
 }
 
-.arco-drawer-title {
+body.api-testing-theme .arco-drawer-title {
   color: #e2e8f0 !important;
 }
 
-.arco-drawer-body {
+body.api-testing-theme .arco-drawer-body {
   background-color: rgb(31, 41, 55) !important;
 }
 
-.arco-drawer-content {
+body.api-testing-theme .arco-drawer-content {
   background-color: rgb(31, 41, 55) !important;
 }
 
-.arco-drawer-wrapper {
+body.api-testing-theme .arco-drawer-wrapper {
   background-color: rgb(31, 41, 55) !important;
 }
 
-.arco-drawer-mask {
+body.api-testing-theme .arco-drawer-mask {
   background-color: rgba(15, 23, 42, 0.6) !important;
   backdrop-filter: none !important;
 }
 
-.arco-drawer-close-btn {
+body.api-testing-theme .arco-drawer-close-btn {
   color: #94a3b8 !important;
 }
 
-.arco-drawer-close-btn:hover {
+body.api-testing-theme .arco-drawer-close-btn:hover {
   color: #e2e8f0 !important;
   background-color: rgba(148, 163, 184, 0.1) !important;
 }
 
 /* ===== main.css: 全局下拉菜单样式 ===== */
-body .arco-dropdown {
+body.api-testing-theme .arco-dropdown {
   background-color: rgb(31, 41, 55) !important;
   border: 2px solid rgba(75, 85, 99, 0.4) !important;
   border-radius: 6px !important;
   box-shadow: 0 4px 15px rgba(0, 0, 0, 0.2) !important;
 }
 
-body .arco-select-dropdown.arco-select-dropdown,
-body .arco-dropdown-list.arco-dropdown-list {
+body.api-testing-theme .arco-select-dropdown.arco-select-dropdown,
+body.api-testing-theme .arco-dropdown-list.arco-dropdown-list {
   background-color: rgb(31, 41, 55) !important;
   box-shadow: 0 4px 15px rgba(0, 0, 0, 0.2) !important;
   border: 1px solid rgba(75, 85, 99, 0.4) !important;
@@ -279,14 +279,14 @@ body .arco-dropdown-list.arco-dropdown-list {
   color: rgb(209, 213, 219) !important;
 }
 
-body .arco-select-dropdown .arco-select-dropdown-list,
-body .arco-dropdown-list .arco-dropdown-list-wrapper {
+body.api-testing-theme .arco-select-dropdown .arco-select-dropdown-list,
+body.api-testing-theme .arco-dropdown-list .arco-dropdown-list-wrapper {
   padding: 3px !important;
   overflow: hidden !important;
 }
 
-body .arco-select-dropdown .arco-select-option,
-body .arco-dropdown-list .arco-dropdown-option {
+body.api-testing-theme .arco-select-dropdown .arco-select-option,
+body.api-testing-theme .arco-dropdown-list .arco-dropdown-option {
   color: rgb(209, 213, 219) !important;
   background: rgba(70, 84, 102, 0.2) !important;
   margin: 3px 0 !important;
@@ -299,127 +299,127 @@ body .arco-dropdown-list .arco-dropdown-option {
   border: 1px solid rgba(75, 85, 99, 0.1) !important;
 }
 
-body .arco-select-dropdown .arco-select-option:hover,
-body .arco-dropdown-list .arco-dropdown-option:hover {
+body.api-testing-theme .arco-select-dropdown .arco-select-option:hover,
+body.api-testing-theme .arco-dropdown-list .arco-dropdown-option:hover {
   background-color: rgba(55, 65, 81, 0.7) !important;
   border-color: rgba(75, 85, 99, 0.3) !important;
 }
 
-body .arco-select-dropdown .arco-select-option-active,
-body .arco-select-dropdown .arco-select-option-selected,
-body .arco-dropdown-list .arco-dropdown-option-active {
+body.api-testing-theme .arco-select-dropdown .arco-select-option-active,
+body.api-testing-theme .arco-select-dropdown .arco-select-option-selected,
+body.api-testing-theme .arco-dropdown-list .arco-dropdown-option-active {
   background-color: rgba(59, 130, 246, 0.2) !important;
   color: rgb(96, 165, 250) !important;
   border-color: rgba(59, 130, 246, 0.3) !important;
 }
 
-body .arco-select-dropdown .arco-select-option-disabled {
+body.api-testing-theme .arco-select-dropdown .arco-select-option-disabled {
   color: rgb(156, 163, 175) !important;
   opacity: 0.7 !important;
   cursor: not-allowed !important;
 }
 
-body .arco-select-dropdown .arco-select-group-title {
+body.api-testing-theme .arco-select-dropdown .arco-select-group-title {
   color: rgb(156, 163, 175) !important;
   background-color: transparent !important;
 }
 
-body .arco-select-dropdown .arco-select-option .arco-btn,
-body .arco-dropdown-list .arco-dropdown-option .arco-btn {
+body.api-testing-theme .arco-select-dropdown .arco-select-option .arco-btn,
+body.api-testing-theme .arco-dropdown-list .arco-dropdown-option .arco-btn {
   background-color: transparent !important;
   border: none !important;
 }
 
-body .arco-select-dropdown .arco-select-option .arco-btn:hover,
-body .arco-dropdown-list .arco-dropdown-option .arco-btn:hover {
+body.api-testing-theme .arco-select-dropdown .arco-select-option .arco-btn:hover,
+body.api-testing-theme .arco-dropdown-list .arco-dropdown-option .arco-btn:hover {
   background-color: transparent !important;
 }
 
-body .arco-select-dropdown .arco-select-option .arco-icon,
-body .arco-dropdown-list .arco-dropdown-option .arco-icon {
+body.api-testing-theme .arco-select-dropdown .arco-select-option .arco-icon,
+body.api-testing-theme .arco-dropdown-list .arco-dropdown-option .arco-icon {
   color: #6b7785 !important;
 }
 
-body .arco-select-dropdown .arco-select-option:hover .arco-icon,
-body .arco-dropdown-list .arco-dropdown-option:hover .arco-icon {
+body.api-testing-theme .arco-select-dropdown .arco-select-option:hover .arco-icon,
+body.api-testing-theme .arco-dropdown-list .arco-dropdown-option:hover .arco-icon {
   color: #86909c !important;
 }
 
-body .arco-select-dropdown .arco-select-dropdown-list {
+body.api-testing-theme .arco-select-dropdown .arco-select-dropdown-list {
   background-color: transparent !important;
   border: none !important;
   box-shadow: none !important;
 }
 
-body .arco-select-dropdown .arco-select-dropdown-multiple-column {
+body.api-testing-theme .arco-select-dropdown .arco-select-dropdown-multiple-column {
   border-color: rgba(75, 85, 99, 0.4) !important;
   background-color: transparent !important;
 }
 
 /* 搜索框样式 */
-body .arco-select-dropdown .arco-select-dropdown-search {
+body.api-testing-theme .arco-select-dropdown .arco-select-dropdown-search {
   border-color: rgb(55, 65, 81) !important;
   background-color: rgb(31, 41, 55) !important;
 }
 
-body .arco-select-dropdown .arco-select-dropdown-search .arco-input-wrapper {
+body.api-testing-theme .arco-select-dropdown .arco-select-dropdown-search .arco-input-wrapper {
   border-color: rgb(55, 65, 81) !important;
   background-color: rgba(17, 24, 39, 0.6) !important;
 }
 
-body .arco-select-dropdown .arco-select-dropdown-search .arco-input {
+body.api-testing-theme .arco-select-dropdown .arco-select-dropdown-search .arco-input {
   color: rgb(209, 213, 219) !important;
 }
 
 /* 树形选择器特殊处理 */
-body .arco-select-dropdown .arco-select-option .arco-tree-node {
+body.api-testing-theme .arco-select-dropdown .arco-select-option .arco-tree-node {
   min-height: 28px !important;
   padding-top: 3px !important;
   padding-bottom: 3px !important;
   background: transparent !important;
 }
 
-body .arco-select-dropdown .arco-tree .arco-tree-node {
+body.api-testing-theme .arco-select-dropdown .arco-tree .arco-tree-node {
   background: transparent !important;
   margin: 2px 0 !important;
 }
 
-body .arco-select-dropdown .arco-select-option div[style*="padding-left"] {
+body.api-testing-theme .arco-select-dropdown .arco-select-option div[style*="padding-left"] {
   height: 28px !important;
   min-height: 28px !important;
   background: transparent !important;
 }
 
 /* 嵌套下拉结构调整 */
-body .arco-select-dropdown .arco-select-option > div,
-body .arco-dropdown-list .arco-dropdown-option > div {
+body.api-testing-theme .arco-select-dropdown .arco-select-option > div,
+body.api-testing-theme .arco-dropdown-list .arco-dropdown-option > div {
   min-height: 24px !important;
   background-color: transparent !important;
   border: none !important;
 }
 
-body .arco-select-dropdown .arco-select-option .arco-select-option,
-body .arco-dropdown-list .arco-dropdown-option .arco-dropdown-option {
+body.api-testing-theme .arco-select-dropdown .arco-select-option .arco-select-option,
+body.api-testing-theme .arco-dropdown-list .arco-dropdown-option .arco-dropdown-option {
   margin: 2px 0 !important;
   border: none !important;
   background: rgba(70, 84, 102, 0.3) !important;
 }
 
 /* 下拉框中的文本内容 */
-body .arco-select-dropdown .arco-select-option-content,
-body .arco-dropdown-list .arco-dropdown-option-content {
+body.api-testing-theme .arco-select-dropdown .arco-select-option-content,
+body.api-testing-theme .arco-dropdown-list .arco-dropdown-option-content {
   line-height: 1.5 !important;
 }
 
-body .arco-select-dropdown .arco-select-option-content .arco-icon,
-body .arco-dropdown-list .arco-dropdown-option-content .arco-icon {
+body.api-testing-theme .arco-select-dropdown .arco-select-option-content .arco-icon,
+body.api-testing-theme .arco-dropdown-list .arco-dropdown-option-content .arco-icon {
   font-size: 14px !important;
   margin-right: 4px !important;
 }
 
 /* 下拉选项内的按钮组调整高度 */
-body .arco-select-dropdown .arco-select-option .arco-btn,
-body .arco-dropdown-list .arco-dropdown-option .arco-btn {
+body.api-testing-theme .arco-select-dropdown .arco-select-option .arco-btn,
+body.api-testing-theme .arco-dropdown-list .arco-dropdown-option .arco-btn {
   height: 24px !important;
   line-height: 1 !important;
   padding: 0 5px !important;
@@ -427,30 +427,30 @@ body .arco-dropdown-list .arco-dropdown-option .arco-btn {
 }
 
 /* 底部分隔线 */
-body .arco-select-dropdown .arco-select-option:not(:last-child),
-body .arco-dropdown-list .arco-dropdown-option:not(:last-child) {
+body.api-testing-theme .arco-select-dropdown .arco-select-option:not(:last-child),
+body.api-testing-theme .arco-dropdown-list .arco-dropdown-option:not(:last-child) {
   box-shadow: 0 1px 0 rgba(75, 85, 99, 0.1) !important;
 }
 
 /* 下拉菜单滚动条 */
-body .arco-select-dropdown .arco-scrollbar,
-body .arco-dropdown-list .arco-scrollbar {
+body.api-testing-theme .arco-select-dropdown .arco-scrollbar,
+body.api-testing-theme .arco-dropdown-list .arco-scrollbar {
   scrollbar-width: thin !important;
   scrollbar-color: rgba(107, 114, 128, 0.3) transparent !important;
 }
 
-body .arco-select-dropdown .arco-scrollbar::-webkit-scrollbar,
-body .arco-dropdown-list .arco-scrollbar::-webkit-scrollbar {
+body.api-testing-theme .arco-select-dropdown .arco-scrollbar::-webkit-scrollbar,
+body.api-testing-theme .arco-dropdown-list .arco-scrollbar::-webkit-scrollbar {
   width: 4px !important;
 }
 
-body .arco-select-dropdown .arco-scrollbar::-webkit-scrollbar-track,
-body .arco-dropdown-list .arco-scrollbar::-webkit-scrollbar-track {
+body.api-testing-theme .arco-select-dropdown .arco-scrollbar::-webkit-scrollbar-track,
+body.api-testing-theme .arco-dropdown-list .arco-scrollbar::-webkit-scrollbar-track {
   background: transparent !important;
 }
 
-body .arco-select-dropdown .arco-scrollbar::-webkit-scrollbar-thumb,
-body .arco-dropdown-list .arco-scrollbar::-webkit-scrollbar-thumb {
+body.api-testing-theme .arco-select-dropdown .arco-scrollbar::-webkit-scrollbar-thumb,
+body.api-testing-theme .arco-dropdown-list .arco-scrollbar::-webkit-scrollbar-thumb {
   background-color: rgba(107, 114, 128, 0.3) !important;
   border-radius: 4px !important;
 }
@@ -630,12 +630,12 @@ body .arco-dropdown-list .arco-scrollbar::-webkit-scrollbar-thumb {
 }
 
 /* ===== Tooltip 暗色主题 ===== */
-body .arco-tooltip-content {
+body.api-testing-theme .arco-tooltip-content {
   background-color: rgb(31, 41, 55) !important;
   color: rgb(229, 231, 235) !important;
   border: 1px solid rgba(75, 85, 99, 0.4) !important;
 }
 
-body .arco-tooltip-arrow::after {
+body.api-testing-theme .arco-tooltip-arrow::after {
   background-color: rgb(31, 41, 55) !important;
 }

@@ -36,7 +36,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed, watch } from 'vue'
+import { ref, computed, watch, onMounted, onBeforeUnmount } from 'vue'
 import { useRoute } from 'vue-router'
 import { useAppI18n } from '@/composables/useAppI18n'
 import { useProjectStore } from '@/store/projectStore'
@@ -56,6 +56,19 @@ const { locale, isEnglish, tl } = useAppI18n()
 const projectStore = useProjectStore()
 const projectId = computed(() => projectStore.currentProjectId)
 const activeTab = ref('interfaces')
+const API_TESTING_THEME_CLASS = 'api-testing-theme'
+
+const syncApiTestingThemeClass = (enabled: boolean) => {
+  document.body.classList.toggle(API_TESTING_THEME_CLASS, enabled)
+}
+
+onMounted(() => {
+  syncApiTestingThemeClass(true)
+})
+
+onBeforeUnmount(() => {
+  syncApiTestingThemeClass(false)
+})
 
 // Support tab switching via query param (e.g. /api-testing?tab=testcases)
 watch(() => route.query.tab, (newTab) => {
