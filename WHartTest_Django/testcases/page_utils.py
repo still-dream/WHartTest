@@ -172,7 +172,11 @@ def highlight_and_screenshot(page, element, text, index, save_dir="C:\\doc"):
         text: 元素的文本内容（用于生成文件名）
         index: 序号（用于生成文件名）
         save_dir: 截图保存目录，默认 "C:\\doc"
+    
+    Returns:
+        bool: 截图成功返回 True，失败返回 False
     """
+    original_border = None
     try:
         original_border = element.evaluate("el => el.style.border")
         element.evaluate("el => { el.style.border = '3px solid red'; }")
@@ -191,9 +195,16 @@ def highlight_and_screenshot(page, element, text, index, save_dir="C:\\doc"):
         page.screenshot(path=filepath, full_page=False)
         print(f"  📸 截图已保存: {filepath}")
 
-        element.evaluate(f"el => {{ el.style.border = '{original_border}'; }}")
+        return True
     except Exception as e:
         print(f"  ❌ 高亮/截图失败: {e}")
+        return False
+    finally:
+        if original_border is not None:
+            try:
+                element.evaluate("(el, border) => { el.style.border = border; }", original_border)
+            except Exception:
+                pass
 
 
 def wait_for_element_visible(page, selector, timeout=10000):

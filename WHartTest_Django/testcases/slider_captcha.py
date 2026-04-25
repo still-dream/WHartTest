@@ -28,7 +28,7 @@ def get_gap_offset_opencv(bg_img_pil, gap_img_pil, search_start=200, search_end=
         bg_cv = cv2.cvtColor(np.array(bg_img_pil), cv2.COLOR_RGB2BGR)
         gap_cv = cv2.cvtColor(np.array(gap_img_pil), cv2.COLOR_RGB2BGR)
 
-        bg_gray = cv2.cvtColor.cvtColor(bg_cv, cv2.COLOR_BGR2GRAY)
+        bg_gray = cv2.cvtColor(bg_cv, cv2.COLOR_BGR2GRAY)
         gap_gray = cv2.cvtColor(gap_cv, cv2.COLOR_BGR2GRAY)
 
         bg_gray = cv2.GaussianBlur(bg_gray, (3, 3), 0)
@@ -153,7 +153,7 @@ def human_like_slider(
             bg_container = page.locator(bg_selector).first
             bg_box = bg_container.bounding_box()
             if not bg_box:
-                print("❌ 无法获取背景图容器位置，刷新刷新重试")
+                print("❌ 无法获取背景图容器位置，刷新重试")
                 page.locator(refresh_btn_selector).click()
                 page.wait_for_timeout(500)
                 continue
