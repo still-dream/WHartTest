@@ -1,12 +1,5 @@
 <template>
   <div class="login-container">
-    <!-- 背景装饰 -->
-    <div class="background-decoration">
-      <div class="decoration-circle circle-1"></div>
-      <div class="decoration-circle circle-2"></div>
-      <div class="decoration-circle circle-3"></div>
-    </div>
-
     <!-- 登录卡片 -->
     <div class="login-card">
       <!-- 品牌标识区域 -->
@@ -14,8 +7,8 @@
         <div class="brand-logo">
           <img src="/WGHTest.png" alt="WGHTest Logo" class="logo-icon" />
         </div>
-        <h1 class="brand-title">WGHTest</h1>
-        <p class="brand-subtitle">WGH智能测试平台</p>
+        <h1 class="brand-title">J&TAITest</h1>
+        <p class="brand-subtitle">J&T智能测试平台</p>
       </div>
 
       <!-- 登录表单 -->
@@ -187,63 +180,25 @@ onMounted(() => {
   align-items: center;
   justify-content: center;
   padding: 20px;
-  background: linear-gradient(135deg, #f8f9fc 0%, #e9ecf3 100%);
+  background-color: #f8f9fc;
+  background-image: url('/img/jt3.png');
+  background-size: cover;
+  background-position: center;
+  background-repeat: no-repeat;
   position: relative;
   overflow: hidden;
   box-sizing: border-box;
 }
 
-/* 背景装饰 */
-.background-decoration {
+.login-container::before {
+  content: '';
   position: absolute;
   top: 0;
   left: 0;
   width: 100%;
   height: 100%;
-  pointer-events: none;
-  z-index: 1;
-}
-
-.decoration-circle {
-  position: absolute;
-  border-radius: 50%;
-  background: linear-gradient(135deg, rgba(0, 160, 233, 0.1) 0%, rgba(0, 160, 233, 0.05) 100%);
-  animation: float 6s ease-in-out infinite;
-}
-
-.circle-1 {
-  width: 200px;
-  height: 200px;
-  top: 10%;
-  left: 10%;
-  animation-delay: 0s;
-}
-
-.circle-2 {
-  width: 150px;
-  height: 150px;
-  top: 70%;
-  right: 15%;
-  animation-delay: 2s;
-}
-
-.circle-3 {
-  width: 100px;
-  height: 100px;
-  top: 50%;
-  left: 80%;
-  animation-delay: 4s;
-}
-
-@keyframes float {
-  0%, 100% {
-    transform: translateY(0px) scale(1);
-    opacity: 0.7;
-  }
-  50% {
-    transform: translateY(-20px) scale(1.05);
-    opacity: 1;
-  }
+  background-color: rgba(248, 249, 252, 0.8);
+  z-index: 0;
 }
 
 /* 登录卡片 */
