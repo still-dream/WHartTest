@@ -14,8 +14,8 @@
         <div class="brand-logo">
           <img src="/WGHTest.png" alt="WGHTest Logo" class="logo-icon" />
         </div>
-        <h1 class="brand-title">注册新账户</h1>
-        <p class="brand-subtitle">欢迎加入WGHTest</p>
+        <h1 class="brand-title" style="color: #dc2626;">J&TAITest</h1>
+        <p class="brand-subtitle" style="color: #dc2626;">欢迎加入J&TAITest</p>
       </div>
 
       <!-- 注册表单 -->
@@ -418,15 +418,15 @@ const handleSubmit = async () => {
 
 .form-input:focus {
   outline: none;
-  border-color: #00a0e9;
+  border-color: #dc2626;
   background: #ffffff;
-  box-shadow: 0 0 0 4px rgba(0, 160, 233, 0.08);
+  box-shadow: 0 0 0 4px rgba(220, 38, 38, 0.08);
   transform: translateY(-1px);
 }
 
 .form-input:focus + .input-icon,
 .input-wrapper:focus-within .input-icon {
-  color: #00a0e9;
+  color: #dc2626;
 }
 
 .password-toggle {
@@ -451,7 +451,7 @@ const handleSubmit = async () => {
 .register-button {
   width: 100%;
   padding: 12px 24px;
-  background: #00a0e9;
+  background: #dc2626;
   border: none;
   border-radius: 14px;
   color: #ffffff;
@@ -459,7 +459,7 @@ const handleSubmit = async () => {
   font-weight: 600;
   cursor: pointer;
   transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
-  box-shadow: 0 6px 16px rgba(0, 160, 233, 0.25);
+  box-shadow: 0 6px 16px rgba(220, 38, 38, 0.25);
   position: relative;
   overflow: hidden;
   min-height: 48px;
@@ -468,14 +468,14 @@ const handleSubmit = async () => {
 
 .register-button:hover:not(:disabled) {
   transform: translateY(-2px);
-  box-shadow: 0 10px 25px rgba(26, 170, 235, 0.35);
-  background: #1aaaeb;
+  box-shadow: 0 10px 25px rgba(220, 38, 38, 0.35);
+  background: #dc2626;
 }
 
 .register-button:active:not(:disabled) {
   transform: translateY(1px) scale(0.98);
   transition: all 0.1s ease;
-  background: #0090d1;
+  background: #b91c1c;
 }
 
 .register-button:disabled {
@@ -535,14 +535,14 @@ const handleSubmit = async () => {
 }
 
 .login-link .link {
-  color: #00a0e9;
+  color: #dc2626;
   text-decoration: none;
   font-weight: 500;
   transition: color 0.2s ease;
 }
 
 .login-link .link:hover {
-  color: #0090d1;
+  color: #b91c1c;
   text-decoration: underline;
 }
 

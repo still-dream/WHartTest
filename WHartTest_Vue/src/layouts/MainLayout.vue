@@ -5,7 +5,7 @@
       <div class="left-section">
         <div class="logo" unselectable="on">
           <img src="/WGHTest.png" alt="WGHTest Logo" class="logo-icon" />
-          <span class="logo-text">WGHTest</span>
+          <span class="logo-text">J&TAITest</span>
         </div>
         <div class="project-selector" v-if="showProjectSelector">
           <a-select
@@ -27,7 +27,7 @@
         </div>
       </div>
       <div class="user-info">
-        <a-avatar class="avatar" style="background-color: #00a0e9; color: white;">
+        <a-avatar class="avatar" style="background-color: #dc2626; color: white;">
           <span>{{ userInitial }}</span>
         </a-avatar>
         <a-dropdown trigger="click" class="user-dropdown-wrapper">

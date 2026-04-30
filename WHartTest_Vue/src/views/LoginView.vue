@@ -7,8 +7,8 @@
         <div class="brand-logo">
           <img src="/WGHTest.png" alt="WGHTest Logo" class="logo-icon" />
         </div>
-        <h1 class="brand-title">J&TAITest</h1>
-        <p class="brand-subtitle">J&T智能测试平台</p>
+        <h1 class="brand-title" style="color: #dc2626;">J&TAITest</h1>
+        <p class="brand-subtitle" style="color: #dc2626;">J&T智能测试平台</p>
       </div>
 
       <!-- 登录表单 -->
@@ -102,7 +102,7 @@
         <div class="register-link">
           <p>
             还没有账号?
-            <router-link to="/register" class="link">立即注册</router-link>
+            <router-link to="/register" class="link" style="color: #dc2626;">立即注册</router-link>
           </p>
         </div>
       </form>
@@ -316,15 +316,15 @@ onMounted(() => {
 
 .form-input:focus {
   outline: none;
-  border-color: #00a0e9;
+  border-color: #dc2626;
   background: #ffffff;
-  box-shadow: 0 0 0 4px rgba(0, 160, 233, 0.08);
+  box-shadow: 0 0 0 4px rgba(220, 38, 38, 0.08);
   transform: translateY(-1px);
 }
 
 .form-input:focus + .input-icon,
 .input-wrapper:focus-within .input-icon {
-  color: #00a0e9;
+  color: #dc2626;
 }
 
 .password-toggle {
@@ -367,11 +367,29 @@ onMounted(() => {
   background: #ffffff;
   cursor: pointer;
   transition: all 0.2s ease;
+  vertical-align: middle;
+  margin: 0;
+  appearance: none;
+  -webkit-appearance: none;
+  position: relative;
+  padding: 0;
 }
 
 .form-checkbox:checked {
-  background: #00a0e9;
-  border-color: #00a0e9;
+  background: #ffffff;
+  border-color: #dc2626;
+}
+
+.form-checkbox:checked::after {
+  content: '';
+  position: absolute;
+  left: 5px;
+  top: 2px;
+  width: 6px;
+  height: 10px;
+  border: solid #dc2626;
+  border-width: 0 2px 2px 0;
+  transform: rotate(45deg);
 }
 
 .checkbox-label {
@@ -379,6 +397,8 @@ onMounted(() => {
   color: #6b7280;
   cursor: pointer;
   user-select: none;
+  vertical-align: middle;
+  line-height: 20px;
 }
 
 .forgot-password .link {
@@ -398,7 +418,7 @@ onMounted(() => {
 .login-button {
   width: 100%;
   padding: 12px 24px;
-  background: #00a0e9;
+  background: #dc2626;
   border: none;
   border-radius: 14px;
   color: #ffffff;
@@ -406,7 +426,7 @@ onMounted(() => {
   font-weight: 600;
   cursor: pointer;
   transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
-  box-shadow: 0 6px 16px rgba(0, 160, 233, 0.25);
+  box-shadow: 0 6px 16px rgba(220, 38, 38, 0.25);
   position: relative;
   overflow: hidden;
   min-height: 48px;
@@ -415,13 +435,13 @@ onMounted(() => {
 
 .login-button:hover:not(:disabled) {
   transform: translateY(-2px);
-  box-shadow: 0 10px 25px rgba(26, 170, 235, 0.35);
-  background: #1aaaeb;
+  box-shadow: 0 10px 25px rgba(220, 38, 38, 0.35);
+  background: #dc2626;
 }
 
 .login-button:active:not(:disabled) {
   transform: translateY(0);
-  background: #0090d1;
+  background: #b91c1c;
 }
 
 .login-button:disabled {
@@ -636,14 +656,14 @@ onMounted(() => {
 
 @keyframes inputFocus {
   0% {
-    box-shadow: 0 0 0 0 rgba(0, 160, 233, 0.3);
+    box-shadow: 0 0 0 0 rgba(220, 38, 38, 0.3);
     transform: translateY(0);
   }
   50% {
-    box-shadow: 0 0 0 2px rgba(0, 160, 233, 0.15);
+    box-shadow: 0 0 0 2px rgba(220, 38, 38, 0.15);
   }
   100% {
-    box-shadow: 0 0 0 4px rgba(0, 160, 233, 0.08);
+    box-shadow: 0 0 0 4px rgba(220, 38, 38, 0.08);
     transform: translateY(-1px);
   }
 }
