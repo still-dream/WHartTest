@@ -370,7 +370,7 @@ onMounted(() => {
 
 .overview-icon {
   font-size: 20px;
-  color: #00a0e9;
+  color: #dc2626;
 }
 
 .overview-title {
