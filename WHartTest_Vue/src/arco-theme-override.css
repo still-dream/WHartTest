@@ -123,48 +123,48 @@
 /* 菜单激活项和选中状态 */
 .arco-menu-item-selected,
 .arco-menu-selected {
-  background-color: rgba(0, 160, 233, 0.1) !important;
-  color: #00a0e9 !important;
-  border-left: 3px solid #00a0e9 !important;
+  background-color: rgba(220, 38, 38, 0.1) !important;
+  color: #dc2626 !important;
+  border-left: 3px solid #dc2626 !important;
 }
 
 .arco-menu-light .arco-menu-item-selected,
 .arco-menu-light .arco-menu-selected {
-  background-color: rgba(0, 160, 233, 0.1) !important;
-  color: #00a0e9 !important;
-  border-left: 3px solid #00a0e9 !important;
+  background-color: rgba(220, 38, 38, 0.1) !important;
+  color: #dc2626 !important;
+  border-left: 3px solid #dc2626 !important;
 }
 
 .arco-menu-light .arco-menu-item:hover,
 .arco-menu-item:hover {
-  color: #00a0e9 !important;
-  background-color: rgba(0, 160, 233, 0.05) !important;
+  color: #dc2626 !important;
+  background-color: rgba(220, 38, 38, 0.05) !important;
 }
 
 /* 子菜单项选中状态 */
 .arco-menu-light .arco-menu-inline .arco-menu-item-selected,
 .arco-menu-light .arco-menu-inline .arco-menu-selected {
-  color: #00a0e9 !important;
-  background-color: rgba(0, 160, 233, 0.1) !important;
+  color: #dc2626 !important;
+  background-color: rgba(220, 38, 38, 0.1) !important;
 }
 
 /* 子菜单标题选中状态 */
 .arco-menu-light .arco-menu-inline-header-selected,
 .arco-menu-light .arco-menu-inline-header.arco-menu-selected {
-  color: #00a0e9 !important;
-  background-color: rgba(0, 160, 233, 0.05) !important;
+  color: #dc2626 !important;
+  background-color: rgba(220, 38, 38, 0.05) !important;
 }
 
 .arco-menu-light .arco-menu-inline-header:hover {
-  color: #00a0e9 !important;
-  background-color: rgba(0, 160, 233, 0.05) !important;
+  color: #dc2626 !important;
+  background-color: rgba(220, 38, 38, 0.05) !important;
 }
 
 /* 收起状态下的菜单项选中 */
 .arco-menu-collapse .arco-menu-item-selected,
 .arco-menu-collapse .arco-menu-selected {
-  color: #00a0e9 !important;
-  background-color: rgba(0, 160, 233, 0.1) !important;
+  color: #dc2626 !important;
+  background-color: rgba(220, 38, 38, 0.1) !important;
   border-left: none !important;
 }
 
@@ -172,14 +172,14 @@
 .arco-menu-item-selected .arco-icon,
 .arco-menu-selected .arco-icon,
 .arco-menu-item:hover .arco-icon {
-  color: #00a0e9 !important;
+  color: #dc2626 !important;
 }
 
 /* 菜单链接颜色 */
 .arco-menu-item-selected a,
 .arco-menu-selected a,
 .arco-menu-item:hover a {
-  color: #00a0e9 !important;
+  color: #dc2626 !important;
 }
 
 /* 步骤条 */

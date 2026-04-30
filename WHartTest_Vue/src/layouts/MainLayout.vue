@@ -664,11 +664,11 @@ onMounted(async () => {
 }
 
 :deep(.arco-menu-light .arco-menu-item:hover) {
-  color: #00a0e9;
+  color: #dc2626;
 }
 
 :deep(.arco-menu-light .arco-menu-selected) {
-  color: #00a0e9;
+  color: #dc2626;
   background-color: transparent;
   border-left: none;
 }
@@ -681,11 +681,11 @@ onMounted(async () => {
 }
 
 :deep(.arco-menu-light .arco-menu-inline-header:hover) {
-  color: #00a0e9;
+  color: #dc2626;
 }
 
 :deep(.arco-menu-light .arco-menu-inline-header.arco-menu-selected) {
-  color: #00a0e9;
+  color: #dc2626;
   background-color: transparent;
   border-left: none;
 }
@@ -779,7 +779,7 @@ onMounted(async () => {
 }
 
 .collapse-button:hover {
-  color: #00a0e9;
+  color: #dc2626;
 }
 
 /* 收起状态下的按钮样式 */
