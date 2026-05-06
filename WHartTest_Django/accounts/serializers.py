@@ -421,6 +421,14 @@ class ContentTypeSerializer(serializers.ModelSerializer):
             # 前端一级菜单
             "projects": "项目管理",
             "requirements": "需求管理",
+            "api_database_configs": "接口自动化",
+            "api_environments": "接口自动化",
+            "api_functions": "接口自动化",
+            "api_interfaces": "接口自动化",
+            "api_modules": "接口自动化",
+            "api_sync": "接口自动化",
+            "api_testcases": "接口自动化",
+            "api_testtasks": "接口自动化",
 
             "ui_automation": "UI自动化",
             "task_center": "任务中心",
@@ -463,6 +471,14 @@ class ContentTypeSerializer(serializers.ModelSerializer):
         app_labels = {
             "projects": "Project Management",
             "requirements": "Requirements",
+            "api_database_configs": "API Testing",
+            "api_environments": "API Testing",
+            "api_functions": "API Testing",
+            "api_interfaces": "API Testing",
+            "api_modules": "API Testing",
+            "api_sync": "API Testing",
+            "api_testcases": "API Testing",
+            "api_testtasks": "API Testing",
             "ui_automation": "UI Automation",
             "task_center": "Task Center",
             "django_celery_beat": "Task Center",
@@ -490,6 +506,20 @@ class ContentTypeSerializer(serializers.ModelSerializer):
         menu_category = self.get_app_label_cn(obj)
         app_label = obj.app_label
         model_name = (obj.model or "").lower()
+
+        # 条件：一级菜单是接口自动化；动作：按功能页签分流到子菜单；结果：权限树与前端导航一致。
+        if menu_category == "接口自动化":
+            subcategories = {
+                "api_database_configs": "环境管理",
+                "api_environments": "环境管理",
+                "api_functions": "自定义函数",
+                "api_interfaces": "接口管理",
+                "api_modules": "接口管理",
+                "api_sync": "同步配置",
+                "api_testcases": "测试用例",
+                "api_testtasks": "测试任务",
+            }
+            return subcategories.get(app_label)
 
         # 条件：一级菜单是测试管理；动作：按模型分流到子菜单；结果：用例/套件/执行历史结构清晰。
         if menu_category == "测试管理":
@@ -540,6 +570,19 @@ class ContentTypeSerializer(serializers.ModelSerializer):
         menu_category = self.get_app_label_en(obj)
         app_label = obj.app_label
         model_name = (obj.model or "").lower()
+
+        if menu_category == "API Testing":
+            subcategories = {
+                "api_database_configs": "Environments",
+                "api_environments": "Environments",
+                "api_functions": "Custom Functions",
+                "api_interfaces": "Interfaces",
+                "api_modules": "Interfaces",
+                "api_sync": "Sync Config",
+                "api_testcases": "Test Cases",
+                "api_testtasks": "Test Tasks",
+            }
+            return subcategories.get(app_label)
 
         if menu_category == "Test Management":
             if app_label == "testcase_templates":
@@ -620,20 +663,27 @@ class ContentTypeSerializer(serializers.ModelSerializer):
             return 1
 
         subcategory_sort = {
+            # 接口自动化
+            "接口管理": 1,
+            "测试用例": 2,
+            "测试任务": 3,
+            "环境管理": 4,
+            "自定义函数": 5,
+            "同步配置": 6,
             # 测试管理
-            "用例管理": 1,
-            "测试套件": 2,
-            "执行历史": 3,
+            "用例管理": 11,
+            "测试套件": 12,
+            "执行历史": 13,
             # 系统管理
-            "用户管理": 1,
-            "组织管理": 2,
-            "权限管理": 3,
-            "LLM配置": 4,
-            "KEY管理": 5,
-            "MCP配置": 6,
-            "消息管理": 7,
-            "Skills管理": 8,
-            "任务调度": 9,
+            "用户管理": 21,
+            "组织管理": 22,
+            "权限管理": 23,
+            "LLM配置": 24,
+            "KEY管理": 25,
+            "MCP配置": 26,
+            "消息管理": 27,
+            "Skills管理": 28,
+            "任务调度": 29,
         }
         return subcategory_sort.get(subcategory, 99)
 
@@ -646,12 +696,13 @@ class ContentTypeSerializer(serializers.ModelSerializer):
         sort_order = {
             "项目管理": 1,
             "需求管理": 2,
-            "UI自动化": 3,
-            "任务中心": 4,
-            "测试管理": 5,
-            "LLM对话": 6,
-            "知识库管理": 7,
-            "系统管理": 8,
+            "接口自动化": 3,
+            "UI自动化": 4,
+            "任务中心": 5,
+            "测试管理": 6,
+            "LLM对话": 7,
+            "知识库管理": 8,
+            "系统管理": 9,
         }
         return sort_order.get(app_label_cn, 99)
 

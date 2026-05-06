@@ -37,6 +37,13 @@ class ContentTypeSerializerMenuGroupingTests(SimpleTestCase):
     def setUp(self):
         self.serializer = ContentTypeSerializer()
 
+    def test_api_interfaces_are_grouped_under_api_testing_menu(self):
+        content_type = SimpleNamespace(app_label='api_interfaces', model='apiinterface')
+
+        self.assertEqual(self.serializer.get_app_label_cn(content_type), '接口自动化')
+        self.assertEqual(self.serializer.get_app_label_subcategory(content_type), '接口管理')
+        self.assertEqual(self.serializer.get_app_label_sort(content_type), 3)
+
     def test_task_center_is_grouped_as_top_level_task_center_menu(self):
         content_type = SimpleNamespace(app_label='task_center', model='scheduledtask')
 
