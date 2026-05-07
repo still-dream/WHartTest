@@ -21,6 +21,8 @@ import os
 # 导入 dotenv 加载器，用于读取 .env 配置。
 from dotenv import load_dotenv
 
+from wharttest_django.data_variant import get_postgres_db_name, get_sqlite_db_path
+
 # 在项目内构建路径时可使用：BASE_DIR / 'subdir'。
 # 计算项目根目录（settings.py 的上两级目录）。
 BASE_DIR = Path(__file__).resolve().parent.parent
@@ -203,27 +205,6 @@ WSGI_APPLICATION = "wharttest_django.wsgi.application"
 # DATABASE_PATH: SQLite 文件路径（仅 sqlite 模式）
 # POSTGRES_*: PostgreSQL 连接参数（仅 postgres 模式）
 
-# 根据 git 分支后缀自动选择本地开发数据库，避免切分支时来回跑迁移。
-# -github → wharttest_dev_github, -pro → wharttest_dev_pro, 其他 → wharttest_dev
-def _get_postgres_db_name():
-    env_db = os.environ.get("POSTGRES_DB")
-    if env_db:
-        return env_db
-    import subprocess
-    try:
-        branch = subprocess.check_output(
-            ["git", "rev-parse", "--abbrev-ref", "HEAD"],
-            stderr=subprocess.DEVNULL, cwd=BASE_DIR,
-        ).decode().strip()
-        if branch.endswith("-github"):
-            return "wharttest_dev_github"
-        if branch.endswith("-pro"):
-            return "wharttest_dev_pro"
-    except Exception:
-        pass
-    return "wharttest_dev"
-
-
 # 读取数据库类型（默认 postgres）。
 DATABASE_TYPE = os.environ.get("DATABASE_TYPE", "postgres")
 
@@ -233,7 +214,7 @@ if DATABASE_TYPE == "postgres":
     DATABASES = {
         "default": {
             "ENGINE": "django.db.backends.postgresql",
-            "NAME": _get_postgres_db_name(),
+            "NAME": get_postgres_db_name(BASE_DIR),
             "USER": os.environ.get("POSTGRES_USER", "postgres"),
             "PASSWORD": os.environ.get("POSTGRES_PASSWORD", "postgres"),
             "HOST": os.environ.get("POSTGRES_HOST", "127.0.0.1"),
@@ -249,24 +230,12 @@ if DATABASE_TYPE == "postgres":
     }
 else:
     # SQLite 配置（默认，用于本地开发）
-    # 读取可选 SQLite 文件路径。
-    DATABASE_PATH = os.environ.get("DATABASE_PATH")
-    if DATABASE_PATH:
-        # 使用环境变量指定的路径（Docker部署）
-        DATABASES = {
-            "default": {
-                "ENGINE": "django.db.backends.sqlite3",
-                "NAME": DATABASE_PATH,
-            }
+    DATABASES = {
+        "default": {
+            "ENGINE": "django.db.backends.sqlite3",
+            "NAME": get_sqlite_db_path(BASE_DIR),
         }
-    else:
-        # 使用默认路径（本地开发）
-        DATABASES = {
-            "default": {
-                "ENGINE": "django.db.backends.sqlite3",
-                "NAME": BASE_DIR / "db.sqlite3",
-            }
-        }
+    }
 
 
 # 密码校验

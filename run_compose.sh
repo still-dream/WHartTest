@@ -135,6 +135,137 @@ resolve_mode_and_compose() {
   echo "使用的 compose 文件: $COMPOSE_FILE"
 }
 
+normalize_branch_data_variant() {
+  case "$1" in
+    github|pro|dev|auto)
+      printf '%s' "$1"
+      ;;
+    *)
+      printf '%s' ""
+      ;;
+  esac
+}
+
+get_current_branch_name() {
+  git rev-parse --abbrev-ref HEAD 2>/dev/null || true
+}
+
+get_branch_data_variant() {
+  local branch_name="${1:-}"
+
+  if [[ "$branch_name" == *-github ]]; then
+    printf '%s' "github"
+    return 0
+  fi
+
+  if [[ "$branch_name" == *-pro ]]; then
+    printf '%s' "pro"
+    return 0
+  fi
+
+  printf '%s' "dev"
+}
+
+build_postgres_db_name() {
+  local variant="$1"
+  if [ "$variant" = "dev" ]; then
+    printf '%s' "wharttest_dev"
+  else
+    printf 'wharttest_dev_%s' "$variant"
+  fi
+}
+
+is_default_postgres_db_name() {
+  case "$1" in
+    ""|wharttest|wharttest_dev|wharttest_dev_github|wharttest_dev_pro)
+      return 0
+      ;;
+    *)
+      return 1
+      ;;
+  esac
+}
+
+is_default_sqlite_path() {
+  case "$1" in
+    ""|/app/data/db.sqlite3|db.sqlite3)
+      return 0
+      ;;
+    *)
+      return 1
+      ;;
+  esac
+}
+
+is_default_checkpoint_sqlite_path() {
+  case "$1" in
+    ""|/app/data/chat_history.sqlite|chat_history.sqlite)
+      return 0
+      ;;
+    *)
+      return 1
+      ;;
+  esac
+}
+
+configure_branch_data_variant() {
+  if [ "$DEPLOY_MODE" != "local" ]; then
+    return 0
+  fi
+
+  if [ "${WHARTTEST_AUTO_BRANCH_DATA:-1}" != "1" ]; then
+    echo "本地开发数据自动切换已禁用（WHARTTEST_AUTO_BRANCH_DATA=${WHARTTEST_AUTO_BRANCH_DATA:-0}）"
+    return 0
+  fi
+
+  local branch_name=""
+  local variant=""
+  local explicit_variant=""
+  local sqlite_path=""
+  local checkpoint_path=""
+
+  branch_name=$(get_current_branch_name)
+  explicit_variant=$(normalize_branch_data_variant "${POSTGRES_DB_VARIANT:-}")
+  if [ -n "$explicit_variant" ] && [ "$explicit_variant" != "auto" ]; then
+    variant="$explicit_variant"
+  else
+    variant=$(get_branch_data_variant "$branch_name")
+  fi
+
+  export POSTGRES_DB_VARIANT="$variant"
+
+  if is_default_postgres_db_name "${POSTGRES_DB:-}"; then
+    export POSTGRES_DB
+    POSTGRES_DB=$(build_postgres_db_name "$variant")
+  fi
+
+  if is_default_sqlite_path "${DATABASE_PATH:-}"; then
+    export DATABASE_PATH
+    if [ "$variant" = "dev" ]; then
+      DATABASE_PATH="/app/data/db.sqlite3"
+    else
+      DATABASE_PATH="/app/data/db_${variant}.sqlite3"
+    fi
+  fi
+
+  if is_default_checkpoint_sqlite_path "${LANGGRAPH_CHECKPOINT_SQLITE_PATH:-}"; then
+    export LANGGRAPH_CHECKPOINT_SQLITE_PATH
+    if [ "$variant" = "dev" ]; then
+      LANGGRAPH_CHECKPOINT_SQLITE_PATH="/app/data/chat_history.sqlite"
+    else
+      LANGGRAPH_CHECKPOINT_SQLITE_PATH="/app/data/chat_history_${variant}.sqlite"
+    fi
+  fi
+
+  echo "本地开发数据变体: $variant"
+  if [ -n "$branch_name" ]; then
+    echo "当前 Git 分支: $branch_name"
+  fi
+  echo "- POSTGRES_DB: ${POSTGRES_DB:-}"
+  echo "- DATABASE_PATH: ${DATABASE_PATH:-}"
+  echo "- LANGGRAPH_CHECKPOINT_SQLITE_PATH: ${LANGGRAPH_CHECKPOINT_SQLITE_PATH:-}"
+}
+
 probe_url() {
   local url="$1"
   local timeout="${2:-3}"
@@ -1562,6 +1693,7 @@ EOF2
 main() {
   load_env_file
   resolve_mode_and_compose "$@"
+  configure_branch_data_variant
   require_docker
 
   case "$DEPLOY_MODE" in
