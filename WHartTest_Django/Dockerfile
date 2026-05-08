@@ -38,7 +38,7 @@ RUN uv venv /opt/venv && \
     -r requirements.txt
 
 # 安装 Playwright 浏览器（Chromium）- 放在构建阶段以利用缓存
-RUN /opt/venv/bin/playwright install chromium
+RUN /opt/venv/bin/playwright install --with-deps chromium
 
 # BM25 模型将在首次使用时自动下载
 # 环境变量已在运行阶段设置
@@ -50,13 +50,28 @@ FROM python:3.11-slim
 
 WORKDIR /app
 
+# 设置时区为上海（中文环境通常配套东八区）
+RUN ln -snf /usr/share/zoneinfo/Asia/Shanghai /etc/localtime && \
+    echo "Asia/Shanghai" > /etc/timezone
+
+# 安装 locales 包，并生成 zh_CN.UTF-8 locale
+RUN apt-get update && \
+    apt-get install -y --no-install-recommends locales && \
+    sed -i 's/# zh_CN.UTF-8 UTF-8/zh_CN.UTF-8 UTF-8/g' /etc/locale.gen && \
+    locale-gen && \
+    rm -rf /var/lib/apt/lists/*
+
 # 设置环境变量
 ENV PYTHONUNBUFFERED=1 \
     PYTHONDONTWRITEBYTECODE=1 \
     PATH="/opt/venv/bin:$PATH" \
     PYTHONPATH="/app:$PYTHONPATH" \
     FASTEMBED_CACHE_PATH=/root/.cache/fastembed \
-    HF_ENDPOINT=https://hf-mirror.com
+    HF_ENDPOINT=https://hf-mirror.com \
+    PLAYWRIGHT_BROWSERS_PATH=/root/.cache/ms-playwright \
+    LANG=zh_CN.UTF-8 \
+    LC_ALL=zh_CN.UTF-8 \
+    TZ=Asia/Shanghai
 
 # 配置 apt 国内镜像加速（清华源）
 RUN sed -i 's|deb.debian.org|mirrors.tuna.tsinghua.edu.cn|g' /etc/apt/sources.list.d/debian.sources && \
@@ -100,6 +115,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 
 # 从构建阶段复制虚拟环境（不包含构建工具）
 COPY --from=builder /opt/venv /opt/venv
+COPY --from=builder /root/.cache/ms-playwright /root/.cache/ms-playwright
 
 # BM25 模型缓存目录将在运行时自动创建
 
