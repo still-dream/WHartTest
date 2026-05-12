@@ -169,6 +169,11 @@ const handleSend = async (requestData: { method: string, url: string, id?: numbe
     return
   }
 
+  if (!currentEnvironmentId.value && !hasExplicitBaseUrl(requestData.url)) {
+    Message.warning('请选择环境')
+    return
+  }
+
   try {
     // 根据是否是快速调试，设置对应的加载状态
     if (requestData.quickDebug) {
@@ -301,6 +306,10 @@ const environmentStore = useEnvironmentStore()
 const savingLoading = ref(false)
 const sendingLoading = ref(false)
 const quickDebugLoading = ref(false)
+
+const hasExplicitBaseUrl = (requestUrl: string) => {
+  return /^[a-zA-Z][a-zA-Z\d+.-]*:\/\//.test(requestUrl.trim())
+}
 
 const normalizeModuleValue = (moduleValue: unknown) => {
   if (typeof moduleValue === 'object' && moduleValue !== null && 'value' in moduleValue) {
