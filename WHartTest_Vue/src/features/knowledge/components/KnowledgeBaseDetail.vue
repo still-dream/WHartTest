@@ -104,7 +104,7 @@
                 <a-tag :color="getStatusColor(record.status)">
                   {{ getStatusText(record.status) }}
                 </a-tag>
-                <a-tooltip v-if="record.status === 'failed' && record.error_message" :content="record.error_message">
+                <a-tooltip v-if="record.status === 'failed' && record.error_message" :content="formatDocumentErrorMessage(record.error_message)">
                   <icon-exclamation-circle style="color: #f53f3f; margin-left: 4px; cursor: help;" />
                 </a-tooltip>
               </div>
@@ -270,6 +270,7 @@ import type { KnowledgeBase, Document, QueryResponse } from '../types/knowledge'
 import DocumentUploadModal from './DocumentUploadModal.vue';
 import DocumentDetailModal from './DocumentDetailModal.vue';
 import { useAppI18n } from '@/composables/useAppI18n';
+import { translateLegacyText, type AppLocale } from '@/i18n';
 
 interface Props {
   knowledgeBase: KnowledgeBase;
@@ -281,6 +282,7 @@ const emit = defineEmits<{
   close: [];
 }>();
 const { isEnglish } = useAppI18n();
+const currentLocale = computed<AppLocale>(() => (isEnglish.value ? 'en-US' : 'zh-CN'));
 
 const text = computed(() => (
   isEnglish.value
@@ -573,6 +575,11 @@ const documentColumns = computed(() => ([
 // 方法
 const formatDate = (dateString: string) => {
   return new Date(dateString).toLocaleString(isEnglish.value ? 'en-US' : 'zh-CN');
+};
+
+const formatDocumentErrorMessage = (message?: string) => {
+  if (!message) return '';
+  return translateLegacyText(message, currentLocale.value);
 };
 
 const getStatusColor = (status: string) => {

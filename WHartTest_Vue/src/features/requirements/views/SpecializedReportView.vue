@@ -46,7 +46,7 @@
     <div v-else-if="document && selectedReport" class="report-content">
       <!-- 左侧：专项分析选择器 -->
       <div class="left-panel">
-        <a-card title="📊 专项分析维度" class="analysis-selector-panel">
+        <a-card :title="`📊 ${pageText.analysisDimensions}`" class="analysis-selector-panel">
           <!-- 总体评分卡片 -->
           <div class="overall-score-card">
             <div class="score-display">
@@ -115,7 +115,7 @@
 
             <!-- 优势 -->
             <div v-if="currentAnalysisData.strengths && currentAnalysisData.strengths.length > 0" class="strengths-section">
-              <h4>✅ 优势</h4>
+              <h4>✅ {{ pageText.strengths }}</h4>
               <ul class="list-items">
                 <li v-for="(strength, index) in currentAnalysisData.strengths" :key="index">{{ strength }}</li>
               </ul>
@@ -123,7 +123,7 @@
 
             <!-- 改进建议 -->
             <div v-if="currentAnalysisData.recommendations && currentAnalysisData.recommendations.length > 0" class="recommendations-section">
-              <h4>💡 改进建议</h4>
+              <h4>💡 {{ pageText.improvementSuggestions }}</h4>
               <ul class="list-items">
                 <li v-for="(rec, index) in currentAnalysisData.recommendations" :key="index">{{ rec }}</li>
               </ul>
@@ -132,7 +132,7 @@
             <!-- 问题列表 -->
             <div class="issues-section">
               <div class="issues-header">
-                <h4>⚠️ 发现的问题 ({{ currentAnalysisIssues.length }}个)</h4>
+                <h4>⚠️ {{ pageText.issuesFound(currentAnalysisIssues.length) }}</h4>
                 <a-select v-model="priorityFilter" placeholder="按优先级筛选" style="width: 140px" allow-clear>
                   <a-option value="high">高优先级</a-option>
                   <a-option value="medium">中优先级</a-option>
@@ -189,12 +189,42 @@ import {
   IconArrowLeft,
   IconDownload
 } from '@arco-design/web-vue/es/icon';
+import { useAppI18n } from '@/composables/useAppI18n';
 import { RequirementDocumentService } from '../services/requirementService';
 import ReportVersionSelector from '../components/ReportVersionSelector.vue';
 
 // 路由
 const route = useRoute();
 const router = useRouter();
+const { isEnglish } = useAppI18n();
+
+const pageText = computed(() => (
+  isEnglish.value
+    ? {
+        analysisDimensions: 'Specialized analysis dimensions',
+        issuesFound: (count: number) => `Issues found (${count})`,
+        strengths: 'Strengths',
+        improvementSuggestions: 'Improvement suggestions',
+        completeness: 'completeness analysis',
+        consistency: 'consistency analysis',
+        testability: 'testability analysis',
+        feasibility: 'feasibility analysis',
+        clarity: 'clarity analysis',
+        logic: 'logic analysis',
+      }
+    : {
+        analysisDimensions: '专项分析维度',
+        issuesFound: (count: number) => `发现的问题 (${count}个)`,
+        strengths: '优势',
+        improvementSuggestions: '改进建议',
+        completeness: '完整性分析',
+        consistency: '一致性分析',
+        testability: '可测性分析',
+        feasibility: '可行性分析',
+        clarity: '清晰度分析',
+        logic: '逻辑分析',
+      }
+));
 
 // 响应式数据
 const loading = ref(false);
@@ -204,14 +234,14 @@ const priorityFilter = ref<string>('');
 const selectedReportId = ref<string>(''); // 当前选中的报告ID
 
 // 专项分析类型定义
-const analysisTypes = [
-  { key: 'completeness', title: '完整性分析', icon: '📋' },
-  { key: 'consistency', title: '一致性分析', icon: '🔗' },
-  { key: 'testability', title: '可测性分析', icon: '🧪' },
-  { key: 'feasibility', title: '可行性分析', icon: '⚙️' },
-  { key: 'clarity', title: '清晰度分析', icon: '💡' },
-  { key: 'logic', title: '逻辑分析', icon: '🧠' }
-];
+const analysisTypes = computed(() => [
+  { key: 'completeness', title: pageText.value.completeness, icon: '📋' },
+  { key: 'consistency', title: pageText.value.consistency, icon: '🔗' },
+  { key: 'testability', title: pageText.value.testability, icon: '🧪' },
+  { key: 'feasibility', title: pageText.value.feasibility, icon: '⚙️' },
+  { key: 'clarity', title: pageText.value.clarity, icon: '💡' },
+  { key: 'logic', title: pageText.value.logic, icon: '🧠' }
+]);
 
 // 计算属性
 // 所有报告版本列表(按时间倒序)
@@ -237,7 +267,7 @@ const selectedReport = computed(() => {
 });
 
 const getCurrentAnalysis = computed(() => {
-  return analysisTypes.find(a => a.key === selectedAnalysisType.value);
+  return analysisTypes.value.find(a => a.key === selectedAnalysisType.value);
 });
 
 const currentAnalysisData = computed(() => {

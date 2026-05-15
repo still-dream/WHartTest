@@ -218,6 +218,7 @@ import type {
 } from '../types/knowledge';
 import { getRequiredFieldsForEmbeddingService } from '../types/knowledge';
 import { useAppI18n } from '@/composables/useAppI18n';
+import { translateLegacyText, type AppLocale } from '@/i18n';
 
 interface Props {
   visible: boolean;
@@ -229,6 +230,14 @@ const emit = defineEmits<{
   saved: [];
 }>();
 const { isEnglish } = useAppI18n();
+const currentLocale = computed<AppLocale>(() => (isEnglish.value ? 'en-US' : 'zh-CN'));
+
+const localizeBackendMessage = (message: unknown, fallback: string) => {
+  if (typeof message !== 'string' || !message.trim()) {
+    return fallback;
+  }
+  return translateLegacyText(message, currentLocale.value);
+};
 
 const text = computed(() => (
   isEnglish.value
@@ -557,9 +566,9 @@ const testEmbeddingService = async () => {
     const result = await KnowledgeService.testEmbeddingConnection(payload);
     
     if (result.success) {
-      Message.success(result.message || text.value.embeddingTestSuccess);
+      Message.success(localizeBackendMessage(result.message, text.value.embeddingTestSuccess));
     } else {
-      Message.error(result.message || text.value.testFailed);
+      Message.error(localizeBackendMessage(result.message, text.value.testFailed));
     }
   } catch (error: any) {
     Message.error(error?.message || text.value.connectFailed);
@@ -598,9 +607,9 @@ const testRerankerService = async () => {
     const result = await KnowledgeService.testRerankerConnection(payload);
 
     if (result.success) {
-      Message.success(result.message || text.value.rerankerTestSuccess);
+      Message.success(localizeBackendMessage(result.message, text.value.rerankerTestSuccess));
     } else {
-      Message.error(result.message || text.value.rerankerTestFailed);
+      Message.error(localizeBackendMessage(result.message, text.value.rerankerTestFailed));
     }
   } catch (error: any) {
     Message.error(error?.message || text.value.rerankerConnectFailed);

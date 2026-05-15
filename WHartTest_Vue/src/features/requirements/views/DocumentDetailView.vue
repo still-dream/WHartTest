@@ -488,6 +488,7 @@ import type {
 import SplitOptionsModal from '../components/SplitOptionsModal.vue';
 import { useAppI18n } from '@/composables/useAppI18n';
 import { useProjectStore } from '@/store/projectStore';
+import { translateLegacyText, type AppLocale } from '@/i18n';
 
 // 路由
 const route = useRoute();
@@ -496,6 +497,12 @@ const router = useRouter();
 // 状态仓库
 const projectStore = useProjectStore();
 const { isEnglish } = useAppI18n();
+const currentLocale = computed<AppLocale>(() => (isEnglish.value ? 'en-US' : 'zh-CN'));
+
+const localizeBackendText = (value?: string, fallback = '') => {
+  if (!value) return fallback;
+  return translateLegacyText(value, currentLocale.value);
+};
 
 const pageText = computed(() => (
   isEnglish.value
@@ -1159,7 +1166,7 @@ const pollDocumentStatus = async () => {
         const latestReview = document.value.latest_review;
         reviewProgress.value = {
           progress: latestReview.progress ?? 0,
-          current_step: latestReview.current_step || pageText.value.processingText,
+          current_step: localizeBackendText(latestReview.current_step, pageText.value.processingText),
           completed_steps: latestReview.completed_steps || []
         };
       }
