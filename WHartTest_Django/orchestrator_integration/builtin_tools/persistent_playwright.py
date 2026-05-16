@@ -314,33 +314,76 @@ class _PlaywrightNodeProcess:
         return resp
 
     def exec_run_js(self, run_js_args: List[str], env: Dict[str, str], timeout_seconds: int) -> str:
+        """
+        执行 JavaScript 代码，支持会话断开后的自动恢复
+        
+        Args:
+            run_js_args: 要执行的 JavaScript 代码参数
+            env: 环境变量
+            timeout_seconds: 超时时间
+            
+        Returns:
+            执行结果输出，包含会话恢复信息（如果发生恢复）
+        """
         params: Dict[str, Any] = {"args": run_js_args or [], "env": env or {}}
-        resp = self.request("exec", params=params, timeout_seconds=timeout_seconds)
+        
+        max_retries = 2
+        retry_delay = 2  # 秒
+        was_restored = False
+        
+        for attempt in range(max_retries):
+            try:
+                resp = self.request("exec", params=params, timeout_seconds=timeout_seconds)
+                
+                stdout_lines = resp.get("stdout") or []
+                stderr_lines = resp.get("stderr") or []
+                if isinstance(stdout_lines, str):
+                    stdout_lines = [stdout_lines]
+                if isinstance(stderr_lines, str):
+                    stderr_lines = [stderr_lines]
 
-        stdout_lines = resp.get("stdout") or []
-        stderr_lines = resp.get("stderr") or []
-        if isinstance(stdout_lines, str):
-            stdout_lines = [stdout_lines]
-        if isinstance(stderr_lines, str):
-            stderr_lines = [stderr_lines]
+                output = ""
+                if stdout_lines:
+                    output += "\n".join(str(x) for x in stdout_lines if x is not None)
+                if stderr_lines:
+                    if output:
+                        output += "\n--- stderr ---\n"
+                    output += "\n".join(str(x) for x in stderr_lines if x is not None)
 
-        output = ""
-        if stdout_lines:
-            output += "\n".join(str(x) for x in stdout_lines if x is not None)
-        if stderr_lines:
-            if output:
-                output += "\n--- stderr ---\n"
-            output += "\n".join(str(x) for x in stderr_lines if x is not None)
+                if not resp.get("ok", False):
+                    err = resp.get("error")
+                    if err:
+                        # 检测会话终止错误，进行重试
+                        if "session" in str(err).lower() and "terminated" in str(err).lower() and attempt < max_retries - 1:
+                            logger.warning(f"[persistent_playwright] 会话终止，第 {attempt + 1}/{max_retries} 次重试...")
+                            time.sleep(retry_delay)
+                            continue
+                        if output:
+                            output = f"{err}\n{output}"
+                        else:
+                            output = str(err)
+                
+                # 检查是否发生了会话恢复
+                resp_state = resp.get("state", {})
+                if resp_state.get("hasSavedState") and attempt > 0:
+                    was_restored = True
+                
+                return output, was_restored
+                
+            except PlaywrightPersistentSessionError as e:
+                if attempt < max_retries - 1:
+                    logger.warning(f"[persistent_playwright] 会话错误，第 {attempt + 1}/{max_retries} 次重试: {e}")
+                    time.sleep(retry_delay)
+                    continue
+                raise
+            except Exception as e:
+                if attempt < max_retries - 1:
+                    logger.warning(f"[persistent_playwright] 执行错误，第 {attempt + 1}/{max_retries} 次重试: {e}")
+                    time.sleep(retry_delay)
+                    continue
+                raise
 
-        if not resp.get("ok", False):
-            err = resp.get("error")
-            if err:
-                if output:
-                    output = f"{err}\n{output}"
-                else:
-                    output = str(err)
-
-        return output
+        raise PlaywrightPersistentSessionError(f"执行失败，已重试 {max_retries} 次")
 
     def terminate(self, graceful: bool = True) -> None:
         if self._proc is None:
@@ -473,7 +516,11 @@ class PlaywrightSessionManager:
 
         entry.proc._start(env=env)
 
-        output = entry.proc.exec_run_js(run_js_args=run_js_args, env=env, timeout_seconds=int(timeout_seconds))
+        output, was_restored = entry.proc.exec_run_js(run_js_args=run_js_args, env=env, timeout_seconds=int(timeout_seconds))
+
+        # 如果会话被恢复，添加提示信息
+        if was_restored:
+            output = f"[会话已自动恢复] 浏览器会话曾断开，已自动恢复到之前的页面状态\n\n{output}"
 
         # 执行结束后再次更新时间戳
         with self._lock:

@@ -715,11 +715,43 @@ if __name__ == "__main__":
 - 在所有测试步骤执行完成后再生成脚本
 - **禁止在脚本中使用 emoji 字符**（如 ✅ ❌ 等），使用纯文本描述
 - **每个步骤后必须截图**，截图文件名格式: `step{N}_{action}.png`
+- **截图必须使用 `_take_screenshot(page, filename)` 函数**（脚本模板中已内置），不要直接使用 `page.screenshot(path=...)`
 - **每个步骤后必须 print**，输出格式: `步骤{N}: {描述}成功`
 - **关键操作必须有断言**，验证操作的预期结果
 - **生成后必须执行脚本**，验证脚本的可执行性
 - **禁止使用虚构的选择器**：如 `.welcome-message`、`#main-content` 等，必须使用执行时实际使用的选择器
 - **禁止照抄模板占位符**：模板中的 `【替换为...】` 只是提示，必须替换为实际值
+
+
+### 滑块验证码处理（非常重要）
+**登录场景下，点击登录按钮后经常会弹出滑块验证码（如 `.verifybox` 元素），必须在生成的脚本中处理！**
+
+脚本模板中已内置滑块验证功能函数，你只需在登录按钮点击后添加以下代码：
+
+```python
+# 处理滑块验证码（如果出现）
+_handle_slider_captcha(page, max_retries=20)
+```
+
+**滑块验证码的特征**：
+- 页面出现 `.verifybox` 弹窗
+- 页面出现"请完成安全验证"文字
+- 页面出现可拖动的滑块 `.verify-move-block`
+
+**在脚本中的使用示例**：
+```python
+# 点击登录按钮
+page.get_by_role("button", name="登录").click()
+print(f"步骤{{step}}: 点击登录按钮成功")
+_take_screenshot(page, f"step{{step}}_click_login.png")
+
+# 处理滑块验证码（登录后如果出现滑块验证，自动处理）
+_handle_slider_captcha(page, max_retries=20)
+_take_screenshot(page, f"step{{step}}_slider_captcha.png")
+
+# 验证登录结果
+page.wait_for_load_state("networkidle")
+```
 
 
 ### Python Playwright 语法规范（非常重要）
@@ -816,10 +848,41 @@ page.get_by_placeholder("用户名").fill("admin")
             })
 
             # 12. 创建 AgentOrchestrator 并执行
+            _mcp_configs_for_refresh = client_config if active_mcp_configs else {}
+
+            async def _on_mcp_session_refresh():
+                """MCP会话失效时的刷新回调：重建SSE/WebSocket连接并返回新工具列表"""
+                if not _mcp_configs_for_refresh:
+                    logger.warning("on_mcp_session_refresh: 没有MCP配置可用于刷新")
+                    return mcp_tools_list
+
+                try:
+                    new_tools = await mcp_session_manager.refresh_tools_for_session(
+                        _mcp_configs_for_refresh,
+                        user_id=str(request.user.id),
+                        project_id=str(project_id),
+                        session_id=session_id
+                    )
+                    if new_tools:
+                        from orchestrator_integration.builtin_tools import get_builtin_tools
+                        builtin_tools = get_builtin_tools(
+                            user_id=request.user.id,
+                            project_id=int(project_id),
+                            test_case_id=test_case_id,
+                            chat_session_id=session_id,
+                        )
+                        new_tools.extend(builtin_tools)
+                        logger.info(f"on_mcp_session_refresh: 刷新后共 {len(new_tools)} 个工具（含 {len(builtin_tools)} 个内置工具）")
+                    return new_tools
+                except Exception as e:
+                    logger.error(f"on_mcp_session_refresh: 刷新失败: {e}", exc_info=True)
+                    return mcp_tools_list
+
             orchestrator = AgentOrchestrator(
                 llm=llm,
                 tools=mcp_tools_list,
-                max_steps=500
+                max_steps=500,
+                on_mcp_session_refresh=_on_mcp_session_refresh
             )
 
             # 13. 执行 Agent Loop（流式输出每个步骤）
@@ -1411,8 +1474,16 @@ page.get_by_placeholder("用户名").fill("admin")
                 
                 # 检查工具调用失败计数
                 if step_result.get('error') and step_result.get('tool_results'):
-                    consecutive_tool_failures += 1
-                    logger.warning(f"工具调用失败 ({consecutive_tool_failures}/{max_consecutive_tool_failures}): {step_result['error'][:100]}")
+                    error_msg = step_result['error']
+                    is_session_error = AgentOrchestrator._is_session_terminated_error(error_msg)
+                    is_recoverable_error = AgentOrchestrator._is_recoverable_tool_error(error_msg)
+                    if is_session_error:
+                        logger.warning(f"工具调用会话断开（已自动刷新重试，不计入连续失败）: {error_msg[:100]}")
+                    elif is_recoverable_error:
+                        logger.warning(f"工具调用可恢复错误（AI可自行调整策略，不计入连续失败）: {error_msg[:100]}")
+                    else:
+                        consecutive_tool_failures += 1
+                        logger.warning(f"工具调用失败 ({consecutive_tool_failures}/{max_consecutive_tool_failures}): {error_msg[:100]}")
                     
                     if consecutive_tool_failures >= max_consecutive_tool_failures:
                         task.status = 'failed'

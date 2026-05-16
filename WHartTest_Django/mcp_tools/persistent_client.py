@@ -16,6 +16,8 @@ logger = logging.getLogger(__name__)
 class _PersistentSessionEntry:
     """管理长寿命MCP会话，在单独任务中处理上下文进入/退出。"""
 
+    KEEPALIVE_INTERVAL = 30
+
     def __init__(self, server_name: str, session_context):
         self.server_name = server_name
         self.session_context = session_context
@@ -27,6 +29,7 @@ class _PersistentSessionEntry:
         self._closed_event = asyncio.Event()
         self._error: Optional[BaseException] = None
         self.load_lock = asyncio.Lock()
+        self._keepalive_task = None
 
         self._task = asyncio.create_task(
             self._run(),
@@ -38,6 +41,10 @@ class _PersistentSessionEntry:
             async with self.session_context as session:
                 self.session = session
                 self._ready_event.set()
+                self._keepalive_task = asyncio.create_task(
+                    self._keepalive_loop(),
+                    name=f"mcp-keepalive[{self.server_name}]",
+                )
                 await self._close_requested.wait()
         except Exception as exc:
             self._error = exc
@@ -50,8 +57,43 @@ class _PersistentSessionEntry:
                 exc_info=True,
             )
         finally:
+            if self._keepalive_task and not self._keepalive_task.done():
+                self._keepalive_task.cancel()
             self.session = None
             self._closed_event.set()
+
+    async def _keepalive_loop(self):
+        """定期发送ping保持SSE连接活跃，防止超时断开"""
+        try:
+            while not self._close_requested.is_set():
+                await asyncio.wait_for(
+                    self._close_requested.wait(),
+                    timeout=self.KEEPALIVE_INTERVAL,
+                )
+                return
+        except asyncio.TimeoutError:
+            pass
+        except asyncio.CancelledError:
+            return
+
+        session = self.session
+        if session is None:
+            return
+
+        try:
+            if hasattr(session, 'send_ping'):
+                await asyncio.wait_for(session.send_ping(), timeout=10)
+                logger.debug(f"Keepalive ping sent for {self.server_name}")
+        except Exception as exc:
+            logger.warning(f"Keepalive ping failed for {self.server_name}: {exc}")
+        finally:
+            if not self._close_requested.is_set():
+                if self._keepalive_task and not self._keepalive_task.done():
+                    self._keepalive_task.cancel()
+                self._keepalive_task = asyncio.create_task(
+                    self._keepalive_loop(),
+                    name=f"mcp-keepalive[{self.server_name}]",
+                )
 
     async def get_session(self):
         await self._ready_event.wait()
@@ -460,6 +502,72 @@ class GlobalMCPSessionManager:
         finally:
             self.session_contexts.pop(session_key, None)
     
+    async def refresh_tools_for_session(
+        self,
+        server_configs: Dict[str, Any],
+        user_id: str,
+        project_id: str,
+        session_id: str = None,
+    ) -> List[BaseTool]:
+        """
+        强制刷新指定会话的MCP工具（关闭旧会话并重建）
+
+        当MCP工具调用返回"Session terminated"等会话失效错误时，
+        调用此方法重建SSE/WebSocket连接，获取新的工具实例。
+
+        Args:
+            server_configs: MCP服务器配置
+            user_id: 用户ID
+            project_id: 项目ID
+            session_id: 对话会话ID（可选）
+
+        Returns:
+            刷新后的工具列表
+        """
+        if session_id:
+            session_key = f"{user_id}_{project_id}_{session_id}"
+        else:
+            session_key = f"{user_id}_{project_id}"
+
+        logger.info(f"Refreshing MCP tools for session: {session_key}")
+
+        self.tools_cache.pop(session_key, None)
+
+        client = self.session_clients.get(session_key)
+        if client:
+            try:
+                await client.close_sessions()
+                logger.info(f"Closed old MCP client for session: {session_key}")
+            except Exception as exc:
+                logger.error(f"Error closing old MCP client for {session_key}: {exc}", exc_info=True)
+
+        async with self._lock:
+            client = PersistentMCPClient(server_configs)
+            self.session_clients[session_key] = client
+            logger.info(f"Created new MCP client for session: {session_key}")
+
+        try:
+            tools = await client.get_all_persistent_tools()
+        except Exception as exc:
+            logger.error(f"Failed to load tools after refresh for {session_key}: {exc}", exc_info=True)
+            tools = []
+
+        if tools:
+            self.tools_cache[session_key] = tools
+            logger.info(f"Refreshed {len(tools)} tools for session: {session_key}")
+        else:
+            logger.warning(f"No tools loaded after refresh for session: {session_key}")
+
+        self.session_contexts[session_key] = {
+            'client': client,
+            'last_used': asyncio.get_event_loop().time(),
+            'user_id': user_id,
+            'project_id': project_id,
+            'session_id': session_id
+        }
+
+        return tools
+
     async def cleanup_all_user_sessions(self, user_id: str, project_id: str):
         """清理用户在某个项目下的所有会话，包括关闭所有独立客户端"""
         prefix = f"{user_id}_{project_id}_"

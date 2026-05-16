@@ -113,10 +113,8 @@ def create_screenshot_page_wrapper(real_page, interval=0.1):
             return attr
         
         def screenshot(self, *args, **kwargs):
-            """特殊处理 screenshot 方法 - 调试模式下不保存文件，只发送到前端"""
-            # 移除 path 参数，调试模式下不保存文件
-            kwargs.pop('path', None)
-            # 截图并发送到前端
+            """截图并发送到前端，同时保存到文件（如果指定了path）"""
+            save_path = kwargs.pop('path', None)
             screenshot_bytes = self._real_page.screenshot(*args, **kwargs)
             try:
                 frame_data = base64.b64encode(screenshot_bytes).decode('utf-8')
@@ -124,6 +122,16 @@ def create_screenshot_page_wrapper(real_page, interval=0.1):
                 frame_count[0] += 1
             except Exception as e:
                 send_message('log', {'message': f'发送截图帧失败: {str(e)}'})
+            if save_path:
+                try:
+                    save_dir = os.path.dirname(save_path)
+                    if save_dir:
+                        os.makedirs(save_dir, exist_ok=True)
+                    with open(save_path, 'wb') as f:
+                        f.write(screenshot_bytes)
+                    send_message('log', {'message': f'截图已保存: {save_path}'})
+                except Exception as e:
+                    send_message('log', {'message': f'保存截图文件失败: {str(e)}'})
             return screenshot_bytes
         
         # 显式定义常用方法，确保截图被触发

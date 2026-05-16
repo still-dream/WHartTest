@@ -136,6 +136,15 @@ async function main() {
     context: null,
     page: null,
   };
+  
+  // 页面状态快照，用于会话恢复
+  let savedPageState = {
+    url: null,
+    cookies: [],
+    localStorage: {},
+    sessionStorage: {},
+    timestamp: 0,
+  };
 
   async function loadDeps() {
     if (playwright && helpers) return;
@@ -170,10 +179,95 @@ async function main() {
     };
   }
 
+  async function savePageState() {
+    try {
+      if (!state.page || typeof state.page.isClosed === 'function' && state.page.isClosed()) {
+        return;
+      }
+      
+      const url = await state.page.url();
+      const cookies = state.context ? await state.context.cookies() : [];
+      
+      const localStorage = await state.page.evaluate(() => {
+        const data = {};
+        for (let i = 0; i < localStorage.length; i++) {
+          const key = localStorage.key(i);
+          data[key] = localStorage.getItem(key);
+        }
+        return data;
+      }).catch(() => ({}));
+      
+      const sessionStorage = await state.page.evaluate(() => {
+        const data = {};
+        for (let i = 0; i < sessionStorage.length; i++) {
+          const key = sessionStorage.key(i);
+          data[key] = sessionStorage.getItem(key);
+        }
+        return data;
+      }).catch(() => ({}));
+      
+      savedPageState = {
+        url,
+        cookies,
+        localStorage,
+        sessionStorage,
+        timestamp: Date.now(),
+      };
+      
+      serverLog('[savePageState] 页面状态已保存:', url);
+    } catch (e) {
+      serverLog('[savePageState] 保存失败:', e.message);
+    }
+  }
+
+  async function restorePageState() {
+    if (!savedPageState.url || !state.page) {
+      return false;
+    }
+    
+    try {
+      serverLog('[restorePageState] 尝试恢复页面状态:', savedPageState.url);
+      
+      // 设置 cookies
+      if (state.context && savedPageState.cookies.length > 0) {
+        await state.context.addCookies(savedPageState.cookies);
+      }
+      
+      // 导航到保存的 URL
+      await state.page.goto(savedPageState.url);
+      
+      // 恢复 localStorage
+      if (Object.keys(savedPageState.localStorage).length > 0) {
+        await state.page.evaluate((data) => {
+          for (const [key, value] of Object.entries(data)) {
+            localStorage.setItem(key, value);
+          }
+        }, savedPageState.localStorage);
+      }
+      
+      // 恢复 sessionStorage
+      if (Object.keys(savedPageState.sessionStorage).length > 0) {
+        await state.page.evaluate((data) => {
+          for (const [key, value] of Object.entries(data)) {
+            sessionStorage.setItem(key, value);
+          }
+        }, savedPageState.sessionStorage);
+      }
+      
+      serverLog('[restorePageState] 页面状态恢复成功');
+      return true;
+    } catch (e) {
+      serverLog('[restorePageState] 恢复失败:', e.message);
+      return false;
+    }
+  }
+
   async function ensureBrowserContextPage() {
     await loadDeps();
+    
+    const wasConnected = state.browser && typeof state.browser.isConnected === 'function' && state.browser.isConnected();
 
-    if (!state.browser || (typeof state.browser.isConnected === 'function' && !state.browser.isConnected())) {
+    if (!state.browser || !state.browser.isConnected()) {
       const browserType = (process.env.PW_BROWSER_TYPE || 'chromium').toLowerCase();
       state.browser = await helpers.launchBrowser(browserType);
       state.context = null;
@@ -186,6 +280,11 @@ async function main() {
 
     if (!state.page || (typeof state.page.isClosed === 'function' && state.page.isClosed())) {
       state.page = await state.context.newPage();
+      
+      // 如果之前浏览器断开了，尝试恢复页面状态
+      if (!wasConnected && savedPageState.url) {
+        await restorePageState();
+      }
     }
   }
 
@@ -332,14 +431,21 @@ state.page = page;
           }
 
           const result = await runUserCode(code);
+          
+          // 执行成功后保存页面状态，用于会话恢复
+          if (result.ok) {
+            await savePageState();
+          }
+          
           const pageUrl = state.page && typeof state.page.url === 'function' ? state.page.url() : null;
+          const hasSavedState = savedPageState.url ? true : false;
           send({
             id,
             ok: !!result.ok,
             stdout: result.stdout || [],
             stderr: result.stderr || [],
             error: result.error,
-            state: { pageUrl },
+            state: { pageUrl, hasSavedState },
           });
           return;
         }

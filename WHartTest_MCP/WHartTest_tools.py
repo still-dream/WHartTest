@@ -382,7 +382,6 @@ def save_operation_screenshots_to_the_application_case(
     WHartTest平台保存操作截图到对应用例中
     """
     try:
-        # 参数验证
         if not project_id:
             return "项目id不能为空"
         if not case_id:
@@ -392,29 +391,31 @@ def save_operation_screenshots_to_the_application_case(
         if not title:
             return "截图标题不能为空"
 
-        # 检查文件是否存在
         import os
-        if not os.path.exists(file_path):
-            return f"文件不存在: {file_path}"
+        resolved_path = file_path
+        if not os.path.isabs(file_path) and os.sep not in file_path and '/' not in file_path:
+            screenshot_dir = os.environ.get('SCREENSHOT_DIR', '')
+            if screenshot_dir:
+                resolved_path = os.path.join(screenshot_dir, file_path)
+
+        if not os.path.exists(resolved_path):
+            return f"文件不存在: {resolved_path}"
 
         url = base_url + f"/api/projects/{project_id}/testcases/{case_id}/upload-screenshots/"
 
-        # 根据文件扩展名确定 MIME 类型
-        file_ext = os.path.splitext(file_path)[1].lower()
+        file_ext = os.path.splitext(resolved_path)[1].lower()
         mime_types = {
             '.png': 'image/png',
             '.jpg': 'image/jpeg',
             '.jpeg': 'image/jpeg',
             '.gif': 'image/gif'
         }
-        content_type = mime_types.get(file_ext, 'image/png')  # 默认为 png
+        content_type = mime_types.get(file_ext, 'image/png')
 
-        # 准备文件和表单数据
-        with open(file_path, 'rb') as file:
-            files = {'screenshots': (os.path.basename(file_path), file, content_type)}
+        with open(resolved_path, 'rb') as file:
+            files = {'screenshots': (os.path.basename(resolved_path), file, content_type)}
 
-            # 只添加有值的字段
-            data = {'title': title}  # title 是必填的
+            data = {'title': title}
 
             if description and description.strip():
                 data['description'] = description
@@ -423,10 +424,8 @@ def save_operation_screenshots_to_the_application_case(
             if page_url and page_url.strip():
                 data['page_url'] = page_url
 
-            # 发起请求 - 注意这里不使用json参数，而是用data参数
             response = requests.post(url, headers=headers, files=files, data=data)
 
-            # 检查响应状态
             response.raise_for_status()
 
             # 处理响应

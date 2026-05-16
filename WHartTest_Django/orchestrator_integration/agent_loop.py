@@ -56,7 +56,40 @@ class AgentOrchestrator:
 - 严禁在没有任何新信息的情况下重复调用同一工具（同名同参数）。如果上一步工具返回已经包含所需信息，请直接进入下一步（如生成用例标题并调用保存工具），或给出无法继续的原因。
 """
 
-    def __init__(self, llm, tools=None, max_steps: int = None):
+    SESSION_TERMINATED_MARKERS = [
+        'session terminated',
+        'session is closed',
+        'session has been closed',
+        'sse connection',
+    ]
+
+    PLAYWRIGHT_RECOVERABLE_MARKERS = [
+        'ref ',
+        'not found in the current page snapshot',
+        'try capturing new snapshot',
+        'element is not attached',
+        'element is detached',
+        'waiting for element',
+        'timeout waiting for',
+    ]
+
+    @staticmethod
+    def _is_session_terminated_error(error_str: str) -> bool:
+        """判断错误是否为MCP会话断开导致的（需要重建MCP连接）"""
+        if not error_str:
+            return False
+        lower = error_str.lower()
+        return any(marker in lower for marker in AgentOrchestrator.SESSION_TERMINATED_MARKERS)
+
+    @staticmethod
+    def _is_recoverable_tool_error(error_str: str) -> bool:
+        """判断错误是否为可恢复的工具调用错误（AI可通过调整策略自行恢复，不应终止任务）"""
+        if not error_str:
+            return False
+        lower = error_str.lower()
+        return any(marker in lower for marker in AgentOrchestrator.PLAYWRIGHT_RECOVERABLE_MARKERS)
+
+    def __init__(self, llm, tools=None, max_steps: int = None, on_mcp_session_refresh=None):
         """
         初始化编排器
         
@@ -64,10 +97,13 @@ class AgentOrchestrator:
             llm: LangChain LLM 实例
             tools: 可用的工具列表
             max_steps: 最大步骤数
+            on_mcp_session_refresh: MCP会话失效时的刷新回调，签名为 async def callback() -> list
+                                    返回刷新后的工具列表，编排器会自动更新self.tools
         """
         self.llm = llm
         self.tools = tools or []
         self.max_steps = max_steps or self.DEFAULT_MAX_STEPS
+        self.on_mcp_session_refresh = on_mcp_session_refresh
         
         # 如果有工具，绑定到 LLM
         if self.tools:
@@ -240,22 +276,34 @@ class AgentOrchestrator:
         
         await save()
     
+    MAX_HISTORY_CHARS = 30000
+
     def _build_step_context(self, blackboard: AgentBlackboard, goal: str) -> Dict:
         """
         构建单步执行的上下文（精简版）
         
-        不包含完整的工具输出，只包含历史摘要
+        当前步骤获得完整工具输出，历史记录只保留精简摘要。
         """
         history = blackboard.get_recent_history(self.DEFAULT_HISTORY_WINDOW)
         history_text = '\n'.join([f"- {h}" for h in history]) if history else '（无历史）'
-        
+
+        if len(history_text) > self.MAX_HISTORY_CHARS:
+            lines = history_text.split('\n')
+            kept = []
+            total = 0
+            for line in reversed(lines):
+                if total + len(line) + 1 > self.MAX_HISTORY_CHARS:
+                    break
+                kept.append(line)
+                total += len(line) + 1
+            kept.reverse()
+            history_text = '\n'.join(kept) + '\n...[更早的历史记录已省略]'
+
         current_state = blackboard.current_state or {}
-        
-        # 提取跨对话历史（从 initial_context 传入）
+
         conversation_history = current_state.get('conversation_history', '')
         conversation_history_text = conversation_history if conversation_history else '（无对话历史）'
-        
-        # ⚠️ 修复：从 current_state 中排除 conversation_history，避免重复传递给 LLM
+
         state_for_prompt = {k: v for k, v in current_state.items() if k != 'conversation_history'}
         state_text = json.dumps(state_for_prompt, ensure_ascii=False, indent=2) if state_for_prompt else '（无）'
         
@@ -290,6 +338,24 @@ class AgentOrchestrator:
         # 过滤掉 image_base64，避免传入 format()
         format_context = {k: v for k, v in context.items() if k != 'image_base64'}
         system_prompt = self.STEP_SYSTEM_PROMPT.format(**format_context)
+
+        # 安全阀：如果system_prompt过长，强制截断history和state
+        # 避免因上下文过大导致LLM返回400错误（如196608 token限制的模型约300k字符）
+        max_prompt_chars = 150000
+        if len(system_prompt) > max_prompt_chars:
+            logger.warning(f"_execute_step: system_prompt长度 {len(system_prompt)} 超过 {max_prompt_chars}，将截断上下文")
+            history_text = format_context.get('history', '')
+            if len(history_text) > 10000:
+                history_lines = history_text.split('\n')
+                keep_lines = history_lines[-10:]
+                format_context['history'] = '\n'.join(keep_lines) + '\n...[历史记录已截断，仅保留最近10条]'
+            state_text = format_context.get('current_state', '')
+            if len(state_text) > 15000:
+                format_context['current_state'] = state_text[:15000] + '...[状态信息已截断]'
+            conversation_history_text = format_context.get('conversation_history', '')
+            if len(conversation_history_text) > 20000:
+                format_context['conversation_history'] = conversation_history_text[:20000] + '...[对话历史已截断]'
+            system_prompt = self.STEP_SYSTEM_PROMPT.format(**format_context)
 
         # 检查是否有图片数据（多模态支持）
         image_base64 = context.get('image_base64')
@@ -756,7 +822,7 @@ class AgentOrchestrator:
         return result
     
     async def _execute_tools(self, tool_calls: List) -> List[Dict]:
-        """执行工具调用"""
+        """执行工具调用，支持会话断开时自动刷新重试"""
         results = []
         
         for tool_call in tool_calls:
@@ -770,7 +836,6 @@ class AgentOrchestrator:
                 })
                 continue
             
-            # 查找工具
             tool = self._find_tool(tool_name)
             if not tool:
                 results.append({
@@ -780,19 +845,74 @@ class AgentOrchestrator:
                 continue
             
             try:
-                # 执行工具（支持同步/异步）
                 output = await self._invoke_tool(tool, tool_args)
+                output_str = str(output) if output else ''
+
+                if self._is_session_terminated_error(output_str) and self.on_mcp_session_refresh:
+                    logger.warning(f"工具 {tool_name} 输出包含会话断开标记，尝试刷新MCP连接并重试...")
+                    try:
+                        new_tools = await self.on_mcp_session_refresh()
+                        if new_tools:
+                            self.tools = new_tools
+                            self.llm_with_tools = self.llm.bind_tools(self.tools)
+                            refreshed_tool = self._find_tool(tool_name)
+                            if refreshed_tool:
+                                await asyncio.sleep(2)
+                                retry_output = await self._invoke_tool(refreshed_tool, tool_args)
+                                retry_str = str(retry_output) if retry_output else ''
+                                if not self._is_session_terminated_error(retry_str):
+                                    results.append({
+                                        'tool_name': tool_name,
+                                        'input': tool_args,
+                                        'output': retry_output
+                                    })
+                                    logger.info(f"工具 {tool_name} 刷新后重试成功")
+                                    continue
+                                else:
+                                    logger.warning(f"工具 {tool_name} 刷新后重试仍然会话断开")
+                                    results.append({
+                                        'tool_name': tool_name,
+                                        'input': tool_args,
+                                        'error': f'Session terminated (刷新重试后仍失败): {retry_str[:500]}'
+                                    })
+                                    continue
+                    except Exception as retry_err:
+                        logger.error(f"工具 {tool_name} 刷新重试失败: {retry_err}", exc_info=True)
+
                 results.append({
                     'tool_name': tool_name,
                     'input': tool_args,
                     'output': output
                 })
             except Exception as e:
+                error_str = str(e)
                 logger.error(f"工具 {tool_name} 调用失败: {e}", exc_info=True)
+
+                if self._is_session_terminated_error(error_str) and self.on_mcp_session_refresh:
+                    logger.warning(f"工具 {tool_name} 触发会话断开，尝试刷新MCP连接并重试...")
+                    try:
+                        new_tools = await self.on_mcp_session_refresh()
+                        if new_tools:
+                            self.tools = new_tools
+                            self.llm_with_tools = self.llm.bind_tools(self.tools)
+                            refreshed_tool = self._find_tool(tool_name)
+                            if refreshed_tool:
+                                await asyncio.sleep(2)
+                                output = await self._invoke_tool(refreshed_tool, tool_args)
+                                results.append({
+                                    'tool_name': tool_name,
+                                    'input': tool_args,
+                                    'output': output
+                                })
+                                logger.info(f"工具 {tool_name} 刷新后重试成功")
+                                continue
+                    except Exception as retry_err:
+                        logger.error(f"工具 {tool_name} 刷新重试失败: {retry_err}", exc_info=True)
+
                 results.append({
                     'tool_name': tool_name,
                     'input': tool_args,
-                    'error': str(e)
+                    'error': error_str
                 })
         
         return results
@@ -828,78 +948,83 @@ class AgentOrchestrator:
     
     async def _invoke_tool(self, tool, tool_args: Dict[str, Any]) -> Any:
         """
-        统一处理同步与异步工具
-        """
-        # 处理 MCP 工具的参数类型问题
-        # 某些 MCP 工具期望字符串参数，但 LLM 返回的是解析后的对象
-        tool_name = getattr(tool, 'name', str(tool))
+        统一处理同步与异步工具调用
         
-        # edit_diagram 的 operations 参数需要是 JSON 字符串
+        MCP会话断开时的自动刷新重试由 _execute_tools 负责（调用后检查输出），
+        此处仅执行单次工具调用。
+        """
+        tool_name = getattr(tool, 'name', str(tool))
+
         if tool_name == 'edit_diagram' and 'operations' in tool_args:
             ops = tool_args['operations']
             if not isinstance(ops, str):
                 tool_args['operations'] = json.dumps(ops, ensure_ascii=False)
-        
-        # display_diagram 的 pages 参数需要是 JSON 字符串
+
         if tool_name == 'display_diagram' and 'pages' in tool_args:
             pages = tool_args['pages']
             if not isinstance(pages, str):
                 tool_args['pages'] = json.dumps(pages, ensure_ascii=False)
-        
-        # 优先使用异步方法
-        if hasattr(tool, 'ainvoke'):
-            return await tool.ainvoke(tool_args)
-        
-        # 同步方法
-        invoke_callable = getattr(tool, 'invoke', None)
-        if not invoke_callable and callable(tool):
-            invoke_callable = tool
-        if not invoke_callable:
-            raise AttributeError(f'工具 {getattr(tool, "name", str(tool))} 缺少 invoke/ainvoke 实现')
-        
-        return await asyncio.to_thread(invoke_callable, tool_args)
+
+        async def _do_invoke(t, args):
+            if hasattr(t, 'ainvoke'):
+                return await t.ainvoke(args)
+            invoke_callable = getattr(t, 'invoke', None)
+            if not invoke_callable and callable(t):
+                invoke_callable = t
+            if not invoke_callable:
+                raise AttributeError(f'工具 {getattr(t, "name", str(t))} 缺少 invoke/ainvoke 实现')
+            return await asyncio.to_thread(invoke_callable, args)
+
+        return await _do_invoke(tool, tool_args)
     
     def _summarize_tool_results(self, tool_results: List[Dict]) -> str:
         """
         生成工具结果摘要
-        
-        这是关键：不把完整结果放入上下文，只保留摘要
+
+        当前步骤的工具输出完整保留（DOM快照、JS代码对生成自动化脚本至关重要），
+        Token控制由_build_step_context中的历史截断和_execute_step的安全阀负责。
         """
         summaries = []
-        
+
         for result in tool_results:
             tool_name = result.get('tool_name', '')
-            
-            # 跳过没有工具名的结果（通常是解析错误）
+
             if not tool_name:
                 continue
-            
+
             if result.get('error'):
-                summaries.append(f"{tool_name}: 失败 - {result['error']}")
+                err_text = result['error']
+                if len(err_text) > 2000:
+                    err_text = err_text[:2000] + '...[错误信息已截断]'
+                summaries.append(f"{tool_name}: 失败 - {err_text}")
             else:
                 output = result.get('output', '')
-                
-                # 完整保留所有工具结果，不做截断
+
                 if isinstance(output, str):
-                    summary = output
+                    raw_output = output
                 elif isinstance(output, (dict, list)):
-                    summary = json.dumps(output, ensure_ascii=False, indent=2)
+                    raw_output = json.dumps(output, ensure_ascii=False, indent=2)
                 else:
-                    summary = str(output)
-                
-                summaries.append(f"{tool_name}:\n{summary}")
-        
+                    raw_output = str(output)
+
+                summaries.append(f"{tool_name}:\n{raw_output}")
+
         return '\n\n'.join(summaries)
     
     async def _update_blackboard(self, blackboard: AgentBlackboard, step_result: Dict):
-        """更新 Blackboard"""
+        """更新 Blackboard
+        
+        关键设计：历史记录存储精简摘要（而非完整工具输出），
+        完整输出仅存在于当前步骤的上下文中，用完即丢。
+        """
         from asgiref.sync import sync_to_async
         
-        # 生成本步骤的摘要
         summary_parts = []
         
         if step_result.get('tool_summary'):
-            summary_parts.append(step_result['tool_summary'])
+            tool_summary = step_result['tool_summary']
+            tool_summary = self._compact_for_history(tool_summary)
+            summary_parts.append(tool_summary)
         
         if step_result.get('response') and not step_result.get('is_final'):
             response_content = step_result['response']
@@ -908,6 +1033,8 @@ class AgentOrchestrator:
                     response_content = json.dumps(response_content, ensure_ascii=False)
                 except (TypeError, ValueError):
                     response_content = str(response_content)
+            if len(response_content) > 1000:
+                response_content = response_content[:1000] + '...[AI回复已截断]'
             summary_parts.append(f"AI: {response_content}")
         
         if summary_parts:
@@ -918,6 +1045,59 @@ class AgentOrchestrator:
                 blackboard.add_history(step_summary)
             
             await update()
+
+    @staticmethod
+    def _compact_for_history(tool_summary: str) -> str:
+        """
+        将工具输出压缩为历史摘要。
+
+        策略：Playwright MCP的DOM快照/JS代码在当前步骤使用后，
+        后续步骤只需知道"做了什么、结果如何"，不需要完整DOM。
+        因此提取关键信息而非保留完整输出。
+        """
+        if len(tool_summary) <= 1500:
+            return tool_summary
+
+        lines = tool_summary.split('\n')
+        key_lines = []
+        in_code_block = False
+        code_block_skipped = False
+
+        for line in lines:
+            stripped = line.strip()
+
+            if stripped.startswith('```'):
+                in_code_block = not in_code_block
+                if in_code_block and not code_block_skipped:
+                    key_lines.append('  [JS代码/命令已省略，详见当步上下文]')
+                    code_block_skipped = True
+                continue
+
+            if in_code_block:
+                continue
+
+            if stripped.startswith('###') or stripped.startswith('##'):
+                key_lines.append(line)
+                continue
+
+            if stripped.startswith('- ') or stripped.startswith('* '):
+                key_lines.append(line)
+                continue
+
+            if any(kw in stripped.lower() for kw in [
+                'page title', 'url', 'current url', 'page url',
+                'screenshot', 'result', 'status', 'success', 'fail',
+                'navigated', 'clicked', 'filled', 'typed',
+                'visible', 'visible:', 'text content',
+            ]):
+                key_lines.append(line)
+
+        compacted = '\n'.join(key_lines)
+
+        if len(compacted) > 1500:
+            compacted = compacted[:1500] + '\n...[历史摘要已截断]'
+
+        return compacted
     
     async def _record_step(
         self,
@@ -988,6 +1168,6 @@ class AgentLoopIntegration:
         return False
     
     @staticmethod
-    async def create_orchestrator(llm, tools: List) -> AgentOrchestrator:
+    async def create_orchestrator(llm, tools: List, on_mcp_session_refresh=None) -> AgentOrchestrator:
         """创建编排器实例"""
-        return AgentOrchestrator(llm=llm, tools=tools)
+        return AgentOrchestrator(llm=llm, tools=tools, on_mcp_session_refresh=on_mcp_session_refresh)

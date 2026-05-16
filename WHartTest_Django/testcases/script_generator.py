@@ -13,6 +13,8 @@ from datetime import datetime
 
 from django.utils import timezone
 
+from .slider_captcha import get_inline_slider_code
+
 if TYPE_CHECKING:
     from .models import AutomationScript
 
@@ -128,7 +130,7 @@ class Test{class_name}:
 {test_steps}
 '''
 
-# 简化模板（无 pytest，支持录屏）
+# 简化模板（无 pytest，支持录屏 + 滑块验证 + 截图保存）
 SIMPLE_SCRIPT_TEMPLATE = '''"""
 自动化测试脚本
 生成时间: {generated_at}
@@ -139,6 +141,26 @@ import os
 from playwright.sync_api import sync_playwright
 
 
+{slider_captcha_code}
+
+
+# ======================= 截图保存 =======================
+SCREENSHOT_DIR = os.environ.get('SCREENSHOT_DIR', os.path.dirname(os.path.abspath(__file__)))
+
+
+def _take_screenshot(page, filename):
+    filepath = os.path.join(SCREENSHOT_DIR, filename)
+    try:
+        os.makedirs(os.path.dirname(filepath), exist_ok=True)
+        page.screenshot(path=filepath)
+        print(f"Screenshot saved: {{filepath}}")
+        return filepath
+    except Exception as e:
+        print(f"Screenshot failed: {{e}}")
+        return None
+
+
+# ======================= 主流程 =======================
 def run():
     with sync_playwright() as p:
         browser = p.chromium.launch(headless={headless})
@@ -159,7 +181,7 @@ def run():
             print("测试执行成功")
         except Exception as e:
             print(f"测试执行失败: {{e}}")
-            page.screenshot(path="error_screenshot.png")
+            _take_screenshot(page, "error_screenshot.png")
             raise
         finally:
             # 关闭上下文以确保视频保存完成
@@ -212,6 +234,7 @@ class PlaywrightScriptGenerator:
         if self.use_pytest:
             indent = '        '  # pytest 方法内的缩进
             formatted_steps = '\n'.join(f'{indent}{line}' for line in steps_code if line.strip())
+            formatted_steps_escaped = formatted_steps.replace('{', '{{').replace('}', '}}')
             
             return SCRIPT_TEMPLATE.format(
                 generated_at=datetime.now().strftime('%Y-%m-%d %H:%M:%S'),
@@ -221,11 +244,15 @@ class PlaywrightScriptGenerator:
                 method_name=method_name,
                 timeout=timeout_seconds,
                 test_description=description or test_case_name,
-                test_steps=formatted_steps
+                test_steps=formatted_steps_escaped
             )
         else:
             indent = '            '  # 简单模板的缩进
-            formatted_steps = '\n'.join(f'{indent}{line}' for line in steps_code if line.strip())
+            steps_with_slider = self._inject_slider_captcha_step(steps_code, indent)
+            formatted_steps = '\n'.join(f'{indent}{line}' for line in steps_with_slider if line.strip())
+            formatted_steps_escaped = formatted_steps.replace('{', '{{').replace('}', '}}')
+            slider_captcha_code = get_inline_slider_code().strip()
+            slider_captcha_code_escaped = slider_captcha_code.replace('{', '{{').replace('}', '}}')
             
             return SIMPLE_SCRIPT_TEMPLATE.format(
                 generated_at=datetime.now().strftime('%Y-%m-%d %H:%M:%S'),
@@ -233,7 +260,8 @@ class PlaywrightScriptGenerator:
                 target_url=target_url or '未指定',
                 timeout=timeout_seconds,
                 headless=str(headless),
-                test_steps=formatted_steps
+                test_steps=formatted_steps_escaped,
+                slider_captcha_code=slider_captcha_code_escaped
             )
     
     def _generate_steps_code(self, recorded_steps: list) -> list[str]:
@@ -261,7 +289,90 @@ class PlaywrightScriptGenerator:
             code_lines.append('')  # 空行分隔
         
         return code_lines
-    
+
+    def _inject_slider_captcha_step(self, code_lines: list[str], indent: str) -> list[str]:
+        """
+        在登录流程（点击登录按钮）后自动注入滑块验证码检测和处理步骤
+
+        检测逻辑：遍历生成的代码行，当发现包含登录按钮点击操作
+        （如 click、login 等关键词）时，在其后插入 _handle_slider_captcha(page) 调用。
+
+        Args:
+            code_lines: 原始步骤代码行列表
+            indent: 代码缩进字符串
+
+        Returns:
+            注入滑块验证码步骤后的代码行列表
+        """
+        login_click_patterns = [
+            r'\.click\(\)',
+            r'login',
+            r'登录',
+            r'sign.?in',
+            r'submit',
+        ]
+        login_indicator_patterns = [
+            r'login',
+            r'登录',
+            r'sign.?in',
+            r'btn.*login',
+            r'button.*login',
+        ]
+        result = []
+        injected = False
+
+        for i, line in enumerate(code_lines):
+            result.append(line)
+
+            if injected:
+                continue
+
+            is_click_action = '.click()' in line
+            if not is_click_action:
+                continue
+
+            line_lower = line.lower()
+            comment_line = ''
+            for j in range(i - 1, -1, -1):
+                stripped = code_lines[j].strip()
+                if stripped.startswith('#'):
+                    comment_line = stripped.lower()
+                    break
+                elif stripped:
+                    break
+
+            is_login_related = False
+            for pattern in login_indicator_patterns:
+                if re.search(pattern, line_lower) or re.search(pattern, comment_line):
+                    is_login_related = True
+                    break
+
+            if not is_login_related:
+                for j in range(max(0, i - 5), i):
+                    nearby = code_lines[j].lower()
+                    for pattern in login_indicator_patterns:
+                        if re.search(pattern, nearby):
+                            is_login_related = True
+                            break
+                    if is_login_related:
+                        break
+
+            if is_login_related:
+                result.append('')
+                result.append('# 检测并处理滑块验证码')
+                result.append('slider_result = _handle_slider_captcha(page, max_retries=20)')
+                result.append('if not slider_result:')
+                result.append(f'    print("滑块验证失败，脚本终止")')
+                result.append(f'    return')
+                injected = True
+
+        if not injected:
+            result.append('')
+            result.append('# 检测并处理滑块验证码（如有）')
+            result.append('_handle_slider_captcha(page, max_retries=20)')
+
+        return result
+
     def _sanitize_comment(self, comment: str) -> str:
         """
         清理注释文本，确保是有效的 Python 单行注释
