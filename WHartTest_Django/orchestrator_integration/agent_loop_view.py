@@ -726,11 +726,158 @@ if __name__ == "__main__":
 ### 滑块验证码处理（非常重要）
 **登录场景下，点击登录按钮后经常会弹出滑块验证码（如 `.verifybox` 元素），必须在生成的脚本中处理！**
 
-脚本模板中已内置滑块验证功能函数，你只需在登录按钮点击后添加以下代码：
+**重要：滑块验证码处理函数需要直接在脚本中实现，请将以下代码完整复制到脚本中（放在 `run()` 函数之前）：**
 
 ```python
-# 处理滑块验证码（如果出现）
-_handle_slider_captcha(page, max_retries=20)
+import random
+import io
+import cv2
+import numpy as np
+from PIL import Image
+
+
+def _get_gap_offset_opencv(bg_img_pil, gap_img_pil, search_start=200, search_end=340):
+    try:
+        bg_cv = cv2.cvtColor(np.array(bg_img_pil), cv2.COLOR_RGB2BGR)
+        gap_cv = cv2.cvtColor(np.array(gap_img_pil), cv2.COLOR_RGB2BGR)
+        bg_gray = cv2.GaussianBlur(cv2.cvtColor(bg_cv, cv2.COLOR_BGR2GRAY), (3, 3), 0)
+        gap_gray = cv2.GaussianBlur(cv2.cvtColor(gap_cv, cv2.COLOR_BGR2GRAY), (3, 3), 0)
+        bg_edges = cv2.Canny(bg_gray, 50, 150)
+        gap_edges = cv2.Canny(gap_gray, 50, 150)
+        h_gap, w_gap = gap_edges.shape
+        h_bg, w_bg = bg_edges.shape
+        max_x = w_bg - w_gap
+        if search_start > max_x:
+            search_start = max(0, max_x - 50)
+        if search_end > max_x:
+            search_end = max_x
+        roi = bg_edges[:, search_start:search_end + 1]
+        result = cv2.matchTemplate(roi, gap_edges, cv2.TM_CCOEFF_NORMED)
+        min_val, max_val, min_loc, max_loc = cv2.minMaxLoc(result)
+        offset_x = search_start + max_loc[0]
+        match_rate = max_val
+        print(f"模板匹配结果 | 位置: {offset_x}px | 匹配度: {match_rate:.2%}")
+        if offset_x < 200 and match_rate < 0.2:
+            print("识别位置在左侧滑块区域，误匹配，刷新重试")
+            return None
+        if match_rate < 0.2:
+            print("匹配度过低，可能识别失败")
+            return None
+        return offset_x
+    except Exception as e:
+        print(f"OpenCV 识别异常: {e}")
+        return None
+
+
+def _get_gap_offset(page, bg_selector=".verify-img-panel", gap_selector=".verify-sub-block"):
+    try:
+        bg_element = page.locator(bg_selector).first
+        gap_element = page.locator(gap_selector).first
+        bg_element.wait_for(state="visible", timeout=5000)
+        gap_element.wait_for(state="visible", timeout=5000)
+        bg_img = Image.open(io.BytesIO(bg_element.screenshot()))
+        gap_img = Image.open(io.BytesIO(gap_element.screenshot()))
+        return _get_gap_offset_opencv(bg_img, gap_img, search_start=200, search_end=340)
+    except Exception as e:
+        print(f"获取缺口位置失败: {e}")
+        return None
+
+
+def _human_like_slider(page, verify_box_selector=".verifybox",
+                        slider_block_selector=".verify-move-block",
+                        refresh_btn_selector=".verify-refresh",
+                        bg_selector=".verify-img-panel",
+                        gap_selector=".verify-sub-block",
+                        max_retries=20):
+    for attempt in range(max_retries):
+        try:
+            print(f"\n滑块验证尝试 {attempt + 1}/{max_retries}")
+            page.wait_for_selector(verify_box_selector, state="visible", timeout=5000)
+            slider = page.locator(slider_block_selector).first
+            slider.wait_for(state="visible", timeout=5000)
+            gap_abs_x = _get_gap_offset(page, bg_selector, gap_selector)
+            if gap_abs_x is None:
+                print("识别失败，刷新验证码")
+                page.locator(refresh_btn_selector).click()
+                page.wait_for_timeout(500)
+                continue
+            slider_box = slider.bounding_box()
+            if not slider_box:
+                print("无法获取滑块位置，刷新重试")
+                page.locator(refresh_btn_selector).click()
+                page.wait_for_timeout(500)
+                continue
+            bg_box = page.locator(bg_selector).first.bounding_box()
+            if not bg_box:
+                print("无法获取背景图容器位置，刷新重试")
+                page.locator(refresh_btn_selector).click()
+                page.wait_for_timeout(500)
+                continue
+            start_x = slider_box["x"] + slider_box["width"] / 2
+            start_y = slider_box["y"] + slider_box["height"] / 2
+            target_screen_x = bg_box["x"] + gap_abs_x + (slider_box["width"] / 2)
+            distance = target_screen_x - start_x
+            print(f"移动距离: {distance:.1f}px (缺口绝对坐标: {gap_abs_x}px)")
+            page.mouse.move(start_x + random.randint(-10, 10), start_y + random.randint(-3, 3), steps=random.randint(6, 10))
+            page.wait_for_timeout(random.randint(50, 100))
+            page.mouse.move(start_x, start_y, steps=random.randint(3, 5))
+            page.wait_for_timeout(random.randint(30, 60))
+            page.mouse.down()
+            page.wait_for_timeout(random.randint(40, 80))
+            total_steps = random.randint(20, 30)
+            for i in range(total_steps):
+                progress = i / total_steps
+                ease_progress = 1 - (1 - progress) ** 3
+                next_x = start_x + distance * ease_progress + random.uniform(-1.5, 1.5) * (1 - ease_progress)
+                next_y = start_y + random.uniform(-2, 2)
+                page.mouse.move(next_x, next_y, steps=1)
+                if random.random() < 0.1:
+                    page.wait_for_timeout(random.randint(2, 6))
+            final_target_x = target_screen_x + random.uniform(-2, 2)
+            overshoot = random.randint(1, 3)
+            page.mouse.move(final_target_x + overshoot, start_y, steps=random.randint(1, 2))
+            page.wait_for_timeout(random.randint(10, 25))
+            page.mouse.move(final_target_x, start_y, steps=1)
+            page.wait_for_timeout(random.randint(20, 50))
+            page.mouse.up()
+            page.wait_for_timeout(random.randint(60, 100))
+            try:
+                page.wait_for_selector(verify_box_selector, state="hidden", timeout=2500)
+                print("滑块验证成功！")
+                return True
+            except:
+                print("验证失败，刷新重试")
+                page.locator(refresh_btn_selector).click()
+                page.wait_for_timeout(500)
+                continue
+        except Exception as e:
+            print(f"滑块验证异常: {e}")
+            try:
+                page.locator(refresh_btn_selector).click()
+                page.wait_for_timeout(500)
+            except:
+                pass
+            continue
+    print("滑块验证尝试全部失败")
+    return False
+
+
+def _handle_slider_captcha(page, max_retries=20):
+    try:
+        page.wait_for_timeout(500)
+        verify_box = page.locator(".verifybox")
+        verify_text = page.locator("text=请完成安全验证")
+        box_visible = verify_box.is_visible()
+        text_visible = verify_text.is_visible()
+        if box_visible and text_visible:
+            print("检测到安全验证，开始处理滑块（最多{}次重试）".format(max_retries))
+            return _human_like_slider(page, max_retries=max_retries)
+        else:
+            print("未检测到安全验证，跳过滑块处理")
+            return True
+    except Exception as e:
+        print(f"检测滑块验证异常: {e}")
+        return False
 ```
 
 **滑块验证码的特征**：

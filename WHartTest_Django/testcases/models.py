@@ -518,7 +518,7 @@ class AutomationScript(models.Model):
     
     # 配置
     target_url = models.URLField(_('目标URL'), max_length=2000, blank=True, null=True)
-    timeout_seconds = models.IntegerField(_('超时时间(秒)'), default=30)
+    timeout_seconds = models.IntegerField(_('超时时间(秒)'), default=100)
     headless = models.BooleanField(_('无头模式'), default=True)
     
     # 版本管理

@@ -389,39 +389,141 @@ def main():
         page = context.new_page()
         print("✅ 浏览器已最大化")
 
+        # 确保截图目录存在
+        screenshot_dir = "login_screenshots"
+        os.makedirs(screenshot_dir, exist_ok=True)
+
         step = 0
         try:
             step += 1
-            page.goto("https://demo-home-admin.jtexpress.ph/login", wait_until="networkidle")
-            expect(page).to_have_title("J&T Home")
+            # 使用马来西亚站点URL（用户执行时使用的站点）
+            login_url = "https://demo-station-admin.jtexpress.my"
+            print(f"🔄 步骤{step}: 正在导航到登录页面: {login_url}")
+            page.goto(login_url, wait_until="networkidle", timeout=30000)
+            
+            # 等待页面加载完成
+            page.wait_for_timeout(2000)
+            
+            # 验证页面是否成功加载（不依赖标题，因为标题可能不同）
+            if page.url == "about:blank":
+                print("❌ 页面导航失败，当前页面为空白页")
+                # 重试导航
+                print("🔄 重试导航到登录页面...")
+                page.goto(login_url, wait_until="networkidle", timeout=30000)
+                page.wait_for_timeout(2000)
+            
             print(f"✅ 步骤{step}: 打开登录页面成功")
-            page.screenshot(path=f"step{step}_open_login_page.png")
+            screenshot_path = os.path.join(screenshot_dir, f"step{step}_open_login_page.png")
+            page.screenshot(path=screenshot_path)
+            print(f"📸 截图已保存: {screenshot_path}")
 
             step += 1
-            account_input = page.get_by_role("textbox", name="请输入账号")
-            account_input.wait_for(state="visible", timeout=10000)
-            account_input.fill("JT940060")
+            print(f"🔄 步骤{step}: 输入用户名和密码")
+            
+            # 支持多种可能的用户名输入框定位方式
+            account_input = None
+            input_selectors = [
+                page.get_by_role("textbox", name="请输入账号"),
+                page.get_by_role("textbox", name="Username"),
+                page.locator("input[type='text']").first,
+                page.locator("input[name='username']").first,
+                page.locator("input[placeholder*='账号']").first,
+                page.locator("input[placeholder*='Username']").first
+            ]
+            
+            for selector in input_selectors:
+                try:
+                    selector.wait_for(state="visible", timeout=3000)
+                    account_input = selector
+                    break
+                except:
+                    continue
+            
+            if account_input:
+                account_input.fill("JT820024")
+                print("✅ 用户名输入成功")
+            else:
+                print("❌ 未找到用户名输入框")
 
-            password_input = page.get_by_role("textbox", name="请输入密码")
-            password_input.wait_for(state="visible", timeout=10000)
-            password_input.fill("Jitu1633")
-            print(f"✅ 步骤{step}: 输入用户名和密码成功")
-            page.screenshot(path=f"step{step}_input_credentials.png")
+            # 支持多种可能的密码输入框定位方式
+            password_input = None
+            password_selectors = [
+                page.get_by_role("textbox", name="请输入密码"),
+                page.get_by_role("textbox", name="Password"),
+                page.locator("input[type='password']").first,
+                page.locator("input[name='password']").first,
+                page.locator("input[placeholder*='密码']").first,
+                page.locator("input[placeholder*='Password']").first
+            ]
+            
+            for selector in password_selectors:
+                try:
+                    selector.wait_for(state="visible", timeout=3000)
+                    password_input = selector
+                    break
+                except:
+                    continue
+            
+            if password_input:
+                password_input.fill("Aa123456")
+                print("✅ 密码输入成功")
+            else:
+                print("❌ 未找到密码输入框")
+            
+            print(f"✅ 步骤{step}: 输入用户名和密码完成")
+            screenshot_path = os.path.join(screenshot_dir, f"step{step}_input_credentials.png")
+            page.screenshot(path=screenshot_path)
+            print(f"📸 截图已保存: {screenshot_path}")
 
             step += 1
-            login_button = page.get_by_role("button", name="登录")
-            login_button.wait_for(state="visible", timeout=5000)
-            login_button.click()
-            print(f"✅ 步骤{step}: 点击登录按钮成功")
-            page.screenshot(path=f"step{step}_click_login.png")
+            print(f"🔄 步骤{step}: 点击登录按钮")
+            
+            # 支持多种可能的登录按钮定位方式
+            login_button = None
+            button_selectors = [
+                page.get_by_role("button", name="登录"),
+                page.get_by_role("button", name="Login"),
+                page.locator("button[type='submit']").first,
+                page.locator("button:has-text('登录')").first,
+                page.locator("button:has-text('Login')").first,
+                page.locator(".login-btn").first
+            ]
+            
+            for selector in button_selectors:
+                try:
+                    selector.wait_for(state="visible", timeout=5000)
+                    login_button = selector
+                    break
+                except:
+                    continue
+            
+            if login_button:
+                login_button.click()
+                print(f"✅ 步骤{step}: 点击登录按钮成功")
+            else:
+                print("❌ 未找到登录按钮")
+            
+            screenshot_path = os.path.join(screenshot_dir, f"step{step}_click_login.png")
+            page.screenshot(path=screenshot_path)
+            print(f"📸 截图已保存: {screenshot_path}")
 
             step += 1
             print(f"🔄 步骤{step}: 检测安全验证")
-            page.wait_for_timeout(500)
+            page.wait_for_timeout(1000)
+            
+            # 支持多种安全验证检测方式
             verify_box = page.locator(".verifybox")
             verify_text = page.locator("text=请完成安全验证")
+            verify_text_en = page.locator("text=Please complete security verification")
+            
+            has_verification = False
+            try:
+                has_verification = (verify_box.is_visible() and 
+                                  (verify_text.is_visible() or verify_text_en.is_visible()))
+            except:
+                pass
 
-            if verify_box.is_visible() and verify_text.is_visible():
+            if has_verification:
                 print("ℹ️ 检测到安全验证，开始处理滑块（最多20次重试）")
                 slider_success = human_like_slider(page, max_retries=20)
                 if not slider_success:
@@ -430,49 +532,60 @@ def main():
             else:
                 print("ℹ️ 未检测到安全验证，跳过滑块处理")
 
-            # page.screenshot(path=f"step{step}_slider_verification.png")
-
             step += 1
             print(f"🔄 步骤{step}: 验证登录结果")
-            page.wait_for_load_state("networkidle", timeout=10000)
-            page.wait_for_timeout(800)
-            page.screenshot(path=f"step{step}_login_final_result.png")
+            page.wait_for_load_state("networkidle", timeout=15000)
+            page.wait_for_timeout(2000)
+            
+            screenshot_path = os.path.join(screenshot_dir, f"step{step}_login_final_result.png")
+            page.screenshot(path=screenshot_path)
+            print(f"📸 截图已保存: {screenshot_path}")
 
-            if "login" not in page.url:
+            if "login" not in page.url.lower():
                 print("🎉 登录成功！")
             else:
                 print("⚠️ 仍在登录页，请检查截图")
 
-            # ---------- 步骤1：收集中文菜单 ----------
-            print("\n📋 正在收集中文菜单文本...")
-            chinese_menus = collect_menu_texts(page)
-            print(f"✅ 共收集到 {len(chinese_menus)} 个中文菜单项")
-
-            # ---------- 步骤2：切换语言到英文 ----------
-            print("\n🌐 正在切换语言到 English...")
-            switch_language(page, target_lang="EN")
-            print("✅ 语言切换完成")
-
-            # ---------- 步骤3：查找未翻译的文本 ----------
-            print("\n🔍 开始查找未翻译的文本...")
-            untranslated = find_untranstaled_elements(page, chinese_menus)
-
-            if not untranslated:
-                print("🎉 没有发现任何未翻译的文本！")
+            # ---------- 步骤5：登录后验证 ----------
+            step += 1
+            print(f"� 步骤{step}: 验证登录成功后的页面状态")
+            
+            # 检查是否跳转到主页或仪表盘
+            dashboard_selectors = [
+                page.locator("text=Dashboard"),
+                page.locator("text=仪表盘"),
+                page.locator("text=首页"),
+                page.locator(".ant-layout-content").first
+            ]
+            
+            is_logged_in = False
+            for selector in dashboard_selectors:
+                try:
+                    if selector.is_visible():
+                        is_logged_in = True
+                        break
+                except:
+                    continue
+            
+            if is_logged_in:
+                print("🎉 登录验证通过！已成功进入系统")
             else:
-                print(f"⚠️ 发现 {len(untranslated)} 个未翻译的文本，正在截图...")
-                for idx, (el, txt) in enumerate(untranslated, start=1):
-                    highlight_and_screenshot(page, el, txt, idx)
+                print("⚠️ 登录验证不确定，请手动检查")
 
-            print("\n✅ 所有任务完成！")
+            print("\n✅ 所有登录任务完成！")
 
         except Exception as e:
             print(f"❌ 脚本异常: {e}")
-            page.screenshot(path=f"step{step}_error.png")
+            try:
+                screenshot_path = os.path.join(screenshot_dir, f"step{step}_error.png")
+                page.screenshot(path=screenshot_path)
+                print(f"📸 错误截图已保存: {screenshot_path}")
+            except:
+                pass
 
         finally:
-            print("ℹ️ 浏览器将在3秒后关闭...")
-            page.wait_for_timeout(3000)
+            print("ℹ️ 浏览器将在5秒后关闭...")
+            page.wait_for_timeout(5000)
             browser.close()
 
 

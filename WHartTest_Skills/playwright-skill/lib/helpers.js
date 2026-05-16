@@ -44,7 +44,7 @@ async function launchBrowser(browserType = 'chromium', options = {}) {
   const defaultOptions = {
     headless: process.env.HEADLESS !== 'false',
     slowMo: process.env.SLOW_MO ? parseInt(process.env.SLOW_MO) : 0,
-    args: ['--no-sandbox', '--disable-setuid-sandbox']
+    args: ['--no-sandbox', '--disable-setuid-sandbox', '--lang=zh-CN']
   };
   
   const browsers = { chromium, firefox, webkit };

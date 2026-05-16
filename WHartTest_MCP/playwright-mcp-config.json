@@ -11,7 +11,8 @@
         "width": 1920,
         "height": 1080
       },
-      "ignoreHTTPSErrors": true
+      "ignoreHTTPSErrors": true,
+      "locale": "zh-CN"
     }
   },
   "server": {

@@ -549,7 +549,7 @@ const getDefaultForm = (): ScriptForm => ({
   target_url: '',
   description: '',
   script_content: '',
-  timeout_seconds: 60,
+  timeout_seconds: 100,
 });
 
 const scriptForm = reactive<ScriptForm>(getDefaultForm());

@@ -65,11 +65,14 @@ services:
     volumes:
       - ./data:/app/data
       - backend-static:/app/static
+      - ./data/playwright-screenshots:/app/data/playwright-screenshots
     environment:
       # 数据库配置
       # 默认使用 PostgreSQL（生产环境推荐）
       # 如需使用 SQLite（本地开发），请设置 DATABASE_TYPE=sqlite
       - DATABASE_TYPE=${DATABASE_TYPE:-postgres}
+      # Playwright 截图目录配置
+      - PLAYWRIGHT_SCREENSHOT_DIR=/app/data/playwright-screenshots
       # SQLite 配置（DATABASE_TYPE=sqlite 时使用）
       - DATABASE_PATH=/app/data/db.sqlite3
       # PostgreSQL 配置（DATABASE_TYPE=postgres 时使用）

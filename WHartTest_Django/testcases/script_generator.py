@@ -100,7 +100,7 @@ TOOL_MAPPING = {
     'mcp_chrome-devtoo_press_key': 'page.keyboard.press("{key}")',
 }
 
-# Playwright 脚本模板
+# Playwright 脚本模板（pytest 版本）
 SCRIPT_TEMPLATE = '''"""
 自动化测试脚本
 生成时间: {generated_at}
@@ -109,6 +109,9 @@ SCRIPT_TEMPLATE = '''"""
 """
 import pytest
 from playwright.sync_api import Page, expect
+
+
+{slider_captcha_code}
 
 
 class Test{class_name}:
@@ -145,7 +148,11 @@ from playwright.sync_api import sync_playwright
 
 
 # ======================= 截图保存 =======================
-SCREENSHOT_DIR = os.environ.get('SCREENSHOT_DIR', os.path.dirname(os.path.abspath(__file__)))
+# 优先使用 SKILL 传入的 SCREENSHOT_DIR，其次使用全局配置的 PLAYWRIGHT_SCREENSHOT_DIR，最后使用默认目录
+SCREENSHOT_DIR = os.environ.get(
+    'SCREENSHOT_DIR', 
+    os.environ.get('PLAYWRIGHT_SCREENSHOT_DIR', os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), 'data', 'playwright-screenshots'))
+)
 
 
 def _take_screenshot(page, filename):
@@ -207,7 +214,7 @@ class PlaywrightScriptGenerator:
         recorded_steps: list,
         test_case_name: str,
         target_url: str = '',
-        timeout_seconds: int = 30,
+        timeout_seconds: int = 100,
         headless: bool = True,
         description: str = ''
     ) -> str:
@@ -233,8 +240,11 @@ class PlaywrightScriptGenerator:
         
         if self.use_pytest:
             indent = '        '  # pytest 方法内的缩进
-            formatted_steps = '\n'.join(f'{indent}{line}' for line in steps_code if line.strip())
+            steps_with_slider = self._inject_slider_captcha_step(steps_code, indent)
+            formatted_steps = '\n'.join(f'{indent}{line}' for line in steps_with_slider if line.strip())
             formatted_steps_escaped = formatted_steps.replace('{', '{{').replace('}', '}}')
+            slider_captcha_code = get_inline_slider_code().strip()
+            slider_captcha_code_escaped = slider_captcha_code.replace('{', '{{').replace('}', '}}')
             
             return SCRIPT_TEMPLATE.format(
                 generated_at=datetime.now().strftime('%Y-%m-%d %H:%M:%S'),
@@ -244,7 +254,8 @@ class PlaywrightScriptGenerator:
                 method_name=method_name,
                 timeout=timeout_seconds,
                 test_description=description or test_case_name,
-                test_steps=formatted_steps_escaped
+                test_steps=formatted_steps_escaped,
+                slider_captcha_code=slider_captcha_code_escaped
             )
         else:
             indent = '            '  # 简单模板的缩进

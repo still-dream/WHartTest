@@ -100,7 +100,7 @@ def get_playwright_tools(
                 script_content=script_content,
                 recorded_steps=[],
                 target_url='',
-                timeout_seconds=30,
+                timeout_seconds=100,
                 headless=True,
                 version=new_version,
                 creator=creator,

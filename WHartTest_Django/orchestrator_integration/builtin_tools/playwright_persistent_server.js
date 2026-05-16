@@ -167,10 +167,12 @@ async function main() {
   }
 
   function getContextOptionsWithHeaders(options = {}) {
-    if (!helpers?.getExtraHeadersFromEnv) return options;
+    const localeOptions = { locale: 'zh-CN' };
+    if (!helpers?.getExtraHeadersFromEnv) return { ...localeOptions, ...options };
     const extra = helpers.getExtraHeadersFromEnv();
-    if (!extra) return options;
+    if (!extra) return { ...localeOptions, ...options };
     return {
+      ...localeOptions,
       ...options,
       extraHTTPHeaders: {
         ...(extra || {}),
@@ -222,42 +224,62 @@ async function main() {
 
   async function restorePageState() {
     if (!savedPageState.url || !state.page) {
+      serverLog('[restorePageState] 跳过恢复：无保存的 URL 或页面不存在');
       return false;
     }
-    
+
+    if (state.page.isClosed && state.page.isClosed()) {
+      serverLog('[restorePageState] 跳过恢复：页面已关闭');
+      return false;
+    }
+
     try {
       serverLog('[restorePageState] 尝试恢复页面状态:', savedPageState.url);
-      
+
       // 设置 cookies
-      if (state.context && savedPageState.cookies.length > 0) {
-        await state.context.addCookies(savedPageState.cookies);
+      if (state.context && savedPageState.cookies && savedPageState.cookies.length > 0) {
+        try {
+          await state.context.addCookies(savedPageState.cookies);
+        } catch (cookieErr) {
+          serverLog('[restorePageState] 设置 cookies 失败:', cookieErr.message);
+        }
       }
-      
-      // 导航到保存的 URL
-      await state.page.goto(savedPageState.url);
-      
+
+      // 导航到保存的 URL（带超时）
+      await state.page.goto(savedPageState.url, { timeout: 30000, waitUntil: 'domcontentloaded' });
+
       // 恢复 localStorage
-      if (Object.keys(savedPageState.localStorage).length > 0) {
-        await state.page.evaluate((data) => {
-          for (const [key, value] of Object.entries(data)) {
-            localStorage.setItem(key, value);
-          }
-        }, savedPageState.localStorage);
+      if (savedPageState.localStorage && Object.keys(savedPageState.localStorage).length > 0) {
+        try {
+          await state.page.evaluate((data) => {
+            for (const [key, value] of Object.entries(data)) {
+              localStorage.setItem(key, value);
+            }
+          }, savedPageState.localStorage);
+        } catch (lsErr) {
+          serverLog('[restorePageState] 恢复 localStorage 失败:', lsErr.message);
+        }
       }
-      
+
       // 恢复 sessionStorage
-      if (Object.keys(savedPageState.sessionStorage).length > 0) {
-        await state.page.evaluate((data) => {
-          for (const [key, value] of Object.entries(data)) {
-            sessionStorage.setItem(key, value);
-          }
-        }, savedPageState.sessionStorage);
+      if (savedPageState.sessionStorage && Object.keys(savedPageState.sessionStorage).length > 0) {
+        try {
+          await state.page.evaluate((data) => {
+            for (const [key, value] of Object.entries(data)) {
+              sessionStorage.setItem(key, value);
+            }
+          }, savedPageState.sessionStorage);
+        } catch (ssErr) {
+          serverLog('[restorePageState] 恢复 sessionStorage 失败:', ssErr.message);
+        }
       }
-      
+
       serverLog('[restorePageState] 页面状态恢复成功');
       return true;
     } catch (e) {
       serverLog('[restorePageState] 恢复失败:', e.message);
+      // 清除保存的状态，避免误导
+      savedPageState = { url: null, cookies: [], localStorage: {}, sessionStorage: {}, timestamp: 0 };
       return false;
     }
   }
@@ -278,11 +300,13 @@ async function main() {
       state.context = await state.browser.newContext(getContextOptionsWithHeaders({}));
     }
 
-    if (!state.page || (typeof state.page.isClosed === 'function' && state.page.isClosed())) {
+    const pageWasClosed = !state.page || (typeof state.page.isClosed === 'function' && state.page.isClosed());
+
+    if (pageWasClosed) {
       state.page = await state.context.newPage();
-      
-      // 如果之前浏览器断开了，尝试恢复页面状态
-      if (!wasConnected && savedPageState.url) {
+
+      // 如果之前有保存的页面状态，尝试恢复（无论是浏览器断开还是页面关闭）
+      if (savedPageState.url) {
         await restorePageState();
       }
     }

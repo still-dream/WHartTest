@@ -239,6 +239,13 @@ MEDIA_URL = '/media/'
 # 支持通过环境变量配置 MEDIA_ROOT,用于 Docker 部署
 MEDIA_ROOT = os.environ.get('MEDIA_ROOT', str(BASE_DIR / 'media'))
 
+# Playwright 截图目录配置
+# 支持通过环境变量配置，用于 Docker 部署
+PLAYWRIGHT_SCREENSHOT_DIR = os.environ.get(
+    'PLAYWRIGHT_SCREENSHOT_DIR',
+    str(BASE_DIR / 'data' / 'playwright-screenshots')
+)
+
 
 # Default primary key field type
 # https://docs.djangoproject.com/en/5.2/ref/settings/#default-auto-field

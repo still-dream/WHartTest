@@ -240,12 +240,17 @@ def main():
                     
                     def patched_chromium_launch(*args, **kwargs):
                         kwargs['headless'] = headless
+                        launch_args = kwargs.get('args', [])
+                        if '--lang=zh-CN' not in launch_args:
+                            launch_args.append('--lang=zh-CN')
+                        kwargs['args'] = launch_args
                         browser = original_chromium_launch(*args, **kwargs)
                         
                         original_new_context = browser.new_context
                         original_browser_new_page = browser.new_page
                         
                         def patched_new_context(*ctx_args, **ctx_kwargs):
+                            ctx_kwargs.setdefault('locale', 'zh-CN')
                             context = original_new_context(*ctx_args, **ctx_kwargs)
                             original_context_new_page = context.new_page
                             
@@ -325,8 +330,9 @@ def main():
             send_message('log', {'message': '简单脚本模式'})
             
             with original_sync_playwright() as p:
-                browser = p.chromium.launch(headless=headless)
-                page = browser.new_page()
+                browser = p.chromium.launch(headless=headless, args=['--lang=zh-CN'])
+                context = browser.new_context(locale='zh-CN')
+                page = context.new_page()
                 page.set_default_timeout(timeout_seconds * 1000)
                 
                 # 先创建包装器

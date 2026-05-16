@@ -131,15 +131,10 @@ def get_skill_tools(user_id: int, project_id: int = None, test_case_id: int = No
             env['WHARTTEST_BACKEND_URL'] = getattr(settings, 'WHARTTEST_BACKEND_URL', 'http://localhost:8000')
             env['WHARTTEST_API_KEY'] = getattr(settings, 'WHARTTEST_API_KEY', '')
 
-            # 截图目录：使用 playwright-skill 目录下的 media/screenshots（跨 skill 共享）
+            # 截图目录：使用统一配置的 PLAYWRIGHT_SCREENSHOT_DIR（跨 skill 共享）
+            # 确保父目录存在
+            os.makedirs(settings.PLAYWRIGHT_SCREENSHOT_DIR, exist_ok=True)
             # 优先使用 test_case_id（最稳定），其次 session_id，最后 _default
-            playwright_skill = Skill.objects.filter(name='playwright-skill', is_active=True).first()
-            if playwright_skill and playwright_skill.skill_path:
-                playwright_skill_dir = os.path.join(settings.MEDIA_ROOT, playwright_skill.skill_path)
-            else:
-                playwright_skill_dir = skill_dir
-
-            # 确定截图子目录 key
             case_dir_key = None
             if current_test_case_id:
                 case_dir_key = str(current_test_case_id)
@@ -147,7 +142,7 @@ def get_skill_tools(user_id: int, project_id: int = None, test_case_id: int = No
                 case_dir_key = session_id
 
             if case_dir_key:
-                screenshots_dir = os.path.abspath(os.path.join(playwright_skill_dir, 'media', 'screenshots', case_dir_key))
+                screenshots_dir = os.path.abspath(os.path.join(settings.PLAYWRIGHT_SCREENSHOT_DIR, case_dir_key))
                 # 使用标记文件记录当前 chat_session_id，不同对话时清空目录
                 session_marker = os.path.join(screenshots_dir, '.chat_session')
                 current_chat_id = current_chat_session_id or 'default'
@@ -168,7 +163,7 @@ def get_skill_tools(user_id: int, project_id: int = None, test_case_id: int = No
                 with open(session_marker, 'w') as f:
                     f.write(current_chat_id)
             else:
-                screenshots_dir = os.path.abspath(os.path.join(playwright_skill_dir, 'media', 'screenshots', '_default'))
+                screenshots_dir = os.path.abspath(os.path.join(settings.PLAYWRIGHT_SCREENSHOT_DIR, '_default'))
                 os.makedirs(screenshots_dir, exist_ok=True)
             env['SCREENSHOT_DIR'] = screenshots_dir
 
