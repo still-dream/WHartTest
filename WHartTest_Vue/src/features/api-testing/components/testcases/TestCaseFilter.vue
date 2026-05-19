@@ -5,6 +5,7 @@ import { testcaseTagService } from '../../services/testcaseTagService'
 import { testcaseGroupService } from '../../services/testcaseGroupService'
 import type { ApiTestCaseTag, ApiTestCaseGroup } from '../../types/testcase'
 import { Message } from '@arco-design/web-vue'
+import { collapseTreeBranchIds } from '../../utils/treeExpansion'
 
 interface FilterValue {
   priority?: string
@@ -33,7 +34,7 @@ const toggleGroup = (groupId: number, event: Event) => {
   if (index === -1) {
     expandedGroups.value.push(groupId)
   } else {
-    expandedGroups.value.splice(index, 1)
+    expandedGroups.value = collapseTreeBranchIds(groupList.value, expandedGroups.value, groupId)
   }
 }
 
@@ -169,6 +170,7 @@ const priorityColors = {
       class="flex-1"
       allow-clear
       :loading="groupLoading"
+      :fallback-option="false"
     >
       <template #prefix>
         <icon-folder />

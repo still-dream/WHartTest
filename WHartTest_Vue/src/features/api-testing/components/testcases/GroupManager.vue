@@ -4,6 +4,7 @@ import { Message } from '@arco-design/web-vue'
 import { IconFolder, IconPlus, IconEdit, IconDelete, IconRight, IconDown } from '@arco-design/web-vue/es/icon'
 import { testcaseGroupService } from '../../services/testcaseGroupService'
 import type { ApiTestCaseGroup } from '../../types/testcase'
+import { collapseTreeBranchIds } from '../../utils/treeExpansion'
 
 interface Props {
   modelValue: number | null
@@ -65,7 +66,7 @@ const toggleGroup = (groupId: number, event: Event) => {
   if (index === -1) {
     expandedGroups.value.push(groupId)
   } else {
-    expandedGroups.value.splice(index, 1)
+    expandedGroups.value = collapseTreeBranchIds(groupList.value, expandedGroups.value, groupId)
   }
 }
 
@@ -156,6 +157,7 @@ onMounted(() => {
       class="!w-60"
       :disabled="readonly"
       :loading="groupLoading"
+      :fallback-option="false"
       allow-clear
     >
       <template #prefix>
@@ -307,6 +309,7 @@ onMounted(() => {
             class="!flex-1"
             allow-clear
             :loading="groupLoading"
+            :fallback-option="false"
           >
             <template #empty>
               <div v-if="groupLoading" class="flex items-center justify-center py-2">
