@@ -48,7 +48,7 @@ class ScriptExecutor:
     def __init__(
         self,
         work_dir: Optional[str] = None,
-        timeout_seconds: int = 300,
+        timeout_seconds: int = 1000,
         browser_type: str = 'chromium'
     ):
         self.work_dir = work_dir or tempfile.mkdtemp(prefix='playwright_')

@@ -595,7 +595,7 @@ async def _execute_testcase_via_chat_api(result: TestCaseResult):
         current_step_response = ""  # 当前步骤的响应内容
         step_count = 0
         
-        async with httpx.AsyncClient(timeout=300.0) as client:
+        async with httpx.AsyncClient(timeout=1000.0) as client:
             async with client.stream(
                 'POST',
                 api_url,

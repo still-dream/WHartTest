@@ -1,5 +1,6 @@
 # 第一阶段：构建阶段
-FROM docker.1ms.run/library/node:20-alpine AS builder
+# 使用 Docker Hub 官方镜像（更稳定可靠）
+FROM node:20-alpine AS builder
 
 # 设置工作目录
 WORKDIR /app

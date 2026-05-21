@@ -102,6 +102,55 @@ const text = await helpers.getPageText(page);
 console.log(text);
 ```
 
+## 滑块验证码处理
+
+系统内置滑块验证码处理功能，当登录操作后出现安全验证时，自动处理滑块验证。
+
+### helpers.handleSliderCaptcha(page, options) - 自动处理滑块验证
+
+在登录后调用此函数，系统会自动检测并处理滑块验证码（最多重试20次）。
+
+**滑块验证码特征**：
+- 页面出现 `.verifybox` 弹窗
+- 页面出现"请完成安全验证"文字
+- 页面出现可拖动的滑块 `.verify-move-block`
+
+```javascript
+// 登录后自动处理滑块验证
+await page.click('button[type="submit"]');
+await page.waitForTimeout(500);
+
+// 处理滑块验证码（会自动检测是否存在）
+const result = await helpers.handleSliderCaptcha(page);
+if (!result) {
+  console.log('滑块验证失败');
+}
+```
+
+### 滑块验证选项（可选）
+
+```javascript
+await helpers.handleSliderCaptcha(page, {
+  maxRetries: 20,           // 最大重试次数
+  verifyBoxSelector: '.verifybox',        // 验证框选择器
+  sliderBlockSelector: '.verify-move-block', // 滑块选择器
+  refreshBtnSelector: '.verify-refresh',   // 刷新按钮选择器
+  bgSelector: '.verify-img-panel',         // 背景图选择器
+  gapSelector: '.verify-sub-block'         // 缺口图选择器
+});
+```
+
+### 完整登录流程示例
+
+```bash
+# 完整登录测试（包含滑块验证码处理）
+execute_skill_script(
+    skill_name="playwright-skill",
+    command='node run.js "const dir = process.env.SCREENSHOT_DIR; const browser = await chromium.launch({ headless: false }); const page = await browser.newPage(); await page.goto(\'http://example.com/login\'); await page.screenshot({ path: dir + \'/step1.png\' }); await page.fill(\'input[name=username]\', \'admin\'); await page.fill(\'input[name=password]\', \'pass123\'); await page.click(\'button[type=submit]\'); await page.waitForTimeout(1000); const sliderOk = await helpers.handleSliderCaptcha(page); if (!sliderOk) { console.log(\'滑块验证失败\'); } else { console.log(\'滑块验证成功\'); } await page.screenshot({ path: dir + \'/step2.png\' }); await browser.close();"',
+    session_id="login-test-001"
+)
+```
+
 ## 常用 API
 
 ### 浏览器启动
@@ -164,10 +213,10 @@ await page.waitForLoadState('networkidle');  // 等待网络空闲
 
 ## 完整测试流程示例
 
-执行一个完整的登录测试：
+执行一个完整的登录测试（包含滑块验证码处理）：
 
 ```bash
-node run.js "const dir = process.env.SCREENSHOT_DIR; const browser = await chromium.launch({ headless: false, slowMo: 100 }); const page = await browser.newPage(); console.log('步骤1: 打开登录页'); await page.goto('http://192.168.150.114:8913/'); await page.screenshot({ path: dir + '/step1_open.png' }); console.log('步骤2: 输入账号'); await page.fill('input[type=\"text\"]', 'admin'); console.log('步骤3: 输入密码'); await page.fill('input[type=\"password\"]', 'admin123456'); await page.screenshot({ path: dir + '/step2_input.png' }); console.log('步骤4: 点击登录'); await page.click('button[type=\"submit\"]'); await page.waitForTimeout(2000); await page.screenshot({ path: dir + '/step3_result.png' }); console.log('登录结果 - 当前URL:', page.url()); await browser.close(); console.log('测试完成，截图保存在:', dir);"
+node run.js "const dir = process.env.SCREENSHOT_DIR; const browser = await chromium.launch({ headless: false, slowMo: 100 }); const page = await browser.newPage(); console.log('步骤1: 打开登录页'); await page.goto('http://192.168.150.114:8913/'); await page.screenshot({ path: dir + '/step1_open.png' }); console.log('步骤2: 输入账号'); await page.fill('input[type=\"text\"]', 'admin'); console.log('步骤3: 输入密码'); await page.fill('input[type=\"password\"]', 'admin123456'); await page.screenshot({ path: dir + '/step2_input.png' }); console.log('步骤4: 点击登录'); await page.click('button[type=\"submit\"]'); await page.waitForTimeout(1000); console.log('步骤5: 处理滑块验证码'); const sliderOk = await helpers.handleSliderCaptcha(page); if (!sliderOk) { console.log('滑块验证失败'); } else { console.log('滑块验证成功'); } await page.screenshot({ path: dir + '/step3_result.png' }); console.log('登录结果 - 当前URL:', page.url()); await browser.close(); console.log('测试完成，截图保存在:', dir);"
 ```
 
 ## 注意事项

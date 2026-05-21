@@ -528,6 +528,262 @@ async function describePageForAI(page) {
   return desc;
 }
 
+/**
+ * Slider Captcha Handler
+ * Handles slider captcha verification with OpenCV-based gap detection
+ */
+
+/**
+ * Get gap offset using canvas pixel comparison
+ * @param {Object} page - Playwright page
+ * @param {string} bgSelector - Background image selector
+ * @param {string} gapSelector - Gap/slider image selector
+ */
+async function getGapOffset(page, bgSelector = '.verify-img-panel', gapSelector = '.verify-sub-block') {
+  try {
+    const bgElement = page.locator(bgSelector).first();
+    const gapElement = page.locator(gapSelector).first();
+
+    await bgElement.waitFor({ state: 'visible', timeout: 5000 });
+    await gapElement.waitFor({ state: 'visible', timeout: 5000 });
+
+    const bgScreenshot = await bgElement.screenshot();
+    const gapScreenshot = await gapElement.screenshot();
+
+    const bgBase64 = bgScreenshot.toString('base64');
+    const gapBase64 = gapScreenshot.toString('base64');
+
+    // Use canvas to get pixel data for gap detection
+    const bgImage = await page.evaluate(async (base64) => {
+      return new Promise((resolve) => {
+        const img = new Image();
+        img.onload = () => {
+          const canvas = document.createElement('canvas');
+          canvas.width = img.width;
+          canvas.height = img.height;
+          const ctx = canvas.getContext('2d');
+          ctx.drawImage(img, 0, 0);
+          resolve({ width: img.width, height: img.height, data: ctx.getImageData(0, 0, img.width, img.height).data });
+        };
+        img.src = 'data:image/png;base64,' + base64;
+      });
+    }, bgBase64);
+
+    const gapImage = await page.evaluate(async (base64) => {
+      return new Promise((resolve) => {
+        const img = new Image();
+        img.onload = () => {
+          const canvas = document.createElement('canvas');
+          canvas.width = img.width;
+          canvas.height = img.height;
+          const ctx = canvas.getContext('2d');
+          ctx.drawImage(img, 0, 0);
+          resolve({ width: img.width, height: img.height, data: ctx.getImageData(0, 0, img.width, img.height).data });
+        };
+        img.src = 'data:image/png;base64,' + base64;
+      });
+    }, gapBase64);
+
+    const gapWidth = gapImage.width;
+    const bgWidth = bgImage.width;
+    const searchStart = 200;
+    const searchEnd = Math.min(340, bgWidth - gapWidth);
+
+    let bestMatch = { x: 0, similarity: 0 };
+
+    for (let x = searchStart; x <= searchEnd; x++) {
+      let matchCount = 0;
+      const sampleStep = 3;
+
+      for (let y = 0; y < bgImage.height; y += sampleStep) {
+        for (let gx = 0; gx < gapWidth; gx += sampleStep) {
+          const bgIdx = (y * bgWidth + (x + gx)) * 4;
+          const gapIdx = (y * gapWidth + gx) * 4;
+
+          const bgR = bgImage.data[bgIdx];
+          const bgG = bgImage.data[bgIdx + 1];
+          const bgB = bgImage.data[bgIdx + 2];
+
+          const gapR = gapImage.data[gapIdx];
+          const gapG = gapImage.data[gapIdx + 1];
+          const gapB = gapImage.data[gapIdx + 2];
+
+          const diff = Math.abs(bgR - gapR) + Math.abs(bgG - gapG) + Math.abs(bgB - gapB);
+          if (diff < 60) {
+            matchCount++;
+          }
+        }
+      }
+
+      const similarity = matchCount / ((bgImage.height / sampleStep) * (gapWidth / sampleStep));
+      if (similarity > bestMatch.similarity) {
+        bestMatch = { x, similarity };
+      }
+    }
+
+    console.log(`Gap detection: position=${bestMatch.x}px, similarity=${(bestMatch.similarity * 100).toFixed(2)}%`);
+
+    if (bestMatch.x < 200 && bestMatch.similarity < 0.2) {
+      console.log('Gap detection in left slider area, misidentification, retrying...');
+      return null;
+    }
+
+    if (bestMatch.similarity < 0.2) {
+      console.log('Low similarity, detection may have failed');
+      return null;
+    }
+
+    return bestMatch.x;
+  } catch (e) {
+    console.log('Gap detection error:', e.message);
+    return null;
+  }
+}
+
+/**
+ * Human-like slider drag
+ * @param {Object} page - Playwright page
+ * @param {number} targetX - Target X position to drag to
+ * @param {Object} options - Configuration options
+ */
+async function humanLikeSliderDrag(page, targetX, options = {}) {
+  const slider = page.locator('.verify-move-block').first();
+  const sliderBox = await slider.boundingBox();
+
+  if (!sliderBox) {
+    throw new Error('Cannot get slider position');
+  }
+
+  const startX = sliderBox.x + sliderBox.width / 2;
+  const startY = sliderBox.y + sliderBox.height / 2;
+
+  const distance = targetX - startX;
+
+  console.log(`Slider drag: distance=${distance.toFixed(1)}px`);
+
+  // Move to start position
+  await page.mouse.move(startX + randInt(-10, 10), startY + randInt(-3, 3), { steps: randInt(6, 10) });
+  await page.waitForTimeout(randInt(50, 100));
+  await page.mouse.move(startX, startY, { steps: randInt(3, 5) });
+  await page.waitForTimeout(randInt(30, 60));
+
+  // Press down
+  await page.mouse.down();
+  await page.waitForTimeout(randInt(40, 80));
+
+  // Natural trajectory with easeOutCubic
+  const totalSteps = randInt(20, 30);
+  for (let i = 0; i < totalSteps; i++) {
+    const progress = i / totalSteps;
+    const easeProgress = 1 - Math.pow(1 - progress, 3);
+
+    let nextX = startX + distance * easeProgress;
+    nextX += randFloat(-1.5, 1.5) * (1 - easeProgress);
+    const nextY = startY + randFloat(-2, 2);
+
+    await page.mouse.move(nextX, nextY, { steps: 1 });
+
+    if (Math.random() < 0.1) {
+      await page.waitForTimeout(randInt(2, 6));
+    }
+  }
+
+  // Fine-tune at end with overshoot
+  const finalTargetX = targetX + randFloat(-2, 2);
+  const overshoot = randInt(1, 3);
+  await page.mouse.move(finalTargetX + overshoot, startY, { steps: randInt(1, 2) });
+  await page.waitForTimeout(randInt(10, 25));
+  await page.mouse.move(finalTargetX, startY, { steps: 1 });
+  await page.waitForTimeout(randInt(20, 50));
+
+  // Release
+  await page.mouse.up();
+  await page.waitForTimeout(randInt(60, 100));
+}
+
+/**
+ * Handle slider captcha - main entry point
+ * @param {Object} page - Playwright page
+ * @param {Object} options - Configuration options
+ */
+async function handleSliderCaptcha(page, options = {}) {
+  const maxRetries = options.maxRetries || 20;
+  const verifyBoxSelector = options.verifyBoxSelector || '.verifybox';
+  const sliderBlockSelector = options.sliderBlockSelector || '.verify-move-block';
+  const refreshBtnSelector = options.refreshBtnSelector || '.verify-refresh';
+  const bgSelector = options.bgSelector || '.verify-img-panel';
+  const gapSelector = options.gapSelector || '.verify-sub-block';
+
+  for (let attempt = 0; attempt < maxRetries; attempt++) {
+    try {
+      console.log(`\nSlider captcha attempt ${attempt + 1}/${maxRetries}`);
+
+      await page.waitForSelector(verifyBoxSelector, { state: 'visible', timeout: 5000 });
+      await page.waitForSelector(sliderBlockSelector, { state: 'visible', timeout: 5000 });
+
+      const gapAbsX = await getGapOffset(page, bgSelector, gapSelector);
+      if (gapAbsX === null) {
+        console.log('Detection failed, refreshing captcha');
+        await page.locator(refreshBtnSelector).click();
+        await page.waitForTimeout(500);
+        continue;
+      }
+
+      const slider = page.locator(sliderBlockSelector).first();
+      const sliderBox = await slider.boundingBox();
+      if (!sliderBox) {
+        console.log('Cannot get slider position, retrying');
+        await page.locator(refreshBtnSelector).click();
+        await page.waitForTimeout(500);
+        continue;
+      }
+
+      const bgContainer = page.locator(bgSelector).first();
+      const bgBox = await bgContainer.boundingBox();
+      if (!bgBox) {
+        console.log('Cannot get background position, retrying');
+        await page.locator(refreshBtnSelector).click();
+        await page.waitForTimeout(500);
+        continue;
+      }
+
+      const targetScreenX = bgBox.x + gapAbsX + sliderBox.width / 2;
+
+      await humanLikeSliderDrag(page, targetScreenX);
+
+      try {
+        await page.waitForSelector(verifyBoxSelector, { state: 'hidden', timeout: 2500 });
+        console.log('Slider captcha verified successfully!');
+        return true;
+      } catch {
+        console.log('Verification failed, retrying');
+        await page.locator(refreshBtnSelector).click();
+        await page.waitForTimeout(500);
+        continue;
+      }
+    } catch (e) {
+      console.log('Slider captcha exception:', e.message);
+      try {
+        await page.locator(refreshBtnSelector).click();
+        await page.waitForTimeout(500);
+      } catch {}
+      continue;
+    }
+  }
+
+  console.log('Slider captcha all attempts failed');
+  return false;
+}
+
+// Utility functions for slider
+function randInt(min, max) {
+  return Math.floor(Math.random() * (max - min + 1)) + min;
+}
+
+function randFloat(min, max) {
+  return Math.random() * (max - min) + min;
+}
+
 module.exports = {
   launchBrowser,
   createPage,
@@ -546,5 +802,8 @@ module.exports = {
   getExtraHeadersFromEnv,
   getPageText,
   getPageStructure,
-  describePageForAI
+  describePageForAI,
+  handleSliderCaptcha,
+  getGapOffset,
+  humanLikeSliderDrag
 };

@@ -1,5 +1,5 @@
-# 使用 Python 3.11 官方镜像作为基础镜像
-FROM docker.1ms.run/library/python:3.11-slim
+# 使用 Python 3.11 官方镜像作为基础镜像（更稳定可靠）
+FROM python:3.11-slim
 
 # 设置工作目录
 WORKDIR /app

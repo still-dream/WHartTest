@@ -453,14 +453,28 @@ $steps
 5. 如遇到错误，记录具体错误信息但继续执行后续步骤
 6. 在每个步骤都需要使用 browser_take_screenshot 工具截图，截图完成后必须调用 save_operation_screenshots_to_the_application_case 工具将截图上传到当前测试用例（project_id使用上述项目ID，case_id使用上述用例ID）
 
-## 滑块验证码处理
-登录场景下，点击登录按钮后如果出现滑块验证码（页面出现 `.verifybox` 弹窗或"请完成安全验证"文字），需要使用浏览器工具模拟拖动滑块完成验证。操作步骤：
-1. 使用 browser_snapshot 确认滑块验证码是否出现
-2. 如果出现滑块验证码，使用 browser_click 工具点击并按住滑块元素（`.verify-move-block`）
-3. 模拟人类拖动：先缓慢向右拖动，接近目标位置时减速，最后微调释放
-4. 如果验证失败（滑块弹窗仍在），点击刷新按钮（`.verify-refresh`）重试
-5. 最多重试20次，直到验证弹窗消失
-6. 验证成功后继续执行后续测试步骤
+## 滑块验证码处理（重要）
+登录场景下，点击登录按钮后如果出现滑块验证码（页面出现 `.verifybox` 弹窗或"请完成安全验证"文字），**必须使用 `execute_skill_script` 调用 `playwright-skill` 的 `run.js` 并使用 `helpers.handleSliderCaptcha` 函数来处理滑块验证**，不要使用 browser_* 系列工具手动处理滑块！
+
+正确做法示例：
+```python
+# 使用 execute_skill_script 调用 playwright-skill 的 run.js
+execute_skill_script(
+    skill_name="playwright-skill",
+    command='node run.js "const ok = await helpers.handleSliderCaptcha(page); console.log(\'滑块验证结果:\', ok);"',
+    session_id="当前会话的session_id"
+)
+```
+
+滑块验证码特征：
+- 页面出现 `.verifybox` 弹窗
+- 页面出现"请完成安全验证"文字
+- 页面出现可拖动的滑块 `.verify-move-block`
+
+**注意**：
+1. `session_id` 必须与当前测试会话的 session_id 保持一致，以确保浏览器状态可以跨步骤保持
+2. `helpers.handleSliderCaptcha` 会自动检测滑块是否存在，最多重试20次
+3. 如果返回 `false`，说明滑块验证失败，需要排查原因
 
 ## 输出格式
 执行完成后，请输出以下JSON格式的测试结果：

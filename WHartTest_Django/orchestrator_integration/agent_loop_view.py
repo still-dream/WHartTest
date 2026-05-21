@@ -1203,8 +1203,8 @@ page.get_by_placeholder("用户名").fill("admin")
                     orchestrator._execute_step(task, step_context, stream_callback=stream_callback)
                 )
                 
-                # ⭐ 设置步骤整体超时（5分钟）
-                step_timeout = 300  # 秒
+                # ⭐ 设置步骤整体超时
+                step_timeout = 1000  # 秒
                 step_start_time = asyncio.get_event_loop().time()
                 step_timed_out = False
                 user_stopped = False  # ⭐ 用户停止标志
