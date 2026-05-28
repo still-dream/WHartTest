@@ -77,7 +77,7 @@ def generate_custom_id():
 
 @mcp.tool(description='获取当前用户信息，包括用户ID、用户名、姓名等')
 def get_current_user_info(
-        ctx,
+        ctx=None,
         user_id: int = Field(default=0, description='用户id（可选，用于指定要获取的用户信息）')) -> str:
     """
     获取当前用户信息
@@ -443,7 +443,7 @@ def save_operation_screenshots_to_the_application_case(
 
 @mcp.tool(description='保存WHartTest平台功能测试用例')
 def add_functional_case(
-        ctx,
+        ctx=None,
         project_id: int = Field(description='项目id'),
         name: str = Field(description='用例名称'),
         precondition: str = Field(description='前置条件'),
