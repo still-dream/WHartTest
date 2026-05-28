@@ -30,13 +30,14 @@
 
           <div class="overview-card">
             <div class="overview-header">
-              <icon-robot class="overview-icon" />
-              <span class="overview-title">UI用例</span>
+              <icon-desktop class="overview-icon" />
+              <span class="overview-title">UI自动化</span>
             </div>
-            <div class="overview-value">{{ statistics?.automation_scripts?.total || 0 }}</div>
+            <div class="overview-value">{{ statistics?.ui_automation?.total_cases || 0 }}</div>
             <div class="overview-sub">
-              <span class="sub-item active">启用 {{ statistics?.automation_scripts?.by_status?.active || 0 }}</span>
-              <span class="sub-item draft">草稿 {{ statistics?.automation_scripts?.by_status?.draft || 0 }}</span>
+              <span class="sub-item">执行 {{ statistics?.ui_automation?.total_executions || 0 }}</span>
+              <span class="sub-item passed">成功 {{ statistics?.ui_automation?.by_status?.success || 0 }}</span>
+              <span class="sub-item failed">失败 {{ statistics?.ui_automation?.by_status?.failed || 0 }}</span>
             </div>
           </div>
 
@@ -133,28 +134,53 @@
             </div>
           </div>
 
-          <!-- 右侧：资源概览 -->
+          <!-- 右侧：Token 使用统计 -->
           <div class="panel resource-panel">
             <div class="panel-header">
-              <span class="panel-title">资源统计</span>
+              <span class="panel-title">Token 统计</span>
+              <div class="token-period-selector">
+                <span
+                  v-for="opt in periodOptions"
+                  :key="opt.value"
+                  :class="['period-tag', { active: tokenPeriod === opt.value }]"
+                  @click="changeTokenPeriod(opt.value)"
+                >{{ opt.label }}</span>
+              </div>
             </div>
             <div class="panel-body">
               <div class="resource-grid">
-                <div class="resource-block">
-                  <div class="resource-label">需求文档</div>
-                  <div class="resource-stats">
-                    <div class="stat-row">
-                      <span>项目文档数</span>
-                      <span class="stat-num">{{ statistics?.requirements?.total || 0 }}</span>
-                    </div>
+                <div class="resource-block token-total">
+                  <div class="resource-label">总消耗</div>
+                  <div class="token-value">{{ formatTokenCount(tokenStats?.total?.total_tokens || 0) }}</div>
+                  <div class="token-sub">
+                    <span class="token-detail">入 {{ formatTokenCount(tokenStats?.total?.input_tokens || 0) }}</span>
+                    <span class="token-detail">出 {{ formatTokenCount(tokenStats?.total?.output_tokens || 0) }}</span>
+                    <span class="token-detail">缓存 {{ formatTokenCount(tokenStats?.total?.cache_read_tokens || 0) }}</span>
                   </div>
                 </div>
                 <div class="resource-block">
-                  <div class="resource-label">知识库文档</div>
+                  <div class="resource-label">使用情况</div>
                   <div class="resource-stats">
                     <div class="stat-row">
-                      <span>总文档数</span>
-                      <span class="stat-num">{{ statistics?.knowledge?.total || 0 }}</span>
+                      <span>请求次数</span>
+                      <span class="stat-num">{{ tokenStats?.total?.request_count || 0 }}</span>
+                    </div>
+                    <div class="stat-row">
+                      <span>会话数</span>
+                      <span class="stat-num">{{ tokenStats?.total?.session_count || 0 }}</span>
+                    </div>
+                    <div class="stat-row">
+                      <span>平均/请求</span>
+                      <span class="stat-num active">{{ avgTokensPerRequest }}</span>
+                    </div>
+                  </div>
+                </div>
+                <div class="resource-block" v-if="tokenStats?.by_user?.length">
+                  <div class="resource-label">用户排行</div>
+                  <div class="resource-stats">
+                    <div class="stat-row" v-for="(user, index) in tokenStats.by_user.slice(0, 3)" :key="user.user_id">
+                      <span>{{ index + 1 }}. {{ user.username }}</span>
+                      <span class="stat-num">{{ formatTokenCount(user.total_tokens) }}</span>
                     </div>
                   </div>
                 </div>
@@ -170,13 +196,13 @@
               <span class="panel-title">近7天执行趋势</span>
               <div class="trend-summary">
                 <span class="summary-item">
-                  近7天: <strong>{{ statistics?.execution_trend?.summary_7d?.execution_count || 0 }}</strong> 次
+                  近30天: <strong>{{ statistics?.execution_trend?.summary_30d?.execution_count || 0 }}</strong> 次
                 </span>
                 <span class="summary-item passed">
-                  通过 <strong>{{ statistics?.execution_trend?.summary_7d?.passed || 0 }}</strong>
+                  通过 <strong>{{ statistics?.execution_trend?.summary_30d?.passed || 0 }}</strong>
                 </span>
                 <span class="summary-item failed">
-                  失败 <strong>{{ statistics?.execution_trend?.summary_7d?.failed || 0 }}</strong>
+                  失败 <strong>{{ statistics?.execution_trend?.summary_30d?.failed || 0 }}</strong>
                 </span>
               </div>
             </div>
@@ -218,14 +244,22 @@
 import { ref, computed, watch, onMounted } from 'vue';
 import { Message } from '@arco-design/web-vue';
 import {
-  IconBarChart, IconFile, IconRobot, IconThunderbolt, IconApps
+  IconBarChart, IconFile, IconThunderbolt, IconApps, IconDesktop
 } from '@arco-design/web-vue/es/icon';
-import { getProjectStatistics, type ProjectStatistics } from '@/services/projectService';
+import { getProjectStatistics, getTokenUsageStats, type ProjectStatistics, type TokenUsageStats } from '@/services/projectService';
 import { useProjectStore } from '@/store/projectStore';
 
 const projectStore = useProjectStore();
 const loading = ref(false);
 const statistics = ref<ProjectStatistics | null>(null);
+const tokenStats = ref<TokenUsageStats | null>(null);
+const tokenPeriod = ref<'day' | 'week' | 'month'>('day');
+
+const periodOptions = [
+  { label: '日', value: 'day' as const },
+  { label: '周', value: 'week' as const },
+  { label: '月', value: 'month' as const },
+];
 
 const currentProjectId = computed(() => projectStore.currentProjectId);
 
@@ -270,6 +304,33 @@ const formatDate = (dateStr: string): string => {
   return `${date.getMonth() + 1}/${date.getDate()}`;
 };
 
+const formatTokenCount = (count: number): string => {
+  return count.toLocaleString('zh-CN');
+};
+
+const avgTokensPerRequest = computed(() => {
+  const total = tokenStats.value?.total?.total_tokens || 0;
+  const requests = tokenStats.value?.total?.request_count || 0;
+  if (requests === 0) return '0';
+  return formatTokenCount(Math.round(total / requests));
+});
+
+const fetchTokenStats = async () => {
+  try {
+    const response = await getTokenUsageStats({ group_by: tokenPeriod.value });
+    if (response.success && response.data) {
+      tokenStats.value = response.data;
+    }
+  } catch (error) {
+    console.error('获取 Token 统计数据出错:', error);
+  }
+};
+
+const changeTokenPeriod = (period: 'day' | 'week' | 'month') => {
+  tokenPeriod.value = period;
+  fetchTokenStats();
+};
+
 const fetchStatistics = async () => {
   if (!currentProjectId.value) return;
 
@@ -301,6 +362,7 @@ watch(currentProjectId, () => {
 });
 
 onMounted(() => {
+  fetchTokenStats();
   if (currentProjectId.value) {
     fetchStatistics();
   }
@@ -310,7 +372,7 @@ onMounted(() => {
 <style scoped>
 .dashboard-view {
   height: 100%;
-  background-color: #f8f9fc;
+  background-color: var(--theme-page-bg);
   padding: 10px;
   box-sizing: border-box;
   overflow-y: auto;
@@ -358,7 +420,7 @@ onMounted(() => {
 }
 
 .overview-card:hover {
-  box-shadow: 4px 0 12px rgba(0, 160, 233, 0.25), 0 4px 12px rgba(0, 160, 233, 0.25), 0 0 12px rgba(0, 160, 233, 0.2);
+  box-shadow: 4px 0 12px rgba(var(--theme-accent-rgb), 0.22), 0 4px 12px rgba(var(--theme-accent-rgb), 0.22), 0 0 12px rgba(var(--theme-accent-rgb), 0.18);
 }
 
 .overview-header {
@@ -370,12 +432,12 @@ onMounted(() => {
 
 .overview-icon {
   font-size: 20px;
-  color: #dc2626;
+  color: var(--theme-accent);
 }
 
 .overview-title {
   font-size: 14px;
-  color: #666;
+  color: var(--theme-text-secondary);
   font-weight: 500;
 }
 
@@ -412,7 +474,7 @@ onMounted(() => {
 /* 主内容区域 */
 .main-section {
   display: grid;
-  grid-template-columns: 1fr 1fr 1fr;
+  grid-template-columns: 1fr 280px 1fr;
   gap: 10px;
 }
 
@@ -428,7 +490,7 @@ onMounted(() => {
   justify-content: space-between;
   align-items: center;
   padding: 14px 20px;
-  border-bottom: 1px solid #f0f0f0;
+  border-bottom: 1px solid var(--theme-border);
 }
 
 .panel-title {
@@ -439,8 +501,8 @@ onMounted(() => {
 
 .panel-badge {
   font-size: 12px;
-  color: #86909c;
-  background: #f2f3f5;
+  color: var(--theme-text-tertiary);
+  background: var(--theme-surface-soft);
   padding: 2px 8px;
   border-radius: 10px;
 }
@@ -470,24 +532,24 @@ onMounted(() => {
 
 .bar-label {
   font-size: 13px;
-  color: #4e5969;
+  color: var(--theme-text-secondary);
 }
 
 .bar-value {
   font-size: 14px;
   font-weight: 600;
-  color: #1d2129;
+  color: var(--theme-text);
 }
 
 .bar-percent {
   font-size: 12px;
   font-weight: 400;
-  color: #86909c;
+  color: var(--theme-text-tertiary);
 }
 
 .bar-track {
   height: 6px;
-  background: #e8e8e8;
+  background: var(--theme-surface-soft);
   border-radius: 3px;
   overflow: hidden;
 }
@@ -520,7 +582,7 @@ onMounted(() => {
 
 .rate-bg {
   fill: none;
-  stroke: #e8e8e8;
+  stroke: var(--theme-surface-soft);
   stroke-width: 8;
 }
 
@@ -547,7 +609,7 @@ onMounted(() => {
 
 .rate-unit {
   font-size: 14px;
-  color: #86909c;
+  color: var(--theme-text-tertiary);
 }
 
 .rate-legend {
@@ -576,41 +638,25 @@ onMounted(() => {
 .legend-dot.error { background: #ff7875; }
 
 .legend-label {
-  color: #86909c;
+  color: var(--theme-text-tertiary);
   flex: 1;
 }
 
 .legend-value {
   font-weight: 600;
-  color: #1d2129;
+  color: var(--theme-text);
 }
 
 /* 资源统计 */
-.resource-panel {
-  display: flex;
-  flex-direction: column;
-}
-
-.resource-panel .panel-body {
-  flex: 1;
-  display: flex;
-  flex-direction: column;
-}
-
 .resource-grid {
-  flex: 1;
   display: flex;
   flex-direction: column;
   gap: 16px;
 }
 
 .resource-block {
-  flex: 1;
   padding-bottom: 12px;
-  border-bottom: 1px solid #f0f0f0;
-  display: flex;
-  flex-direction: column;
-  justify-content: center;
+  border-bottom: 1px solid var(--theme-border);
 }
 
 .resource-block:last-child {
@@ -621,7 +667,7 @@ onMounted(() => {
 .resource-label {
   font-size: 13px;
   font-weight: 500;
-  color: #4e5969;
+  color: var(--theme-text-secondary);
   margin-bottom: 8px;
 }
 
@@ -635,16 +681,66 @@ onMounted(() => {
   display: flex;
   justify-content: space-between;
   font-size: 12px;
-  color: #86909c;
+  color: var(--theme-text-tertiary);
 }
 
 .stat-num {
   font-weight: 600;
-  color: #1d2129;
+  color: var(--theme-text);
 }
 
 .stat-num.active { color: #52c41a; }
 .stat-num.deprecated { color: #ff4d4f; }
+
+/* Token 统计样式 */
+.token-period-selector {
+  display: flex;
+  gap: 4px;
+}
+
+.period-tag {
+  font-size: 12px;
+  padding: 2px 8px;
+  border-radius: 10px;
+  cursor: pointer;
+  color: var(--theme-text-tertiary);
+  background: var(--theme-surface-soft);
+  transition: all 0.2s;
+}
+
+.period-tag:hover {
+  color: var(--theme-accent);
+}
+
+.period-tag.active {
+  color: #fff;
+  background: var(--theme-accent);
+}
+
+.token-total {
+  text-align: center;
+  padding-bottom: 16px !important;
+}
+
+.token-value {
+  font-size: 28px;
+  font-weight: 700;
+  color: var(--theme-accent);
+  line-height: 1.2;
+  margin: 8px 0;
+}
+
+.token-sub {
+  display: flex;
+  justify-content: center;
+  gap: 16px;
+}
+
+.token-detail {
+  font-size: 12px;
+  color: var(--theme-text-tertiary);
+}
+
 
 /* 趋势图 */
 .trend-section {
@@ -676,11 +772,11 @@ onMounted(() => {
   display: flex;
   gap: 16px;
   font-size: 12px;
-  color: #86909c;
+  color: var(--theme-text-tertiary);
 }
 
 .summary-item strong {
-  color: #1d2129;
+  color: var(--theme-text);
 }
 
 .summary-item.passed strong { color: #52c41a; }
@@ -721,7 +817,7 @@ onMounted(() => {
 
 .column-label {
   font-size: 11px;
-  color: #86909c;
+  color: var(--theme-text-tertiary);
 }
 
 .trend-legend {
@@ -730,12 +826,12 @@ onMounted(() => {
   gap: 20px;
   margin-top: 12px;
   padding-top: 12px;
-  border-top: 1px solid #f0f0f0;
+  border-top: 1px solid var(--theme-border);
 }
 
 .legend-tag {
   font-size: 12px;
-  color: #86909c;
+  color: var(--theme-text-tertiary);
   display: flex;
   align-items: center;
   gap: 6px;

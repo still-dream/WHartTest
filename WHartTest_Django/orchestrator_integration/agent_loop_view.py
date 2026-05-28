@@ -1,67 +1,832 @@
 """
-Agent Loop 流式 API 视图
+Agent Loop API 视图 (LangChain v1 重构版)
 
-基于 Agent Loop 架构实现流式聊天，解决 Token 累积问题。
+使用 LangChain v1 的 create_agent + middleware 模式，
+替代原有的手动 AgentOrchestrator 循环。
+
+核心变更：
+- 使用 create_agent() 统一创建 Agent
+- 使用 SummarizationMiddleware 自动处理上下文压缩
+- 使用 HumanInTheLoopMiddleware 处理 HITL 审批
+- 在流处理层检测工具调用，生成 step_start/step_complete 事件
+- 支持 stream 参数控制流式/非流式输出
+- SSE 事件格式与旧版保持兼容，前端无需修改
 """
+
 import asyncio
+import base64
 import json
 import logging
 import os
+import re
 import uuid
 from typing import Any, Dict, List, Optional
+from urllib.parse import urlparse
 
-from django.conf import settings
-from django.http import StreamingHttpResponse
-from django.utils import timezone
+import httpx
+from django.http import StreamingHttpResponse, JsonResponse
 from django.utils.decorators import method_decorator
 from django.views import View
 from django.views.decorators.csrf import csrf_exempt
-from rest_framework import status
 from rest_framework.exceptions import AuthenticationFailed
 from rest_framework_simplejwt.authentication import JWTAuthentication
-from langchain_core.messages import SystemMessage
 from asgiref.sync import sync_to_async
 
-from langchain_core.messages import HumanMessage, SystemMessage, AIMessage, ToolMessage, AnyMessage
-from .context_compression import ConversationCompressor, CompressionSettings
-from requirements.context_limits import context_checker, RESERVED_TOKENS
+from langchain_core.messages import (
+    AIMessage,
+    HumanMessage,
+    RemoveMessage,
+    SystemMessage,
+    ToolMessage,
+)
+from langchain.agents import create_agent
 from wharttest_django.checkpointer import get_async_checkpointer
 
-from .agent_loop import AgentOrchestrator
-from .models import AgentTask, AgentBlackboard, AgentStep
+from .middleware_config import (
+    get_middleware_from_config,
+    get_user_tool_approvals,
+    get_user_friendly_llm_error,
+)
+from .playwright_instructions import PLAYWRIGHT_SCRIPT_INSTRUCTION
+from .stop_signal import should_stop, clear_stop_signal
 from langgraph_integration.models import ChatSession, LLMConfig
 from langgraph_integration.views import (
+    _extract_requirement_doc_images_for_message,
     create_llm_instance,
     create_sse_data,
     get_effective_system_prompt_async,
+    check_project_permission,
 )
-from projects.models import Project, ProjectMember
+from projects.models import Project
 from prompts.models import UserPrompt
 from mcp_tools.models import RemoteMCPConfig
 from mcp_tools.persistent_client import mcp_session_manager
+from requirements.context_limits import (
+    MODEL_CONTEXT_LIMITS,
+    context_checker,
+    get_context_limit_from_llm,
+)
 
 logger = logging.getLogger(__name__)
 
 
-@method_decorator(csrf_exempt, name='dispatch')
+def _build_sse_error_event(exc: Exception) -> Dict[str, Any]:
+    friendly_error = get_user_friendly_llm_error(exc)
+    if friendly_error:
+        event = {
+            "type": "error",
+            "message": friendly_error["message"],
+            "code": friendly_error["status_code"],
+            "error_code": friendly_error["error_code"],
+            "errors": friendly_error["errors"],
+        }
+        if friendly_error.get("model"):
+            event["model"] = friendly_error["model"]
+        if friendly_error.get("reset_time"):
+            event["retry_after"] = friendly_error["reset_time"]
+        if friendly_error.get("reset_seconds") is not None:
+            event["retry_after_seconds"] = friendly_error["reset_seconds"]
+        return event
+
+    return {"type": "error", "message": f"执行错误: {str(exc)}", "code": 500}
+
+
+# ============== 统一响应辅助函数 ==============
+
+
+def api_success_response(
+    message: str, data: Any = None, code: int = 200
+) -> JsonResponse:
+    """构建统一格式的成功响应"""
+    return JsonResponse(
+        {
+            "status": "success",
+            "code": code,
+            "message": message,
+            "data": data,
+            "errors": None,
+        },
+        json_dumps_params={"ensure_ascii": False},
+    )
+
+
+def api_error_response(
+    message: str, code: int = 400, errors: Any = None
+) -> JsonResponse:
+    """构建统一格式的错误响应"""
+    if errors is None:
+        errors = {"detail": [message]}
+    return JsonResponse(
+        {
+            "status": "error",
+            "code": code,
+            "message": message,
+            "data": None,
+            "errors": errors,
+        },
+        status=code,
+        json_dumps_params={"ensure_ascii": False},
+    )
+
+
+_MARKDOWN_IMAGE_URL_RE = re.compile(
+    r"!\[[^\]]*?\]\((?P<url>https?://[^)\s]+)\)", re.IGNORECASE
+)
+_PLAIN_HTTP_URL_RE = re.compile(r'(?P<url>https?://[^\s<>"\']+)', re.IGNORECASE)
+_URL_LEADING_WRAP_CHARS = "([<{\"'“‘（【《「『"
+_URL_TRAILING_WRAP_CHARS = ")]}>\"'”’）】》」』.,;!?，。；！？、"
+_URL_HARD_STOP_CHARS = "\r\n\t ,;)}]>\"'，。；！？、：”’）】》」』"
+
+
+def _get_env_int(name: str, default: int, min_value: int = 1) -> int:
+    raw = os.getenv(name)
+    if raw is None:
+        return default
+    try:
+        return max(min_value, int(raw))
+    except ValueError:
+        logger.warning(
+            "AgentLoopStreamAPI: Invalid int env %s=%s, fallback=%s", name, raw, default
+        )
+        return default
+
+
+def _get_env_float(name: str, default: float, min_value: float = 0.1) -> float:
+    raw = os.getenv(name)
+    if raw is None:
+        return default
+    try:
+        return max(min_value, float(raw))
+    except ValueError:
+        logger.warning(
+            "AgentLoopStreamAPI: Invalid float env %s=%s, fallback=%s",
+            name,
+            raw,
+            default,
+        )
+        return default
+
+
+def _normalize_uploaded_image_base64_list(
+    raw_images: Any, raw_image: Any = None
+) -> List[str]:
+    """兼容旧 image 字段与新 images 数组，返回去重后的上传图片列表。"""
+
+    normalized: List[str] = []
+
+    def _append(candidate: Any) -> None:
+        if not isinstance(candidate, str):
+            return
+        value = candidate.strip()
+        if not value or value in normalized:
+            return
+        normalized.append(value)
+
+    if isinstance(raw_images, list):
+        for item in raw_images:
+            _append(item)
+    else:
+        _append(raw_images)
+
+    _append(raw_image)
+    return normalized
+
+
+_LINKED_IMAGE_URL_ALLOWLIST = {
+    host.strip().lower()
+    for host in os.getenv("AGENT_LOOP_IMAGE_URL_ALLOWLIST", "*").split(",")
+    if host.strip()
+}
+_MAX_LINKED_IMAGES_PER_REQUEST = _get_env_int(
+    "AGENT_LOOP_MAX_LINKED_IMAGES", 3, min_value=1
+)
+_MAX_LINKED_IMAGE_BYTES = _get_env_int(
+    "AGENT_LOOP_MAX_LINKED_IMAGE_BYTES", 5 * 1024 * 1024, min_value=1024
+)
+_LINKED_IMAGE_FETCH_TIMEOUT = _get_env_float(
+    "AGENT_LOOP_LINKED_IMAGE_FETCH_TIMEOUT", 8.0, min_value=1.0
+)
+_MAX_SAFE_TOOL_MESSAGE_CHARS = _get_env_int(
+    "AGENT_LOOP_MAX_SAFE_TOOL_MESSAGE_CHARS", 20000, min_value=1000
+)
+
+
+def _extract_linked_image_urls(text: str) -> List[str]:
+    """从用户消息中提取图片 URL（支持 Markdown 图片语法和纯 URL）。"""
+    if not text:
+        return []
+
+    urls: List[str] = []
+    seen: set[str] = set()
+
+    def _normalize_url(candidate: str) -> str:
+        url = (candidate or "").strip()
+        while url and url[0] in _URL_LEADING_WRAP_CHARS:
+            url = url[1:]
+        hard_stop_indexes = [
+            url.find(char) for char in _URL_HARD_STOP_CHARS if char in url
+        ]
+        if hard_stop_indexes:
+            url = url[: min(index for index in hard_stop_indexes if index >= 0)]
+        while url and url[-1] in _URL_TRAILING_WRAP_CHARS:
+            url = url[:-1]
+        return url
+
+    for pattern in (_MARKDOWN_IMAGE_URL_RE, _PLAIN_HTTP_URL_RE):
+        for match in pattern.finditer(text):
+            url = _normalize_url(match.group("url") or "")
+            if not url or url in seen:
+                continue
+
+            try:
+                parsed = urlparse(url)
+            except ValueError:
+                continue
+            if parsed.scheme.lower() not in ("http", "https"):
+                continue
+            if not parsed.netloc:
+                continue
+
+            seen.add(url)
+            urls.append(url)
+
+    return urls
+
+
+def _is_linked_image_url_allowed(url: str) -> bool:
+    """校验图片 URL 是否在允许的 host 白名单中（支持 * 全放开）。"""
+    if "*" in _LINKED_IMAGE_URL_ALLOWLIST or "all" in _LINKED_IMAGE_URL_ALLOWLIST:
+        return True
+
+    try:
+        parsed = urlparse(url)
+    except ValueError:
+        return False
+    host = (parsed.hostname or "").strip().lower()
+    return bool(host and host in _LINKED_IMAGE_URL_ALLOWLIST)
+
+
+async def _download_linked_image_as_data_url(url: str) -> Optional[str]:
+    """下载图片 URL 并转为 data URL，供视觉模型消费。"""
+    if not _is_linked_image_url_allowed(url):
+        logger.warning(
+            "AgentLoopStreamAPI: Skip linked image URL not in allowlist. url=%s, allowlist=%s",
+            url,
+            sorted(_LINKED_IMAGE_URL_ALLOWLIST),
+        )
+        return None
+
+    timeout = httpx.Timeout(
+        _LINKED_IMAGE_FETCH_TIMEOUT, connect=_LINKED_IMAGE_FETCH_TIMEOUT
+    )
+    try:
+        async with httpx.AsyncClient(timeout=timeout, follow_redirects=True) as client:
+            async with client.stream(
+                "GET", url, headers={"Accept": "image/*"}
+            ) as response:
+                response.raise_for_status()
+                content_type = (
+                    (response.headers.get("Content-Type") or "")
+                    .split(";")[0]
+                    .strip()
+                    .lower()
+                )
+                if not content_type.startswith("image/"):
+                    logger.warning(
+                        "AgentLoopStreamAPI: Skip linked URL with non-image content-type. url=%s, content_type=%s",
+                        url,
+                        content_type or "unknown",
+                    )
+                    return None
+
+                data = bytearray()
+                async for chunk in response.aiter_bytes():
+                    if not chunk:
+                        continue
+                    if len(data) + len(chunk) > _MAX_LINKED_IMAGE_BYTES:
+                        logger.warning(
+                            "AgentLoopStreamAPI: Skip linked image over size limit. url=%s, max_bytes=%s",
+                            url,
+                            _MAX_LINKED_IMAGE_BYTES,
+                        )
+                        return None
+                    data.extend(chunk)
+
+                if not data:
+                    logger.warning(
+                        "AgentLoopStreamAPI: Skip empty linked image response. url=%s",
+                        url,
+                    )
+                    return None
+
+                encoded = base64.b64encode(bytes(data)).decode("utf-8")
+                return f"data:{content_type};base64,{encoded}"
+    except Exception as e:
+        logger.warning(
+            "AgentLoopStreamAPI: Failed to fetch linked image url=%s, error=%s", url, e
+        )
+        return None
+
+
+async def _collect_linked_image_data_urls(
+    user_message: str,
+    linked_urls: Optional[List[str]] = None,
+) -> List[str]:
+    """从用户消息 URL 中收集可用图片，并转换为 data URL 列表。"""
+    if linked_urls is None:
+        linked_urls = _extract_linked_image_urls(user_message)
+    if not linked_urls:
+        return []
+
+    limited_urls = linked_urls[:_MAX_LINKED_IMAGES_PER_REQUEST]
+    if len(linked_urls) > len(limited_urls):
+        logger.info(
+            "AgentLoopStreamAPI: Truncated linked image URLs from %s to %s",
+            len(linked_urls),
+            len(limited_urls),
+        )
+
+    download_tasks = [_download_linked_image_as_data_url(url) for url in limited_urls]
+    results = await asyncio.gather(*download_tasks, return_exceptions=True)
+
+    data_urls: List[str] = []
+    for url, result in zip(limited_urls, results):
+        if isinstance(result, Exception):
+            logger.warning(
+                "AgentLoopStreamAPI: Linked image download task failed. url=%s, error=%s",
+                url,
+                result,
+            )
+            continue
+        if result:
+            data_urls.append(result)
+
+    return data_urls
+
+
+async def _prepare_agent_loop_human_message(
+    user_message: str,
+    *,
+    project: Project,
+    supports_vision: bool,
+    uploaded_images_base64: Optional[List[str]] = None,
+) -> tuple[Any, Dict[str, Any], str]:
+    """
+    规范化 Agent Loop 的用户消息。
+
+    - 将需求文档中的 `docimg://` 占位符替换为可访问的 `/api/.../images/...` URL
+    - 当模型支持视觉时，把需求文档图片与普通 HTTP(S) 图片一并转成多模态输入
+    - 返回：LangChain HumanMessage content、additional_kwargs、展示用文本
+    """
+    display_message = (user_message or "").strip()
+    uploaded_images_base64 = uploaded_images_base64 or []
+
+    (
+        display_message,
+        requirement_doc_image_data_urls,
+        requirement_document_id,
+    ) = await _extract_requirement_doc_images_for_message(display_message, project)
+
+    if requirement_doc_image_data_urls and not supports_vision:
+        logger.warning(
+            "AgentLoopStreamAPI: Requirement document images detected but current model does not support vision"
+        )
+
+    linked_image_data_urls: List[str] = []
+    linked_image_urls = _extract_linked_image_urls(display_message)
+    if linked_image_urls:
+        logger.info(
+            "AgentLoopStreamAPI: Extracted %s candidate linked image URLs from message",
+            len(linked_image_urls),
+        )
+        if supports_vision:
+            linked_image_data_urls = await _collect_linked_image_data_urls(
+                display_message,
+                linked_urls=linked_image_urls,
+            )
+            if linked_image_data_urls:
+                logger.info(
+                    "AgentLoopStreamAPI: Loaded %s linked images for multimodal input",
+                    len(linked_image_data_urls),
+                )
+        else:
+            logger.warning(
+                "AgentLoopStreamAPI: Found %s linked image URLs but current model does not support vision",
+                len(linked_image_urls),
+            )
+    elif "http://" in display_message.lower() or "https://" in display_message.lower():
+        logger.warning(
+            "AgentLoopStreamAPI: Message contains URL text but extractor found 0 valid URLs"
+        )
+
+    multimodal_image_data_urls = requirement_doc_image_data_urls + linked_image_data_urls
+
+    additional_kwargs: Dict[str, Any] = {}
+    if requirement_document_id:
+        additional_kwargs["requirement_document_id"] = requirement_document_id
+        if requirement_doc_image_data_urls:
+            additional_kwargs["image_source"] = "requirement_document"
+
+    if supports_vision and (uploaded_images_base64 or multimodal_image_data_urls):
+        human_message_content: Any = [{"type": "text", "text": display_message}]
+        for data_url in multimodal_image_data_urls:
+            human_message_content.append(
+                {
+                    "type": "image_url",
+                    "image_url": {"url": data_url},
+                }
+            )
+        for image_base64 in uploaded_images_base64:
+            human_message_content.append(
+                {
+                    "type": "image_url",
+                    "image_url": {
+                        "url": f"data:image/jpeg;base64,{image_base64}"
+                    },
+                }
+            )
+    else:
+        human_message_content = display_message
+
+    return human_message_content, additional_kwargs, display_message
+
+
+def process_mcp_tool_output(content: Any) -> tuple:
+    """
+    处理 MCP 工具返回的内容，提取实际数据并生成摘要
+
+    Args:
+        content: 工具返回的原始内容
+
+    Returns:
+        tuple: (processed_content, summary)
+    """
+    # 处理 MCP 工具返回的列表格式，提取 text 内容
+    if isinstance(content, list) and len(content) == 1:
+        first_item = content[0]
+        if isinstance(first_item, dict) and first_item.get("type") == "text":
+            text_content = first_item.get("text")
+            if text_content is not None:
+                content = text_content
+            # text 为 None 或空时保留原始列表格式
+
+    # 确保 content 可序列化
+    if content is None:
+        content = ""
+    elif not isinstance(content, (str, dict, list, int, float, bool)):
+        content = str(content)
+
+    # 生成摘要
+    if isinstance(content, str):
+        summary = content[:200]
+    else:
+        try:
+            summary = json.dumps(content, ensure_ascii=False)[:200]
+        except (TypeError, ValueError):
+            summary = str(content)[:200]
+
+    return content, summary
+
+
+def _build_sanitized_messages(messages: List[Any]) -> tuple[List[Any], int]:
+    """
+    构建合法的消息列表：
+    1) 为缺失 ToolMessage 响应的 tool_call 插入占位 ToolMessage
+    2) 清理悬空的 ToolMessage（无匹配 tool_call）
+    3) 清理有问题的 ToolMessage（content 非字符串 / 过长 / 含 base64）
+    返回 (clean_messages, fix_count)
+    """
+    result: List[Any] = []
+    fix_count = 0
+
+    # 当前 pending 的 tool_call IDs 及其工具名
+    pending_call_ids: List[str] = []
+    pending_call_names: Dict[str, str] = {}
+
+    def _flush_pending() -> None:
+        nonlocal fix_count
+        for tc_id in pending_call_ids:
+            result.append(
+                ToolMessage(
+                    content="[Tool execution was interrupted]",
+                    tool_call_id=tc_id,
+                    name=pending_call_names.get(tc_id, "unknown"),
+                )
+            )
+            fix_count += 1
+        pending_call_ids.clear()
+        pending_call_names.clear()
+
+    def _is_tool_content_problematic(msg: ToolMessage) -> bool:
+        content = getattr(msg, "content", None)
+        if content is None or not isinstance(content, str):
+            return True
+        if len(content) > _MAX_SAFE_TOOL_MESSAGE_CHARS:
+            return True
+        if "data:image/" in content and "base64," in content:
+            return True
+        return False
+
+    for msg in messages:
+        # 带 tool_calls 的 AIMessage
+        if isinstance(msg, AIMessage) and getattr(msg, "tool_calls", None):
+            _flush_pending()
+            result.append(msg)
+
+            for tc in msg.tool_calls:
+                tc_id = (
+                    tc.get("id") if isinstance(tc, dict) else getattr(tc, "id", None)
+                )
+                tc_name = (
+                    tc.get("name")
+                    if isinstance(tc, dict)
+                    else getattr(tc, "name", None)
+                )
+                if tc_id:
+                    tc_id = str(tc_id)
+                    pending_call_ids.append(tc_id)
+                    pending_call_names[tc_id] = tc_name or "unknown"
+            continue
+
+        # ToolMessage 消息
+        if isinstance(msg, ToolMessage):
+            tc_id = str(getattr(msg, "tool_call_id", "") or "")
+            if tc_id in pending_call_ids:
+                pending_call_ids.remove(tc_id)
+                if _is_tool_content_problematic(msg):
+                    result.append(
+                        ToolMessage(
+                            content="[Tool output removed: content was invalid or too large]",
+                            tool_call_id=tc_id,
+                            name=getattr(msg, "name", None)
+                            or pending_call_names.get(tc_id, "unknown"),
+                        )
+                    )
+                    fix_count += 1
+                else:
+                    result.append(msg)
+            else:
+                # 悬空 ToolMessage，丢弃
+                fix_count += 1
+            continue
+
+        # 其他消息类型
+        _flush_pending()
+        result.append(msg)
+
+    _flush_pending()
+    return result, fix_count
+
+
+async def _sanitize_history_before_model_call(
+    agent: Any,
+    invoke_config: Dict[str, Any],
+    log_prefix: str,
+) -> Dict[str, Any]:
+    """
+    统一历史修复入口：读取状态，构建合法消息列表，若有修复则用 REMOVE_ALL + 完整列表覆写。
+    """
+    try:
+        current_state = await agent.aget_state(invoke_config)
+    except Exception as e:
+        logger.warning("%s: Failed to load state for sanitize: %s", log_prefix, e)
+        return {"removed_count": 0, "sanitized": False}
+
+    values = (
+        current_state.values
+        if hasattr(current_state, "values") and current_state.values
+        else {}
+    )
+    messages = values.get("messages", []) if isinstance(values, dict) else []
+    if not messages:
+        return {"removed_count": 0, "sanitized": False}
+
+    clean_msgs, fix_count = _build_sanitized_messages(messages)
+    if fix_count == 0:
+        return {"removed_count": 0, "sanitized": False}
+
+    # 用 REMOVE_ALL + 完整干净列表替换状态
+    update_payload = [RemoveMessage(id="__remove_all__"), *clean_msgs]
+
+    available_nodes = list(getattr(agent, "nodes", {}).keys())
+    preferred_nodes = [n for n in ("model", "agent", "tools") if n in available_nodes]
+    if available_nodes and available_nodes[0] not in preferred_nodes:
+        preferred_nodes.append(available_nodes[0])
+    preferred_nodes.append(None)
+
+    success = False
+    last_error: Optional[Exception] = None
+    for as_node in preferred_nodes:
+        try:
+            if as_node is None:
+                await agent.aupdate_state(invoke_config, {"messages": update_payload})
+            else:
+                await agent.aupdate_state(
+                    invoke_config, {"messages": update_payload}, as_node=as_node
+                )
+            success = True
+            logger.info(
+                "%s: Sanitized history via REMOVE_ALL, fixed %d issues, %d clean messages (as_node=%s)",
+                log_prefix,
+                fix_count,
+                len(clean_msgs),
+                as_node or "auto",
+            )
+            break
+        except Exception as e:
+            last_error = e
+
+    if not success:
+        logger.error(
+            "%s: Failed to sanitize history. fix_count=%d, available_nodes=%s, error=%s",
+            log_prefix,
+            fix_count,
+            available_nodes,
+            last_error,
+        )
+        return {"removed_count": 0, "sanitized": False}
+
+    return {"removed_count": fix_count, "sanitized": True}
+
+
+def calculate_context_tokens(
+    messages: List[Any],
+    model_name: str = "gpt-4o",
+    tools: Optional[list] = None,
+    system_prompt: Optional[str] = None,
+) -> tuple[int, int, int]:
+    """
+    计算当前上下文 Token
+
+    优先使用最后一条带 usage_metadata 的消息；
+    如果 provider 未返回 usage_metadata，则回退到内容估算 + 真实开销。
+
+    Args:
+        messages: 消息列表
+        model_name: 模型名称
+        tools: 工具对象列表，用于精确计算开销
+        system_prompt: 系统提示词，用于精确计算开销
+    """
+    # 1) 优先使用 usage_metadata（最准确）
+    for msg in reversed(messages):
+        if hasattr(msg, "usage_metadata") and msg.usage_metadata:
+            usage = msg.usage_metadata
+            input_tokens = usage.get("input_tokens", 0) or 0
+            output_tokens = usage.get("output_tokens", 0) or 0
+            total_tokens = usage.get("total_tokens", 0) or (
+                input_tokens + output_tokens
+            )
+
+            if total_tokens > 0:
+                return input_tokens, output_tokens, total_tokens
+
+    # 2) 回退到内容估算 + 真实开销（避免 context_update 始终为 0）
+    from orchestrator_integration.middleware_config import _calculate_overhead_tokens
+
+    overhead = _calculate_overhead_tokens(model_name, tools, system_prompt)
+
+    content_tokens = 0
+    for msg in messages:
+        if hasattr(msg, "content") and msg.content:
+            content = msg.content if isinstance(msg.content, str) else str(msg.content)
+            content_tokens += context_checker.count_tokens(content, model_name)
+
+    estimated_total = content_tokens + overhead
+    return 0, 0, estimated_total
+
+
+def _is_unreliable_default_detected_limit(
+    model_name: str, detected_limit: Optional[int]
+) -> bool:
+    """
+    判断检测上限是否仅来自未知模型的默认回退值（如 128000）。
+    该场景下应优先信任用户配置的 context_limit。
+    """
+    if not isinstance(detected_limit, int) or detected_limit <= 0:
+        return False
+
+    default_limit = int(MODEL_CONTEXT_LIMITS.get("default", 128000))
+    if detected_limit != default_limit:
+        return False
+
+    normalized_name = (model_name or "").lower()
+    for model_key in MODEL_CONTEXT_LIMITS.keys():
+        if model_key == "default":
+            continue
+        if model_key in normalized_name:
+            return False
+
+    return True
+
+
+def resolve_runtime_context_limit(
+    config_context_limit: Optional[int], llm, model_name: str
+) -> int:
+    """
+    运行时上下文限制（与 middleware_config 保持一致，用户优先）：
+    - 用户配置存在时：直接使用 config
+    - 无 config 时：profile > 可靠 detected > 默认值
+    """
+    config_limit = (
+        config_context_limit
+        if isinstance(config_context_limit, int) and config_context_limit > 0
+        else None
+    )
+    detected_limit = (
+        get_context_limit_from_llm(llm, fallback_model_name=model_name)
+        if llm is not None
+        else None
+    )
+
+    profile_limit = None
+    if llm is not None:
+        profile = getattr(llm, "profile", None)
+        if isinstance(profile, dict):
+            max_input_tokens = profile.get("max_input_tokens")
+            if isinstance(max_input_tokens, int) and max_input_tokens > 0:
+                profile_limit = max_input_tokens
+
+    unreliable_detected_limit = _is_unreliable_default_detected_limit(
+        model_name, detected_limit
+    )
+
+    if config_limit:
+        return config_limit
+
+    if profile_limit:
+        return profile_limit
+
+    if (
+        isinstance(detected_limit, int)
+        and detected_limit > 0
+        and not unreliable_detected_limit
+    ):
+        return detected_limit
+
+    return 128000
+
+
+@method_decorator(csrf_exempt, name="dispatch")
 class AgentLoopStreamAPIView(View):
     """
-    Agent Loop 流式聊天 API
-    
+    Agent Loop 聊天 API (LangChain v1 重构版)
+
     核心特性：
-    - 每步独立 AI 调用，不累积 Token
-    - Blackboard 状态管理
-    - 工具结果自动摘要
-    - 支持 SSE 流式输出
+    - 使用 create_agent() 统一创建 Agent
+    - SummarizationMiddleware 自动上下文压缩
+    - HumanInTheLoopMiddleware 处理 HITL 审批
+    - 在流处理层检测工具调用生成步骤事件
+    - 支持 stream 参数：
+      - stream=true (默认)：返回 SSE 流式响应
+      - stream=false：返回普通 JSON 响应
     """
+
+    # 最大步骤数（用于前端显示）
+    MAX_STEPS = 500
+
+    def _update_session_token_usage(
+        self, session_id: str, input_tokens: int, output_tokens: int,
+        cache_read_tokens: int = 0, user_id=None, project_id=None,
+    ):
+        """更新会话的 Token 使用统计，同时写入独立的 TokenUsageRecord"""
+        try:
+            from django.db.models import F
+            from django.utils import timezone
+
+            ChatSession.objects.filter(session_id=session_id).update(
+                total_input_tokens=F("total_input_tokens") + input_tokens,
+                total_output_tokens=F("total_output_tokens") + output_tokens,
+                total_tokens=F("total_tokens") + input_tokens + output_tokens,
+                total_cache_read_tokens=F("total_cache_read_tokens") + cache_read_tokens,
+                request_count=F("request_count") + 1,
+                updated_at=timezone.now(),
+            )
+        except Exception as e:
+            logger.warning(f"Failed to update session token usage: {e}")
+
+        # 写入独立记录（不随会话删除而丢失）
+        try:
+            from langgraph_integration.models import TokenUsageRecord
+
+            TokenUsageRecord.objects.create(
+                user_id=user_id,
+                project_id=project_id,
+                session_id=session_id,
+                input_tokens=input_tokens,
+                output_tokens=output_tokens,
+                total_tokens=input_tokens + output_tokens,
+                cache_read_tokens=cache_read_tokens,
+            )
+        except Exception as e:
+            logger.warning(f"Failed to create TokenUsageRecord: {e}")
 
     async def authenticate_request(self, request):
         """JWT 认证"""
-        auth_header = request.META.get('HTTP_AUTHORIZATION')
-        if not auth_header or not auth_header.startswith('Bearer '):
-            raise AuthenticationFailed('Authentication credentials were not provided.')
+        auth_header = request.META.get("HTTP_AUTHORIZATION")
+        if not auth_header or not auth_header.startswith("Bearer "):
+            raise AuthenticationFailed("Authentication credentials were not provided.")
 
-        token = auth_header.split(' ')[1]
+        token = auth_header.split(" ")[1]
         jwt_auth = JWTAuthentication()
 
         try:
@@ -69,347 +834,7 @@ class AgentLoopStreamAPIView(View):
             user = await sync_to_async(jwt_auth.get_user)(validated_token)
             return user
         except Exception as e:
-            raise AuthenticationFailed(f'Invalid token: {str(e)}')
-
-    def _check_project_permission(self, user, project_id):
-        """检查项目权限"""
-        try:
-            project = Project.objects.get(id=project_id)
-            if user.is_superuser:
-                return project
-            if ProjectMember.objects.filter(project=project, user=user).exists():
-                return project
-            return None
-        except Project.DoesNotExist:
-            return None
-
-    async def _save_chat_history(
-        self,
-        user_id: int,
-        project_id: str,
-        session_id: str,
-        messages: List[AnyMessage]
-    ):
-        """
-        保存对话历史到 chat_history.sqlite
-        
-        messages 参数是本轮完整的消息列表（包含之前步骤的消息），
-        直接覆盖保存，避免重复追加。
-        """
-        if not messages:
-            logger.warning("AgentLoopStreamAPI: No new messages to persist")
-            return
-        
-        # 构建与 ChatStreamAPIView 相同的 thread_id 格式
-        thread_id = f"{user_id}_{project_id}_{session_id}"
-        
-        async with get_async_checkpointer() as checkpointer:
-            # 配置必须包含 thread_id 和 checkpoint_ns
-            config = {
-                "configurable": {
-                    "thread_id": thread_id,
-                    "checkpoint_ns": ""  # 空字符串表示根命名空间
-                }
-            }
-            
-            # 获取现有 checkpoint 的 channel_versions（用于计算下一个版本）
-            current_channel_versions = {}
-            try:
-                checkpoint_tuple = await checkpointer.aget(config)
-                if checkpoint_tuple:
-                    checkpoint_dict = checkpoint_tuple.checkpoint if hasattr(checkpoint_tuple, 'checkpoint') else checkpoint_tuple
-                    if checkpoint_dict and isinstance(checkpoint_dict, dict):
-                        current_channel_versions = checkpoint_dict.get("channel_versions", {})
-            except Exception as e:
-                logger.warning(f"AgentLoopStreamAPI: Could not load existing checkpoint: {e}")
-            
-            # 直接使用传入的 messages 作为完整消息列表（不再追加）
-            all_messages = list(messages)
-            
-            # 计算新的 channel 版本
-            current_messages_version = current_channel_versions.get("messages")
-            next_messages_version = checkpointer.get_next_version(current_messages_version, None)
-            
-            # 创建新的 checkpoint
-            import time
-            from datetime import datetime
-            checkpoint_id = f"checkpoint_{int(time.time() * 1000)}"
-            ts_str = datetime.utcnow().isoformat() + "Z"
-            
-            new_channel_versions = {"messages": next_messages_version}
-            new_checkpoint = {
-                "v": 1,
-                "id": checkpoint_id,
-                "ts": ts_str,
-                "channel_values": {
-                    "messages": all_messages
-                },
-                "channel_versions": new_channel_versions,
-                "versions_seen": {"": {"messages": next_messages_version}},
-                "pending_sends": []
-            }
-            
-            metadata = {
-                "source": "agent_loop",
-                "step": -1,
-                "writes": {}
-            }
-            
-            # 保存 checkpoint
-            save_config = {
-                "configurable": {
-                    "thread_id": thread_id,
-                    "checkpoint_ns": "",
-                    "checkpoint_id": checkpoint_id
-                }
-            }
-            
-            await checkpointer.aput(
-                save_config,
-                new_checkpoint,
-                metadata,
-                new_channel_versions
-            )
-            
-            logger.info(f"AgentLoopStreamAPI: Saved checkpoint with {len(all_messages)} messages")
-
-    async def _load_conversation_summary(
-        self,
-        user_id: int,
-        project_id: str,
-        session_id: str,
-        llm=None,
-        context_limit: int = 128000,
-        model_name: str = "gpt-4o"
-    ) -> str:
-        """
-        从聊天历史中提取对话摘要，用于初始化新任务的上下文。
-        
-        如果历史消息 Token 数超过 context_limit 的 70%，会使用 AI 生成结构化摘要；
-        否则直接返回完整的消息列表。
-        
-        Args:
-            user_id: 用户ID
-            project_id: 项目ID
-            session_id: 会话ID
-            llm: LLM 实例（用于 AI 摘要）
-            context_limit: 模型的上下文限制（从 LLMConfig 获取）
-            model_name: 模型名称（用于 Token 计算）
-        """
-        thread_id = f"{user_id}_{project_id}_{session_id}"
-        
-        # 计算触发压缩的阈值（上下文限制的 70%，减去预留空间）
-        trigger_threshold = int((context_limit - RESERVED_TOKENS) * 0.7)
-
-        try:
-            async with get_async_checkpointer() as checkpointer:
-                config = {
-                    "configurable": {
-                        "thread_id": thread_id,
-                        "checkpoint_ns": ""
-                    }
-                }
-                checkpoint_tuple = await checkpointer.aget(config)
-                if not checkpoint_tuple:
-                    return ""
-
-                checkpoint_dict = checkpoint_tuple.checkpoint if hasattr(checkpoint_tuple, "checkpoint") else checkpoint_tuple
-                if not checkpoint_dict:
-                    return ""
-
-                channel_values = checkpoint_dict.get("channel_values", {})
-                existing_messages = channel_values.get("messages", [])
-                if not existing_messages:
-                    return ""
-
-                # 过滤掉 SystemMessage
-                filtered_messages = [
-                    msg for msg in existing_messages 
-                    if not isinstance(msg, SystemMessage)
-                ]
-                
-                if not filtered_messages:
-                    return ""
-
-                # 估算现有消息的 Token 数
-                total_tokens = 0
-                for msg in filtered_messages:
-                    content = getattr(msg, 'content', '')
-                    if isinstance(content, list):
-                        # 多模态消息
-                        text_parts = [item.get('text', '') for item in content if isinstance(item, dict) and item.get('type') == 'text']
-                        content = ' '.join(text_parts)
-                    if content:
-                        total_tokens += context_checker.count_tokens(str(content), model_name)
-                
-                logger.info(f"AgentLoopStreamAPI: Found {len(filtered_messages)} messages, ~{total_tokens} tokens (limit: {context_limit}, trigger: {trigger_threshold})")
-
-                # 如果 Token 数在触发阈值内，直接返回完整消息
-                if total_tokens <= trigger_threshold:
-                    logger.info(f"AgentLoopStreamAPI: Token count within limit, returning full messages")
-                    if llm:
-                        filtered_messages = await self._summarize_tool_outputs_for_history(
-                            filtered_messages,
-                            llm=llm,
-                            model_name=model_name
-                        )
-                    return self._format_messages_as_summary(
-                        filtered_messages,
-                        truncate_tool_output=not bool(llm)
-                    )
-                
-                # Token 超过阈值且有 LLM，使用 AI 生成摘要
-                if llm:
-                    logger.info(f"AgentLoopStreamAPI: Token count ({total_tokens}) exceeds trigger threshold ({trigger_threshold}), using AI summary")
-                    try:
-                        compressor = ConversationCompressor(
-                            llm=llm,
-                            model_name=model_name,
-                            settings=CompressionSettings(
-                                max_context_tokens=context_limit,
-                                preserve_recent_messages=4,  # 保留最近 4 条完整
-                                trigger_ratio=0.7
-                            )
-                        )
-                        # 调用压缩器的摘要方法
-                        summary = await compressor._summarize_block(filtered_messages)
-                        if summary:
-                            return summary
-                    except Exception as e:
-                        logger.warning(f"AgentLoopStreamAPI: AI summary failed: {e}, falling back to simple format")
-                
-                # 回退：截取最近的消息
-                recent_messages = filtered_messages[-8:]  # 保留最近 8 条
-                if llm:
-                    recent_messages = await self._summarize_tool_outputs_for_history(
-                        recent_messages,
-                        llm=llm,
-                        model_name=model_name
-                    )
-                return self._format_messages_as_summary(
-                    recent_messages,
-                    truncate_tool_output=not bool(llm)
-                )
-                
-        except FileNotFoundError:
-            return ""
-        except Exception as exc:
-            logger.warning(f"AgentLoopStreamAPI: Failed to load conversation summary: {exc}")
-            return ""
-
-    def _normalize_message_content(self, content: Any) -> str:
-        """规范化消息内容为字符串"""
-        if content is None:
-            return ""
-        if isinstance(content, list):
-            parts = []
-            for item in content:
-                if isinstance(item, dict):
-                    if item.get("type") == "text":
-                        parts.append(item.get("text", ""))
-                    elif item.get("type") == "image_url":
-                        parts.append("[图片]")
-                else:
-                    parts.append(str(item))
-            return " ".join([p for p in parts if p.strip()])
-        if isinstance(content, dict):
-            try:
-                return json.dumps(content, ensure_ascii=False)
-            except Exception:
-                return str(content)
-        return str(content)
-
-    async def _summarize_tool_outputs_for_history(
-        self,
-        messages: List[AnyMessage],
-        llm,
-        model_name: str,
-        summary_limit: int = 600
-    ) -> List[AnyMessage]:
-        """对历史消息中的工具输出进行摘要"""
-        summarized: List[AnyMessage] = []
-        for msg in messages:
-            if isinstance(msg, ToolMessage):
-                raw_content = self._normalize_message_content(getattr(msg, "content", ""))
-                if len(raw_content) > summary_limit and llm:
-                    try:
-                        prompt = (
-                            "以下是工具输出，请用简洁中文概括关键结论、数据和建议，控制在150字内：\n"
-                            f"{raw_content}\n\n"
-                            "要求：保留结论和数值，忽略日志、重复细节。"
-                        )
-                        response = await llm.ainvoke([
-                            SystemMessage(content="你擅长压缩冗长的工具返回，只保留要点。"),
-                            HumanMessage(content=prompt)
-                        ])
-                        summary_text = response.content if hasattr(response, "content") else str(response)
-                        if summary_text:
-                            msg = ToolMessage(
-                                content=f"[工具摘要] {summary_text.strip()}",
-                                name=getattr(msg, "name", None),
-                                tool_call_id=getattr(msg, "tool_call_id", None),
-                                additional_kwargs=getattr(msg, "additional_kwargs", None)
-                            )
-                    except Exception as tool_err:
-                        logger.warning(f"AgentLoopStreamAPI: tool summary failed: {tool_err}")
-            summarized.append(msg)
-        return summarized
-
-    def _format_messages_as_summary(
-        self,
-        messages: List[AnyMessage],
-        max_messages: Optional[int] = 20,
-        *,
-        truncate_tool_output: bool = False,
-        tool_content_limit: int = 600
-    ) -> str:
-        """
-        将消息列表转换为模型可读的文本摘要。
-        保留用户/AI/工具的顺序，并可限制最近若干条。
-        """
-        trimmed_messages = list(messages or [])
-        if max_messages and len(trimmed_messages) > max_messages:
-            trimmed_messages = trimmed_messages[-max_messages:]
-
-        lines: List[str] = []
-        for msg in trimmed_messages:
-            if isinstance(msg, SystemMessage):
-                continue
-
-            content = self._normalize_message_content(getattr(msg, "content", "")).strip()
-            if not content:
-                continue
-
-            metadata = {}
-            if hasattr(msg, "additional_kwargs") and msg.additional_kwargs:
-                metadata = msg.additional_kwargs.get("metadata", {})
-
-            if isinstance(msg, HumanMessage):
-                prefix = "用户"
-            elif isinstance(msg, AIMessage):
-                prefix = "AI"
-            elif isinstance(msg, ToolMessage):
-                prefix = "工具"
-            else:
-                prefix = msg.__class__.__name__
-
-            step = metadata.get("step")
-            max_steps = metadata.get("max_steps")
-            if step:
-                if prefix == "AI":
-                    prefix = f"AI(Step {step}/{max_steps or '?'})"
-                elif prefix == "工具":
-                    prefix = f"工具(Step {step}/{max_steps or '?'})"
-
-            if isinstance(msg, ToolMessage):
-                tool_name = getattr(msg, "name", "agent_tool")
-                prefix = f"{prefix}-{tool_name}"
-                if truncate_tool_output and len(content) > tool_content_limit:
-                    content = content[:tool_content_limit].rstrip() + "... [工具输出已截断]"
-
-            lines.append(f"{prefix}: {content}")
-
-        return "\n".join(lines).strip()
+            raise AuthenticationFailed(f"Invalid token: {str(e)}")
 
     async def _create_stream_generator(
         self,
@@ -421,56 +846,52 @@ class AgentLoopStreamAPIView(View):
         knowledge_base_id: Optional[int] = None,
         use_knowledge_base: bool = True,
         prompt_id: Optional[int] = None,
-        image_base64: Optional[str] = None,
+        uploaded_images_base64: Optional[List[str]] = None,
         generate_playwright_script: bool = False,
         test_case_id: Optional[int] = None,
         use_pytest: bool = True,
     ):
-        """创建 SSE 流式生成器"""
-        # 用于收集所有消息的列表（会先加载历史消息）
-        conversation_messages: List[AnyMessage] = []
-        session_created = False
-        
-        # 先加载历史消息（用于续接会话时避免重复）
+        """
+        创建 SSE 流式生成器（LangChain v1 重构版）
+
+        使用 create_agent + astream 模式，替代旧的 AgentOrchestrator 循环。
+        通过检测 updates 流中的工具调用来生成 step_start/step_complete 事件。
+        """
         thread_id = f"{request.user.id}_{project_id}_{session_id}"
+
+        # 1. 获取 LLM 配置
         try:
-            async with get_async_checkpointer() as checkpointer:
-                config = {"configurable": {"thread_id": thread_id, "checkpoint_ns": ""}}
-                checkpoint_tuple = await checkpointer.aget(config)
-                if checkpoint_tuple:
-                    checkpoint_dict = checkpoint_tuple.checkpoint if hasattr(checkpoint_tuple, 'checkpoint') else checkpoint_tuple
-                    if checkpoint_dict and isinstance(checkpoint_dict, dict):
-                        existing_messages = checkpoint_dict.get("channel_values", {}).get("messages", [])
-                        if existing_messages:
-                            conversation_messages = list(existing_messages)
-                            logger.info(f"AgentLoopStreamAPI: Loaded {len(existing_messages)} existing messages for continuation")
-        except Exception as e:
-            logger.warning(f"AgentLoopStreamAPI: Could not load existing messages: {e}")
-        
-        try:
-            # 1. 获取 LLM 配置
             active_config = await sync_to_async(LLMConfig.objects.get)(is_active=True)
             logger.info(f"AgentLoopStreamAPI: Using LLM config: {active_config.name}")
             context_limit = active_config.context_limit or 128000
             model_name = active_config.name or "gpt-4o"
         except LLMConfig.DoesNotExist:
-            yield create_sse_data({'type': 'error', 'message': 'No active LLM configuration found'})
+            yield create_sse_data(
+                {"type": "error", "message": "No active LLM configuration found"}
+            )
             return
 
         # 2. 验证多模态支持
-        if image_base64 and not active_config.supports_vision:
-            yield create_sse_data({
-                'type': 'error',
-                'message': f'模型 {active_config.name} 不支持图片输入'
-            })
+        if uploaded_images_base64 and not active_config.supports_vision:
+            yield create_sse_data(
+                {
+                    "type": "error",
+                    "message": f"模型 {active_config.name} 不支持图片输入",
+                }
+            )
             return
 
         try:
-            # 3. 初始化 LLM（避免阻塞事件循环）
-            llm = await sync_to_async(create_llm_instance)(active_config, temperature=0.7)
+            # 3. 初始化 LLM
+            llm = await sync_to_async(create_llm_instance)(
+                active_config, temperature=0.7
+            )
+            context_limit = resolve_runtime_context_limit(
+                active_config.context_limit, llm, model_name
+            )
 
             # 4. 加载 MCP 工具
-            mcp_tools_list = []
+            tools: List[Any] = []
             try:
                 active_mcp_configs = await sync_to_async(list)(
                     RemoteMCPConfig.objects.filter(is_active=True)
@@ -481,44 +902,65 @@ class AgentLoopStreamAPIView(View):
                         key = cfg.name or f"remote_{cfg.id}"
                         client_config[key] = {
                             "url": cfg.url,
-                            "transport": (cfg.transport or "streamable_http").replace('-', '_'),
+                            "transport": (cfg.transport or "streamable_http").replace(
+                                "-", "_"
+                            ),
                         }
                         if cfg.headers:
                             client_config[key]["headers"] = cfg.headers
 
                     if client_config:
-                        mcp_tools_list = await mcp_session_manager.get_tools_for_config(
+                        mcp_tools = await mcp_session_manager.get_tools_for_config(
                             client_config,
                             user_id=str(request.user.id),
                             project_id=str(project_id),
-                            session_id=session_id
+                            session_id=session_id,
                         )
-                        logger.info(f"AgentLoopStreamAPI: Loaded {len(mcp_tools_list)} MCP tools")
-                        yield create_sse_data({
-                            'type': 'info',
-                            'message': f'已加载 {len(mcp_tools_list)} 个工具'
-                        })
+                        tools.extend(mcp_tools)
+                        logger.info(
+                            f"AgentLoopStreamAPI: Loaded {len(mcp_tools)} MCP tools"
+                        )
+                        yield create_sse_data(
+                            {
+                                "type": "info",
+                                "message": f"已加载 {len(mcp_tools)} 个工具",
+                            }
+                        )
             except Exception as e:
-                logger.error(f"AgentLoopStreamAPI: MCP tools loading failed: {e}", exc_info=True)
-                yield create_sse_data({
-                    'type': 'warning',
-                    'message': f'MCP 工具加载失败: {str(e)}'
-                })
+                logger.error(
+                    f"AgentLoopStreamAPI: MCP tools loading failed: {e}", exc_info=True
+                )
+                yield create_sse_data(
+                    {"type": "warning", "message": f"MCP 工具加载失败: {str(e)}"}
+                )
 
             # 5. 添加知识库工具
+            logger.info(
+                f"AgentLoopStreamAPI: 检查知识库工具 - knowledge_base_id={knowledge_base_id}, use_knowledge_base={use_knowledge_base}"
+            )
             if knowledge_base_id and use_knowledge_base:
                 try:
                     from knowledge.langgraph_integration import create_knowledge_tool
-                    kb_tool = await sync_to_async(create_knowledge_tool)(
-                        knowledge_base_id=knowledge_base_id,
-                        user=request.user
-                    )
-                    mcp_tools_list.append(kb_tool)
-                    logger.info(f"AgentLoopStreamAPI: Added knowledge base tool")
-                except Exception as e:
-                    logger.warning(f"AgentLoopStreamAPI: Knowledge tool creation failed: {e}")
 
-            # 5.5. 添加内置工具（Playwright 脚本管理等）
+                    logger.info(f"AgentLoopStreamAPI: 正在创建知识库工具...")
+                    kb_tool = await sync_to_async(create_knowledge_tool)(
+                        knowledge_base_id=knowledge_base_id, user=request.user
+                    )
+                    tools.append(kb_tool)
+                    logger.info(
+                        f"AgentLoopStreamAPI: ✅ 知识库工具已添加: {kb_tool.name}"
+                    )
+                except Exception as e:
+                    logger.warning(
+                        f"AgentLoopStreamAPI: ❌ Knowledge tool creation failed: {e}",
+                        exc_info=True,
+                    )
+            else:
+                logger.info(
+                    f"AgentLoopStreamAPI: ⚠️ 跳过知识库工具 (knowledge_base_id={knowledge_base_id}, use_knowledge_base={use_knowledge_base})"
+                )
+
+            # 6. 添加内置工具（Playwright 脚本管理等）
             from orchestrator_integration.builtin_tools import get_builtin_tools
 
             builtin_tools = get_builtin_tools(
@@ -527,1244 +969,764 @@ class AgentLoopStreamAPIView(View):
                 test_case_id=test_case_id,
                 chat_session_id=session_id,
             )
-            mcp_tools_list.extend(builtin_tools)
+            tools.extend(builtin_tools)
             logger.info(f"AgentLoopStreamAPI: Added {len(builtin_tools)} builtin tools")
 
-            # 6. 获取或创建 ChatSession
-            chat_session = await sync_to_async(
-                lambda: ChatSession.objects.filter(
-                    session_id=session_id,
-                    user=request.user,
-                    project_id=project_id
-                ).first()
-            )()
-            
-            if not chat_session:
-                prompt_obj = None
-                if prompt_id:
-                    try:
-                        prompt_obj = await sync_to_async(UserPrompt.objects.get)(
-                            id=prompt_id, user=request.user, is_active=True
-                        )
-                    except UserPrompt.DoesNotExist:
-                        pass
-                
-                chat_session = await sync_to_async(ChatSession.objects.create)(
-                    user=request.user,
-                    session_id=session_id,
-                    project=project,
-                    prompt=prompt_obj,
-                    title=f"新对话 - {user_message[:30]}"
-                )
-                session_created = True
-                logger.info(f"AgentLoopStreamAPI: Created new ChatSession: {session_id}")
+            # 7. 获取或创建 ChatSession（使用 get_or_create 避免竞态条件）
+            prompt_obj = None
+            if prompt_id:
+                try:
+                    prompt_obj = await sync_to_async(UserPrompt.objects.get)(
+                        id=prompt_id, user=request.user, is_active=True
+                    )
+                except UserPrompt.DoesNotExist:
+                    pass
 
-            # 7. 获取系统提示词
+            chat_session, created = await sync_to_async(
+                ChatSession.objects.get_or_create
+            )(
+                session_id=session_id,
+                defaults={
+                    "user": request.user,
+                    "project": project,
+                    "prompt": prompt_obj,
+                    "title": f"新对话 - {user_message[:30]}",
+                },
+            )
+            if created:
+                logger.info(
+                    f"AgentLoopStreamAPI: Created new ChatSession: {session_id}"
+                )
+
+            # 8. 获取系统提示词
             effective_prompt, prompt_source = await get_effective_system_prompt_async(
                 request.user, prompt_id, project
             )
-            
-            # 7.1 如果需要生成脚本，追加脚本生成指令
+
+            # 8.1 如果需要生成脚本，追加脚本生成指令
             if generate_playwright_script:
-                script_instruction = """
+                effective_prompt = (
+                    effective_prompt or ""
+                ) + PLAYWRIGHT_SCRIPT_INSTRUCTION
+                logger.info(f"AgentLoopStreamAPI: 已追加脚本生成指令")
 
-## 【强制要求】自动化脚本生成
-
-**重要：本次任务必须在执行完所有测试步骤后，生成并保存 Playwright 脚本！这是强制要求，不可跳过！**
-
-### 任务流程（必须按顺序完成）
-1. ✅ 执行所有测试步骤（使用 Playwright MCP 工具）
-2. ✅ 为每个步骤截图并上传
-3. ⚠️ **【必须】生成 Playwright Python 脚本**（根据执行过程）
-4. ⚠️ **【必须】调用 `save_playwright_script` 保存脚本**
-5. ✅ 返回测试结果 JSON
-
-**如果没有调用 `save_playwright_script` 保存脚本，本次任务视为未完成！**
-
-## 自动化脚本管理工具
-
-你可以使用以下工具管理自动化脚本：
-
-### 可用工具列表
-- `save_playwright_script(script_content, test_case_id, description)` - 保存新的 Playwright 脚本
-- `list_playwright_scripts(test_case_id, keyword, limit)` - 列出脚本列表
-- `get_playwright_script(script_id)` - 获取脚本详情和代码
-- `update_playwright_script(script_id, script_content, description)` - 更新已有脚本
-- `execute_playwright_script(script_id, headless, record_video)` - 执行脚本
-- `get_script_execution_result(execution_id, script_id)` - 获取执行结果
-
-### 执行流程
-1. **执行测试步骤**：使用 Playwright MCP 工具执行测试用例中的所有步骤
-2. **生成脚本**：所有步骤执行完成后，根据执行过程生成完整的 Playwright Python 脚本
-3. **保存脚本**：调用 `save_playwright_script` 工具保存脚本
-
-### 脚本要求
-生成的脚本必须是**标准的自动化测试脚本**，包含：
-- `from playwright.sync_api import sync_playwright, expect` 导入
-- `run()` 函数定义
-- 所有测试步骤对应的 Playwright Python 代码
-- 使用准确的选择器（根据实际执行时使用的选择器）
-- 适当的错误处理（try/finally 确保浏览器关闭）
-- **每个关键步骤后添加截图**（用于执行报告）
-- **适当的 print 输出**（记录执行进度）
-- **断言验证**（验证每个操作的预期结果）
-- 脚本必须是 **Python** 语法，不是 JavaScript
-- 使用 `page.get_by_role()`, `page.locator()` 等方法
-- 在所有测试步骤执行完成后再生成脚本
-- **禁止在脚本中使用 emoji 字符**（如 ✅ ❌ 等），使用纯文本描述
-- **每个步骤后必须截图**，截图文件名格式: `step{N}_{action}.png`
-- **每个步骤后必须 print**，输出格式: `步骤{N}: {描述}成功`
-- **关键操作必须有断言**，验证操作的预期结果
-- **生成后必须执行脚本，验证脚本的可执行性
-
-### 断言示例
-使用 Playwright 的 `expect` API 进行断言：
-- `expect(page).to_have_url("...")` - 验证 URL
-- `expect(page).to_have_title("...")` - 验证标题
-- `expect(page.locator("...")).to_be_visible()` - 验证元素可见
-- `expect(page.locator("...")).to_have_text("...")` - 验证文本内容
-- `expect(page.locator("...")).to_have_count(n)` - 验证元素数量
-- `expect(page.locator("...")).to_be_enabled()` - 验证元素可用
-
-### 断言规则（非常重要）
-1. **禁止猜测 URL**：断言中的 URL 必须使用执行步骤时**实际观察到的 URL**，不要自己编造或猜测
-2. **禁止使用通配符模式**：不要使用 `**/dashboard` 这样的模式，必须使用完整的实际 URL
-3. **断言必须来源于实际结果**：所有断言值（URL、标题、文本等）必须是执行过程中**实际看到的值**
-4. **如果不确定实际值，使用 to_be_visible() 代替**：当无法确定元素的具体文本时，优先使用可见性断言
-
-### 正确示例
-```python
-# 正确：使用实际执行时看到的完整 URL
-expect(page).to_have_url("http://localhost:5173/project-management")
-
-# 正确：使用实际看到的标题
-expect(page).to_have_title("项目管理 - WHartTest")
-```
-
-### 错误示例（禁止这样做）
-```python
-# 错误：自己猜测的 URL
-expect(page).to_have_url("https://example.com/dashboard")
-
-# 错误：使用通配符模式
-expect(page).to_have_url("**/dashboard")
-
-# 错误：编造的标题
-expect(page).to_have_title("Dashboard Page")
-```
-
-### 脚本模板（仅供参考结构，所有值必须替换为实际执行时观察到的值）
-**重要：以下模板中的所有 URL、选择器、文本都是占位符示例，你必须替换为执行测试步骤时实际看到的值！**
-
-```python
-from playwright.sync_api import sync_playwright, expect
-
-
-def run():
-    with sync_playwright() as p:
-        browser = p.chromium.launch(headless=True)
-        context = browser.new_context(ignore_https_errors=True)
-        page = context.new_page()
-        page.set_default_timeout(30000)
-        
-        step = 0
-        
-        try:
-            # 步骤1: 打开页面
-            step += 1
-            # 【替换为实际URL】下面的URL必须是你执行goto时使用的真实URL
-            page.goto("【替换为实际目标URL】")
-            # 【替换为实际标题】下面的标题必须是页面打开后你实际看到的标题
-            expect(page).to_have_title("【替换为实际页面标题】")
-            print(f"步骤{step}: 打开页面成功")
-            page.screenshot(path=f"step{step}_open_page.png")
-            
-            # 步骤2: 输入内容（示例）
-            step += 1
-            # 【替换为实际选择器】使用你执行fill操作时实际使用的选择器
-            page.get_by_role("textbox", name="【替换为实际placeholder或label】").fill("【替换为实际输入值】")
-            print(f"步骤{step}: 输入内容成功")
-            page.screenshot(path=f"step{step}_input.png")
-            
-            # 步骤3: 点击按钮（示例）
-            step += 1
-            # 【替换为实际选择器】使用你执行click操作时实际使用的选择器
-            page.get_by_role("button", name="【替换为实际按钮文本】").click()
-            # 【替换为实际URL】如果点击后会跳转，使用实际跳转后的完整URL
-            expect(page).to_have_url("【替换为跳转后的实际完整URL】")
-            print(f"步骤{step}: 点击按钮成功")
-            page.screenshot(path=f"step{step}_click.png")
-            
-            print(f"测试执行成功, 共执行 {step} 个步骤, 所有断言通过")
-        except Exception as e:
-            print(f"步骤{step}执行失败: {e}")
-            page.screenshot(path="error_screenshot.png")
-            raise
-        finally:
-            context.close()
-            browser.close()
-
-
-if __name__ == "__main__":
-    run()
-```
-
-### 重要提示
-- 脚本必须是 **Python** 语法，不是 JavaScript
-- 使用 `page.get_by_role()`, `page.locator()` 等方法
-- 在所有测试步骤执行完成后再生成脚本
-- **禁止在脚本中使用 emoji 字符**（如 ✅ ❌ 等），使用纯文本描述
-- **每个步骤后必须截图**，截图文件名格式: `step{N}_{action}.png`
-- **截图必须使用 `_take_screenshot(page, filename)` 函数**（脚本模板中已内置），不要直接使用 `page.screenshot(path=...)`
-- **每个步骤后必须 print**，输出格式: `步骤{N}: {描述}成功`
-- **关键操作必须有断言**，验证操作的预期结果
-- **生成后必须执行脚本**，验证脚本的可执行性
-- **禁止使用虚构的选择器**：如 `.welcome-message`、`#main-content` 等，必须使用执行时实际使用的选择器
-- **禁止照抄模板占位符**：模板中的 `【替换为...】` 只是提示，必须替换为实际值
-
-
-### 滑块验证码处理（非常重要）
-**登录场景下，点击登录按钮后经常会弹出滑块验证码（如 `.verifybox` 元素），必须在生成的脚本中处理！**
-
-**重要：滑块验证码处理函数需要直接在脚本中实现，请将以下代码完整复制到脚本中（放在 `run()` 函数之前）：**
-
-```python
-import random
-import io
-import cv2
-import numpy as np
-from PIL import Image
-
-
-def _get_gap_offset_opencv(bg_img_pil, gap_img_pil, search_start=200, search_end=340):
-    try:
-        bg_cv = cv2.cvtColor(np.array(bg_img_pil), cv2.COLOR_RGB2BGR)
-        gap_cv = cv2.cvtColor(np.array(gap_img_pil), cv2.COLOR_RGB2BGR)
-        bg_gray = cv2.GaussianBlur(cv2.cvtColor(bg_cv, cv2.COLOR_BGR2GRAY), (3, 3), 0)
-        gap_gray = cv2.GaussianBlur(cv2.cvtColor(gap_cv, cv2.COLOR_BGR2GRAY), (3, 3), 0)
-        bg_edges = cv2.Canny(bg_gray, 50, 150)
-        gap_edges = cv2.Canny(gap_gray, 50, 150)
-        h_gap, w_gap = gap_edges.shape
-        h_bg, w_bg = bg_edges.shape
-        max_x = w_bg - w_gap
-        if search_start > max_x:
-            search_start = max(0, max_x - 50)
-        if search_end > max_x:
-            search_end = max_x
-        roi = bg_edges[:, search_start:search_end + 1]
-        result = cv2.matchTemplate(roi, gap_edges, cv2.TM_CCOEFF_NORMED)
-        min_val, max_val, min_loc, max_loc = cv2.minMaxLoc(result)
-        offset_x = search_start + max_loc[0]
-        match_rate = max_val
-        print(f"模板匹配结果 | 位置: {offset_x}px | 匹配度: {match_rate:.2%}")
-        if offset_x < 200 and match_rate < 0.2:
-            print("识别位置在左侧滑块区域，误匹配，刷新重试")
-            return None
-        if match_rate < 0.2:
-            print("匹配度过低，可能识别失败")
-            return None
-        return offset_x
-    except Exception as e:
-        print(f"OpenCV 识别异常: {e}")
-        return None
-
-
-def _get_gap_offset(page, bg_selector=".verify-img-panel", gap_selector=".verify-sub-block"):
-    try:
-        bg_element = page.locator(bg_selector).first
-        gap_element = page.locator(gap_selector).first
-        bg_element.wait_for(state="visible", timeout=5000)
-        gap_element.wait_for(state="visible", timeout=5000)
-        bg_img = Image.open(io.BytesIO(bg_element.screenshot()))
-        gap_img = Image.open(io.BytesIO(gap_element.screenshot()))
-        return _get_gap_offset_opencv(bg_img, gap_img, search_start=200, search_end=340)
-    except Exception as e:
-        print(f"获取缺口位置失败: {e}")
-        return None
-
-
-def _human_like_slider(page, verify_box_selector=".verifybox",
-                        slider_block_selector=".verify-move-block",
-                        refresh_btn_selector=".verify-refresh",
-                        bg_selector=".verify-img-panel",
-                        gap_selector=".verify-sub-block",
-                        max_retries=20):
-    for attempt in range(max_retries):
-        try:
-            print(f"\n滑块验证尝试 {attempt + 1}/{max_retries}")
-            page.wait_for_selector(verify_box_selector, state="visible", timeout=5000)
-            slider = page.locator(slider_block_selector).first
-            slider.wait_for(state="visible", timeout=5000)
-            gap_abs_x = _get_gap_offset(page, bg_selector, gap_selector)
-            if gap_abs_x is None:
-                print("识别失败，刷新验证码")
-                page.locator(refresh_btn_selector).click()
-                page.wait_for_timeout(500)
-                continue
-            slider_box = slider.bounding_box()
-            if not slider_box:
-                print("无法获取滑块位置，刷新重试")
-                page.locator(refresh_btn_selector).click()
-                page.wait_for_timeout(500)
-                continue
-            bg_box = page.locator(bg_selector).first.bounding_box()
-            if not bg_box:
-                print("无法获取背景图容器位置，刷新重试")
-                page.locator(refresh_btn_selector).click()
-                page.wait_for_timeout(500)
-                continue
-            start_x = slider_box["x"] + slider_box["width"] / 2
-            start_y = slider_box["y"] + slider_box["height"] / 2
-            target_screen_x = bg_box["x"] + gap_abs_x + (slider_box["width"] / 2)
-            distance = target_screen_x - start_x
-            print(f"移动距离: {distance:.1f}px (缺口绝对坐标: {gap_abs_x}px)")
-            page.mouse.move(start_x + random.randint(-10, 10), start_y + random.randint(-3, 3), steps=random.randint(6, 10))
-            page.wait_for_timeout(random.randint(50, 100))
-            page.mouse.move(start_x, start_y, steps=random.randint(3, 5))
-            page.wait_for_timeout(random.randint(30, 60))
-            page.mouse.down()
-            page.wait_for_timeout(random.randint(40, 80))
-            total_steps = random.randint(20, 30)
-            for i in range(total_steps):
-                progress = i / total_steps
-                ease_progress = 1 - (1 - progress) ** 3
-                next_x = start_x + distance * ease_progress + random.uniform(-1.5, 1.5) * (1 - ease_progress)
-                next_y = start_y + random.uniform(-2, 2)
-                page.mouse.move(next_x, next_y, steps=1)
-                if random.random() < 0.1:
-                    page.wait_for_timeout(random.randint(2, 6))
-            final_target_x = target_screen_x + random.uniform(-2, 2)
-            overshoot = random.randint(1, 3)
-            page.mouse.move(final_target_x + overshoot, start_y, steps=random.randint(1, 2))
-            page.wait_for_timeout(random.randint(10, 25))
-            page.mouse.move(final_target_x, start_y, steps=1)
-            page.wait_for_timeout(random.randint(20, 50))
-            page.mouse.up()
-            page.wait_for_timeout(random.randint(60, 100))
-            try:
-                page.wait_for_selector(verify_box_selector, state="hidden", timeout=2500)
-                print("滑块验证成功！")
-                return True
-            except:
-                print("验证失败，刷新重试")
-                page.locator(refresh_btn_selector).click()
-                page.wait_for_timeout(500)
-                continue
-        except Exception as e:
-            print(f"滑块验证异常: {e}")
-            try:
-                page.locator(refresh_btn_selector).click()
-                page.wait_for_timeout(500)
-            except:
-                pass
-            continue
-    print("滑块验证尝试全部失败")
-    return False
-
-
-def _handle_slider_captcha(page, max_retries=20):
-    try:
-        page.wait_for_timeout(500)
-        verify_box = page.locator(".verifybox")
-        verify_text = page.locator("text=请完成安全验证")
-        box_visible = verify_box.is_visible()
-        text_visible = verify_text.is_visible()
-        if box_visible and text_visible:
-            print("检测到安全验证，开始处理滑块（最多{}次重试）".format(max_retries))
-            return _human_like_slider(page, max_retries=max_retries)
-        else:
-            print("未检测到安全验证，跳过滑块处理")
-            return True
-    except Exception as e:
-        print(f"检测滑块验证异常: {e}")
-        return False
-```
-
-**滑块验证码的特征**：
-- 页面出现 `.verifybox` 弹窗
-- 页面出现"请完成安全验证"文字
-- 页面出现可拖动的滑块 `.verify-move-block`
-
-**在脚本中的使用示例**：
-```python
-# 点击登录按钮
-page.get_by_role("button", name="登录").click()
-print(f"步骤{{step}}: 点击登录按钮成功")
-_take_screenshot(page, f"step{{step}}_click_login.png")
-
-# 处理滑块验证码（登录后如果出现滑块验证，自动处理）
-_handle_slider_captcha(page, max_retries=20)
-_take_screenshot(page, f"step{{step}}_slider_captcha.png")
-
-# 验证登录结果
-page.wait_for_load_state("networkidle")
-```
-
-
-### Python Playwright 语法规范（非常重要）
-**注意：Python 版本的 Playwright 与 JavaScript 版本语法不同！**
-
-#### 定位器方法语法
-Python 使用**关键字参数**，不是 JavaScript 的对象语法：
-
-```python
-# ✅ 正确的 Python 语法：使用关键字参数 name=
-page.get_by_role("textbox", name="请输入用户名")
-page.get_by_role("button", name="登录")
-page.get_by_role("link", name="首页")
-
-# ❌ 错误的 JavaScript 语法：不要使用 { } 对象
-page.get_by_role('textbox', { 'name': '请输入用户名' })  # 错误！
-page.get_by_role("button", { name: "登录" })  # 错误！
-```
-
-#### 其他定位器示例
-```python
-# 正确的 Python 语法
-page.get_by_label("用户名")
-page.get_by_placeholder("请输入密码")
-page.get_by_text("欢迎")
-page.get_by_test_id("submit-button")
-page.locator("css=.button-class")
-page.locator("xpath=//button[@id='submit']")
-```
-
-#### 错误处理
-如果遇到定位器参数问题，请使用以下方式：
-```python
-# 方式1：使用 get_by_role + name 关键字参数
-page.get_by_role("textbox", name="用户名").fill("admin")
-
-# 方式2：使用 locator + CSS 选择器
-page.locator("input[placeholder='用户名']").fill("admin")
-
-# 方式3：使用 get_by_placeholder
-page.get_by_placeholder("用户名").fill("admin")
-```
-"""
-                effective_prompt = (effective_prompt or '') + script_instruction
-                logger.info(f"AgentLoopStreamAPI: 已追加脚本生成指令，系统提示词长度: {len(effective_prompt)} 字符")
-
-            # 7.5 加载历史对话摘要（跨对话上下文，根据模型context_limit判断是否需要AI摘要）
-            conversation_summary = await self._load_conversation_summary(
-                request.user.id,
-                project_id,
-                session_id,
-                llm=llm,
-                context_limit=active_config.context_limit or 128000,
-                model_name=active_config.name or "gpt-4o"
+            # 9. 构建用户消息（支持多模态：上传图片 + HTTP(S) 图片 + 需求文档图片）
+            (
+                human_message_content,
+                human_message_kwargs,
+                display_user_message,
+            ) = await _prepare_agent_loop_human_message(
+                user_message,
+                project=project,
+                supports_vision=active_config.supports_vision,
+                uploaded_images_base64=uploaded_images_base64,
             )
-            if conversation_summary:
-                logger.info(
-                    f"AgentLoopStreamAPI: Loaded conversation summary with {len(conversation_summary.splitlines())} lines"
-                )
+            user_msg = HumanMessage(
+                content=human_message_content,
+                additional_kwargs=human_message_kwargs,
+            )
 
-            # 8. 构建初始上下文
-            initial_context = {
-                'system_prompt': effective_prompt,
-                'project_name': project.name,
-                'project_id': project_id,
-                'conversation_history': conversation_summary or ''
-            }
-
-            # 9. 如果是新会话且有系统提示词，添加到消息列表
-            if session_created and effective_prompt:
-                conversation_messages.append(SystemMessage(content=effective_prompt))
-
-            # 10. 构建目标（含图片时特殊处理）并添加用户消息
-            if image_base64:
-                goal = f"[包含图片] {user_message}"
-                # 多模态消息格式
-                human_message_content = [
-                    {"type": "text", "text": user_message},
-                    {"type": "image_url", "image_url": {"url": f"data:image/jpeg;base64,{image_base64}"}}
-                ]
-            else:
-                goal = user_message
-                human_message_content = user_message
-            
-            conversation_messages.append(HumanMessage(content=human_message_content))
+            # 10. 获取工具名列表用于 HITL
+            tool_names = [t.name for t in tools] if tools else None
 
             # 11. 发送开始信号
-            yield create_sse_data({
-                'type': 'start',
-                'session_id': session_id,
-                'project_id': project_id,
-                'mode': 'agent_loop',
-                'created_at': chat_session.created_at.isoformat() if chat_session and chat_session.created_at else None
-            })
-
-            # 12. 创建 AgentOrchestrator 并执行
-            _mcp_configs_for_refresh = client_config if active_mcp_configs else {}
-
-            async def _on_mcp_session_refresh():
-                """MCP会话失效时的刷新回调：重建SSE/WebSocket连接并返回新工具列表"""
-                if not _mcp_configs_for_refresh:
-                    logger.warning("on_mcp_session_refresh: 没有MCP配置可用于刷新")
-                    return mcp_tools_list
-
-                try:
-                    new_tools = await mcp_session_manager.refresh_tools_for_session(
-                        _mcp_configs_for_refresh,
-                        user_id=str(request.user.id),
-                        project_id=str(project_id),
-                        session_id=session_id
-                    )
-                    if new_tools:
-                        from orchestrator_integration.builtin_tools import get_builtin_tools
-                        builtin_tools = get_builtin_tools(
-                            user_id=request.user.id,
-                            project_id=int(project_id),
-                            test_case_id=test_case_id,
-                            chat_session_id=session_id,
-                        )
-                        new_tools.extend(builtin_tools)
-                        logger.info(f"on_mcp_session_refresh: 刷新后共 {len(new_tools)} 个工具（含 {len(builtin_tools)} 个内置工具）")
-                    return new_tools
-                except Exception as e:
-                    logger.error(f"on_mcp_session_refresh: 刷新失败: {e}", exc_info=True)
-                    return mcp_tools_list
-
-            orchestrator = AgentOrchestrator(
-                llm=llm,
-                tools=mcp_tools_list,
-                max_steps=500,
-                on_mcp_session_refresh=_on_mcp_session_refresh
+            yield create_sse_data(
+                {
+                    "type": "start",
+                    "session_id": session_id,
+                    "thread_id": thread_id,
+                    "project_id": project_id,
+                    "display_message": display_user_message,
+                    "mode": "agent_loop",
+                    "created_at": chat_session.created_at.isoformat()
+                    if chat_session and chat_session.created_at
+                    else None,
+                }
             )
 
-            # 13. 执行 Agent Loop（流式输出每个步骤）
-            task = await orchestrator._create_task(goal, chat_session)
-            blackboard = await orchestrator._create_blackboard(task, initial_context)
-            
-            logger.info(f"AgentLoopStreamAPI: Starting task {task.id}, goal: {goal[:100]}")
-
-            conversation_window = 20
-            last_conversation_snapshot = (blackboard.current_state or {}).get('conversation_history', '')
-            conversation_summary_text = conversation_summary or ''
-            summarized_message_count = 0
-            conversation_compressor = None
-            summary_token_limit = max(2000, int(context_limit * 0.2))
-
-            try:
-                conversation_compressor = ConversationCompressor(
-                    llm=llm,
-                    model_name=model_name,
-                    settings=CompressionSettings(
-                        max_context_tokens=context_limit,
-                        preserve_recent_messages=max(4, conversation_window // 2)
-                    )
+            # 12. 创建 Agent（LangChain v1 统一路径）
+            async with get_async_checkpointer() as checkpointer:
+                # 获取中间件（需要同步到异步，因为内部有 ORM 查询）
+                middleware = await sync_to_async(get_middleware_from_config)(
+                    active_config,
+                    llm,
+                    user=request.user,
+                    session_id=session_id,
+                    all_tool_names=tool_names,
+                    tools=tools,
+                    system_prompt=effective_prompt,
                 )
-            except Exception as compressor_error:
-                logger.warning(f"AgentLoopStreamAPI: ConversationCompressor init failed: {compressor_error}")
 
-            async def refresh_conversation_history_snapshot(force: bool = False) -> bool:
-                nonlocal last_conversation_snapshot, conversation_summary_text, summarized_message_count
-
-                total_messages = len(conversation_messages)
-                if conversation_compressor:
-                    cutoff = max(total_messages - conversation_window, 0)
-                    if cutoff > summarized_message_count:
-                        block = conversation_messages[summarized_message_count:cutoff]
-                        if block:
-                            try:
-                                block_summary = await conversation_compressor._summarize_block(block)
-                            except Exception as summary_error:
-                                logger.warning(f"AgentLoopStreamAPI: conversation summary failed: {summary_error}")
-                                block_summary = None
-                            if block_summary:
-                                block_summary = block_summary.strip()
-                                if conversation_summary_text:
-                                    conversation_summary_text = f"{conversation_summary_text}\n{block_summary}"
-                                else:
-                                    conversation_summary_text = block_summary
-                                summarized_message_count = cutoff
-
-                                if conversation_summary_text and conversation_compressor:
-                                    try:
-                                        summary_tokens = context_checker.count_tokens(conversation_summary_text, model_name)
-                                        if summary_tokens > summary_token_limit:
-                                            compressed = await conversation_compressor._recompress_summary(conversation_summary_text)
-                                            if compressed:
-                                                conversation_summary_text = compressed.strip()
-                                                logger.info(f"AgentLoopStreamAPI: conversation summary recompressed to {context_checker.count_tokens(conversation_summary_text, model_name)} tokens")
-                                    except Exception as recompress_error:
-                                        logger.warning(f"AgentLoopStreamAPI: conversation summary recompress failed: {recompress_error}")
-
-                recent_start = max(total_messages - conversation_window, 0)
-                recent_messages = conversation_messages[recent_start:]
-                recent_text = self._format_messages_as_summary(recent_messages, max_messages=None)
-
-                sections: List[str] = []
-                if conversation_summary_text:
-                    sections.append(f"[过往对话摘要]\n{conversation_summary_text}".strip())
-                if recent_text:
-                    sections.append(f"[最近对话]\n{recent_text}".strip())
-
-                combined_text = "\n\n".join([section for section in sections if section]).strip()
-
-                if combined_text == last_conversation_snapshot and not force:
-                    return False
-
-                blackboard.current_state = dict(blackboard.current_state or {})
-                blackboard.current_state['conversation_history'] = combined_text
-                await sync_to_async(blackboard.save)(update_fields=['current_state', 'updated_at'])
-                last_conversation_snapshot = combined_text
-                return True
-
-            await refresh_conversation_history_snapshot(force=True)
-
-            # 连续工具失败计数器（防止无效重试浪费步数）
-            consecutive_tool_failures = 0
-            max_consecutive_tool_failures = 3
-            
-            step_count = 0
-            while step_count < orchestrator.max_steps:
-                step_count += 1
-
-                # ⭐ 检查停止信号
-                from .stop_signal import should_stop, clear_stop_signal
-                if should_stop(session_id):
-                    logger.info(f"AgentLoopStreamAPI: Stop signal received for session {session_id} at step {step_count}")
-                    clear_stop_signal(session_id)
-
-                    # 更新任务状态
-                    task.status = 'cancelled'
-                    task.error_message = '用户中断'
-                    task.completed_at = timezone.now()
-                    await orchestrator._save_task(task)
-
-                    # 保存已有的对话历史
-                    if conversation_messages:
-                        stopped_metadata = {
-                            "agent": "agent_loop",
-                            "agent_type": "stopped",
-                            "step": step_count,
-                            "max_steps": orchestrator.max_steps,
-                            "sse_event_type": "stopped"
-                        }
-                        conversation_messages.append(
-                            AIMessage(
-                                content="[用户中断]",
-                                additional_kwargs={"metadata": stopped_metadata}
-                            )
-                        )
-                        try:
-                            await self._save_chat_history(
-                                request.user.id,
-                                project_id,
-                                session_id,
-                                conversation_messages
-                            )
-                        except Exception as save_err:
-                            logger.warning(f"AgentLoopStreamAPI: Stop history save failed: {save_err}")
-
-                    yield create_sse_data({
-                        'type': 'stopped',
-                        'message': '已停止生成',
-                        'step': step_count
-                    })
-                    yield create_sse_data({
-                        'type': 'complete',
-                        'status': 'stopped',
-                        'steps': step_count - 1
-                    })
-                    yield "data: [DONE]\n\n"
-                    return
-
-                task.current_step = step_count
-                task.status = 'running'
-                await orchestrator._save_task(task)
-
-                # 发送步骤开始信号
-                yield create_sse_data({
-                    'type': 'step_start',
-                    'step': step_count,
-                    'max_steps': orchestrator.max_steps
-                })
-
-                # 构建上下文
-                step_context = orchestrator._build_step_context(blackboard, goal)
-
-                # ⭐ 第一步时传递图片数据给 LLM
-                if step_count == 1 and image_base64:
-                    step_context['image_base64'] = image_base64
-
-                # ⭐ 使用队列实现真正的流式输出
-                stream_queue = asyncio.Queue()
-                streaming_content = []  # 收集流式内容用于保存
-                
-                async def stream_callback(chunk: str):
-                    """流式回调：将 chunk 放入队列并收集"""
-                    streaming_content.append(chunk)
-                    await stream_queue.put(('chunk', chunk))
-                
-                # 启动后台任务执行 LLM 调用
-                step_task = asyncio.create_task(
-                    orchestrator._execute_step(task, step_context, stream_callback=stream_callback)
+                agent = create_agent(
+                    llm,
+                    tools,
+                    system_prompt=effective_prompt,
+                    checkpointer=checkpointer,
+                    middleware=middleware,
                 )
-                
-                # ⭐ 设置步骤整体超时
-                step_timeout = 1000  # 秒
-                step_start_time = asyncio.get_event_loop().time()
-                step_timed_out = False
-                user_stopped = False  # ⭐ 用户停止标志
+                logger.info(
+                    f"AgentLoopStreamAPI: Agent created with {len(tools)} tools"
+                )
 
-                # 实时输出流式内容
-                while not step_task.done():
-                    try:
-                        # 检查整体超时
-                        elapsed = asyncio.get_event_loop().time() - step_start_time
-                        if elapsed > step_timeout:
-                            step_timed_out = True
-                            step_task.cancel()
-                            logger.error(f"步骤 {step_count} 执行超时 ({step_timeout}秒)")
-                            yield create_sse_data({
-                                'type': 'error',
-                                'message': f'步骤执行超时（{step_timeout}秒）'
-                            })
-                            break
+                # 13. 配置调用参数
+                invoke_config = {
+                    "configurable": {"thread_id": thread_id},
+                    "recursion_limit": 1000,  # 支持约500次工具调用
+                }
+                input_messages = {"messages": [user_msg]}
 
-                        # ⭐ 检查用户停止信号
+                # 13.1 发送前修复历史消息（配对错误 + 风险工具输出）
+                await _sanitize_history_before_model_call(
+                    agent=agent,
+                    invoke_config=invoke_config,
+                    log_prefix="AgentLoopStreamAPI",
+                )
+
+                # 14. 步骤跟踪状态
+                step_count = 0
+                current_tool_calls = []
+                interrupt_detected = False
+                user_stopped = False
+
+                # 15. 流式执行
+                stream_modes = ["updates", "messages"]
+
+                try:
+                    async for stream_mode, chunk in agent.astream(
+                        input_messages, config=invoke_config, stream_mode=stream_modes
+                    ):
+                        # 检查用户停止信号
                         if should_stop(session_id):
                             user_stopped = True
-                            step_task.cancel()
-                            logger.info(f"AgentLoopStreamAPI: Stop signal in streaming for session {session_id}")
+                            clear_stop_signal(session_id)
+                            logger.info(
+                                f"AgentLoopStreamAPI: Stop signal received at step {step_count}"
+                            )
+                            yield create_sse_data(
+                                {
+                                    "type": "stopped",
+                                    "message": "已停止生成",
+                                    "step": step_count,
+                                }
+                            )
                             break
 
-                        # 等待队列数据，设置超时避免阻塞
-                        msg_type, content = await asyncio.wait_for(
-                            stream_queue.get(), 
-                            timeout=0.1
-                        )
-                        if msg_type == 'chunk':
-                            yield create_sse_data({
-                                'type': 'stream',
-                                'data': content
-                            })
-                    except asyncio.TimeoutError:
-                        # 超时后继续检查任务是否完成
-                        continue
-                    except asyncio.CancelledError:
-                        break
-                
-                # 如果超时，更新任务状态并退出
-                if step_timed_out:
-                    # ⭐ 等待任务取消完成
-                    try:
-                        await step_task
-                    except asyncio.CancelledError:
-                        pass
-                    
-                    # 更新任务状态
-                    task.status = 'failed'
-                    task.error_message = f'步骤 {step_count} 执行超时'
-                    task.completed_at = timezone.now()
-                    await orchestrator._save_task(task)
-                    
-                    # ⭐ 保存已收集的流式内容到对话历史
-                    if streaming_content:
-                        partial_response = ''.join(streaming_content)
-                        timeout_metadata = {
-                            "agent": "agent_loop",
-                            "agent_type": "timeout",
-                            "step": step_count,
-                            "max_steps": orchestrator.max_steps,
-                            "sse_event_type": "error"
-                        }
-                        conversation_messages.append(
-                            AIMessage(
-                                content=f"[超时中断] {partial_response}" if partial_response else "[步骤执行超时]",
-                                additional_kwargs={"metadata": timeout_metadata}
-                            )
-                        )
-                        # 保存对话历史
-                        try:
-                            await self._save_chat_history(
-                                request.user.id,
-                                project_id,
-                                session_id,
-                                conversation_messages
-                            )
-                        except Exception as save_err:
-                            logger.warning(f"AgentLoopStreamAPI: Timeout history save failed: {save_err}")
-                    
-                    # 发送错误结束事件
-                    yield create_sse_data({
-                        'type': 'error',
-                        'message': f'步骤执行超时（{step_timeout}秒）',
-                        'step': step_count
-                    })
-                    yield create_sse_data({
-                        'type': 'complete',
-                        'status': 'timeout',
-                        'steps': step_count
-                    })
-                    return
+                        if stream_mode == "updates":
+                            # 检查中断事件 (HITL)
+                            if isinstance(chunk, dict) and "__interrupt__" in chunk:
+                                interrupt_info = chunk["__interrupt__"]
+                                logger.info(
+                                    f"AgentLoopStreamAPI: HITL interrupt detected: {interrupt_info}"
+                                )
+                                logger.info(
+                                    f"AgentLoopStreamAPI: interrupt_info type: {type(interrupt_info)}"
+                                )
 
-                # ⭐ 如果用户停止，优雅退出
-                if user_stopped:
-                    # 等待任务取消完成
-                    try:
-                        await step_task
-                    except asyncio.CancelledError:
-                        pass
+                                action_requests = []
+                                interrupt_id = None
+                                # 处理 tuple、list 或单个 Interrupt 对象
+                                if isinstance(interrupt_info, (list, tuple)):
+                                    interrupts_list = list(interrupt_info)
+                                else:
+                                    interrupts_list = [interrupt_info]
 
-                    # 清除停止信号
-                    clear_stop_signal(session_id)
+                                for intr in interrupts_list:
+                                    logger.info(
+                                        f"AgentLoopStreamAPI: Processing interrupt: type={type(intr)}, dir={dir(intr)}"
+                                    )
+                                    logger.info(
+                                        f"AgentLoopStreamAPI: interrupt repr: {repr(intr)}"
+                                    )
 
-                    # 更新任务状态
-                    task.status = 'cancelled'
-                    task.error_message = '用户中断'
-                    task.completed_at = timezone.now()
-                    await orchestrator._save_task(task)
+                                    if hasattr(intr, "id"):
+                                        interrupt_id = intr.id
+                                        logger.info(
+                                            f"AgentLoopStreamAPI: interrupt_id from attr: {interrupt_id}"
+                                        )
+                                    elif isinstance(intr, dict) and "id" in intr:
+                                        interrupt_id = intr["id"]
+                                        logger.info(
+                                            f"AgentLoopStreamAPI: interrupt_id from dict: {interrupt_id}"
+                                        )
 
-                    # 保存已收集的流式内容到对话历史
-                    partial_response = ''.join(streaming_content) if streaming_content else ''
-                    stopped_metadata = {
-                        "agent": "agent_loop",
-                        "agent_type": "stopped",
-                        "step": step_count,
-                        "max_steps": orchestrator.max_steps,
-                        "sse_event_type": "stopped"
-                    }
-                    conversation_messages.append(
-                        AIMessage(
-                            content=f"[用户中断] {partial_response}" if partial_response else "[用户中断]",
-                            additional_kwargs={"metadata": stopped_metadata}
-                        )
-                    )
-                    try:
-                        await self._save_chat_history(
-                            request.user.id,
-                            project_id,
-                            session_id,
-                            conversation_messages
-                        )
-                    except Exception as save_err:
-                        logger.warning(f"AgentLoopStreamAPI: User stop history save failed: {save_err}")
+                                    intr_value = (
+                                        getattr(intr, "value", intr)
+                                        if hasattr(intr, "value")
+                                        else intr
+                                    )
+                                    logger.info(
+                                        f"AgentLoopStreamAPI: intr_value type={type(intr_value)}, value={intr_value}"
+                                    )
 
-                    yield create_sse_data({
-                        'type': 'stopped',
-                        'message': '已停止生成',
-                        'step': step_count
-                    })
-                    yield create_sse_data({
-                        'type': 'complete',
-                        'status': 'stopped',
-                        'steps': step_count
-                    })
-                    yield "data: [DONE]\n\n"
-                    return
+                                    # 尝试多种方式获取 action_requests
+                                    ars = []
+                                    if isinstance(intr_value, dict):
+                                        ars = intr_value.get("action_requests", [])
+                                        logger.info(
+                                            f"AgentLoopStreamAPI: action_requests from dict: {ars}"
+                                        )
+                                    elif hasattr(intr_value, "action_requests"):
+                                        ars = intr_value.action_requests
+                                        logger.info(
+                                            f"AgentLoopStreamAPI: action_requests from attr: {ars}"
+                                        )
 
-                # 处理队列中剩余的数据
-                while not stream_queue.empty():
-                    msg_type, content = await stream_queue.get()
-                    if msg_type == 'chunk':
-                        yield create_sse_data({
-                            'type': 'stream',
-                            'data': content
-                        })
-                
-                # 获取执行结果
-                try:
-                    step_result = await step_task
-                except asyncio.CancelledError:
-                    step_result = {'error': '步骤被取消'}
+                                    # 如果还是空的，尝试从 intr 本身获取
+                                    if not ars and hasattr(intr, "action_requests"):
+                                        ars = intr.action_requests
+                                        logger.info(
+                                            f"AgentLoopStreamAPI: action_requests from intr attr: {ars}"
+                                        )
 
-                # 记录并流式输出 AI 响应（完整响应，用于保存历史）
-                ai_response = step_result.get('response')
-                if ai_response:
-                    is_final = step_result.get('is_final', False)
-                    
-                    # ⭐ 构建包含 SSE 事件类型的完整元数据
-                    ai_metadata = {
-                        "agent": "agent_loop",
-                        "agent_type": "final" if is_final else "intermediate",
-                        "step": step_count,
-                        "max_steps": orchestrator.max_steps,
-                        "sse_event_type": "message"  # ⭐ 标记为 message 事件
-                    }
-                    # ✅ Agent Loop 的 intermediate 消息不再标记为"思考过程"
-                    # 这些是正常的分步执行结果,应该完整显示,而非折叠
-                    
-                    conversation_messages.append(
-                        AIMessage(content=ai_response, additional_kwargs={"metadata": ai_metadata})
-                    )
-                    await refresh_conversation_history_snapshot()
-                    
-                    # ⭐ 发送流式结束信号（内容已通过 stream 事件发送）
-                    yield create_sse_data({
-                        'type': 'stream_end',
-                        'step': step_count,
-                        'is_final': is_final
-                    })
+                                    logger.info(
+                                        f"AgentLoopStreamAPI: Found {len(ars)} action_requests: {ars}"
+                                    )
 
-                # 工具调用信息
-                tool_summary = step_result.get('tool_summary')
-                if tool_summary:
-                    # ⭐ 工具消息也保存元数据
-                    tool_metadata = {
-                        "step": step_count,
-                        "max_steps": orchestrator.max_steps,  # ⭐ 添加max_steps字段
-                        "agent": "agent_loop",
-                        "sse_event_type": "tool_result"  # ⭐ 标记为 tool_result 事件
-                    }
-                    conversation_messages.append(
-                        ToolMessage(
-                            content=f"Step {step_count} 工具结果:\n{tool_summary}",
-                            tool_call_id=f"agent-loop-step-{step_count}",
-                            name="agent_loop_tools",
-                            additional_kwargs={"metadata": tool_metadata}
-                        )
-                    )
-                    await refresh_conversation_history_snapshot()
-                    yield create_sse_data({
-                        'type': 'tool_result',
-                        'summary': tool_summary
-                    })
+                                    for ar in ars:
+                                        if isinstance(ar, dict):
+                                            action_requests.append(
+                                                {
+                                                    "name": ar.get(
+                                                        "name",
+                                                        ar.get(
+                                                            "action_name", "unknown"
+                                                        ),
+                                                    ),
+                                                    "args": ar.get(
+                                                        "arguments", ar.get("args", {})
+                                                    ),
+                                                    "description": ar.get(
+                                                        "description", ""
+                                                    ),
+                                                }
+                                            )
+                                        else:
+                                            action_requests.append(
+                                                {
+                                                    "name": getattr(
+                                                        ar, "name", "unknown"
+                                                    ),
+                                                    "args": getattr(
+                                                        ar,
+                                                        "arguments",
+                                                        getattr(ar, "args", {}),
+                                                    ),
+                                                    "description": getattr(
+                                                        ar, "description", ""
+                                                    ),
+                                                }
+                                            )
 
-                # 更新 Blackboard
-                await orchestrator._update_blackboard(blackboard, step_result)
+                                if action_requests:
+                                    # 获取用户工具偏好，为 always_reject 的工具添加 auto_reject 标记
+                                    user_approvals = await sync_to_async(
+                                        get_user_tool_approvals
+                                    )(request.user, session_id)
+                                    for ar in action_requests:
+                                        tool_name = ar.get("name", "")
+                                        if (
+                                            user_approvals.get(tool_name)
+                                            == "always_reject"
+                                        ):
+                                            ar["auto_reject"] = True
+                                            logger.info(
+                                                f"AgentLoopStreamAPI: Tool {tool_name} marked as auto_reject"
+                                            )
 
-                # 发送步骤完成信号
-                yield create_sse_data({
-                    'type': 'step_complete',
-                    'step': step_count,
-                    'summary': step_result.get('tool_summary', '')[:200]
-                })
+                                    interrupt_detected = True
+                                    yield create_sse_data(
+                                        {
+                                            "type": "interrupt",
+                                            "interrupt_id": interrupt_id
+                                            or str(id(interrupt_info)),
+                                            "action_requests": action_requests,
+                                            "session_id": session_id,
+                                            "thread_id": thread_id,
+                                        }
+                                    )
+                                    logger.info(
+                                        f"AgentLoopStreamAPI: Sent interrupt with {len(action_requests)} actions"
+                                    )
 
-                # ⭐ 每步完成后立即保存对话历史（增量保存，防止中断丢失）
-                try:
-                    await self._save_chat_history(
-                        request.user.id,
-                        project_id,
-                        session_id,
-                        conversation_messages
-                    )
-                    logger.debug(f"AgentLoopStreamAPI: Step {step_count} history saved ({len(conversation_messages)} messages)")
-                except Exception as save_err:
-                    logger.warning(f"AgentLoopStreamAPI: Step {step_count} history save failed: {save_err}")
+                            # 检测工具调用开始（用于生成 step_start 事件）
+                            elif isinstance(chunk, dict):
+                                for node_name, node_output in chunk.items():
+                                    if node_name == "agent" and isinstance(
+                                        node_output, dict
+                                    ):
+                                        messages = node_output.get("messages", [])
+                                        for msg in messages:
+                                            if (
+                                                hasattr(msg, "tool_calls")
+                                                and msg.tool_calls
+                                            ):
+                                                # 新的工具调用 -> 新步骤开始
+                                                step_count += 1
+                                                current_tool_calls = msg.tool_calls
+                                                tool_names_in_step = [
+                                                    tc.get("name", "unknown")
+                                                    if isinstance(tc, dict)
+                                                    else getattr(tc, "name", "unknown")
+                                                    for tc in current_tool_calls
+                                                ]
+                                                yield create_sse_data(
+                                                    {
+                                                        "type": "step_start",
+                                                        "step": step_count,
+                                                        "max_steps": self.MAX_STEPS,
+                                                        "tools": tool_names_in_step,
+                                                    }
+                                                )
+                                                logger.info(
+                                                    f"AgentLoopStreamAPI: Step {step_count} started with tools: {tool_names_in_step}"
+                                                )
 
-                # ⭐ 每步完成后计算Token使用情况（实时监控）
-                # ✅ 修复：计算实际传递给LLM的内容，而不是存储用的conversation_messages
-                try:
-                    # 调试:检查实际配置值
-                    logger.info(f"[Token] 读取配置: context_limit={context_limit}, name={active_config.name}, config_name={active_config.config_name}")
-                    logger.info(f"[Token] 使用: context_limit={context_limit}, model={model_name}")
-                    
-                    # ⭐⭐ 构建实际的LLM输入内容（与_build_step_context一致）
-                    # 这才是LLM真正看到的内容
-                    history = blackboard.get_recent_history(orchestrator.DEFAULT_HISTORY_WINDOW)
-                    history_text = '\n'.join([f"- {h}" for h in history]) if history else '（无历史）'
-                    
-                    conversation_history = blackboard.current_state.get('conversation_history', '') if blackboard.current_state else ''
-                    conversation_history_text = conversation_history if conversation_history else '（无对话历史）'
-                    
-                    state_text = json.dumps(blackboard.current_state, ensure_ascii=False, indent=2) if blackboard.current_state else '（无）'
-                    context_variables = blackboard.context_variables
-                    
-                    # 格式化为实际的SystemMessage内容（与STEP_SYSTEM_PROMPT一致）
-                    step_context = {
-                        'goal': goal,
-                        'conversation_history': conversation_history_text,
-                        'history': history_text,
-                        'current_state': state_text,
-                        'context_variables': context_variables
-                    }
-                    
-                    # 使用实际的STEP_SYSTEM_PROMPT模板格式化
-                    # 注：无需导入STEP_SYSTEM_PROMPT，直接计算各组件的token
-                    token_counts = {}
-                    token_counts['goal'] = context_checker.count_tokens(goal, model_name)
-                    token_counts['conversation_history'] = context_checker.count_tokens(conversation_history_text, model_name)
-                    token_counts['blackboard_history'] = context_checker.count_tokens(history_text, model_name)
-                    
-                    # ⚠️ 修复：current_state 已包含 conversation_history，不要重复计算
-                    # 从 current_state 中排除 conversation_history 再计算
-                    state_for_token = {k: v for k, v in (blackboard.current_state or {}).items() if k != 'conversation_history'}
-                    state_text_for_token = json.dumps(state_for_token, ensure_ascii=False, indent=2) if state_for_token else '（无）'
-                    token_counts['current_state'] = context_checker.count_tokens(state_text_for_token, model_name)
-                    
-                    token_counts['context_variables'] = context_checker.count_tokens(str(context_variables), model_name)
-                    
-                    # 加上固定的prompt模板开销（粗略估算）
-                    token_counts['prompt_template'] = 200  # 估算STEP_SYSTEM_PROMPT模板本身的token
-                    
-                    total_tokens = sum(token_counts.values())
-                    
-                    # 打印各部分token分布（调试用）
-                    logger.info(f"[Token分布] goal:{token_counts['goal']}, conv_history:{token_counts['conversation_history']}, bb_history:{token_counts['blackboard_history']}, state:{token_counts['current_state']}, vars:{token_counts['context_variables']}, template:{token_counts['prompt_template']}")
-                    logger.info(f"[Context Update] Agent Loop Step {step_count}: {total_tokens}/{context_limit} tokens")
-                    
-                    # ⭐ 每步都发送Token更新事件
-                    yield create_sse_data({
-                        'type': 'context_update',
-                        'context_token_count': total_tokens,
-                        'context_limit': context_limit,
-                        'step': step_count  # ⭐ 标记是哪一步的Token统计
-                    })
-                    
-                    # ⭐⭐ 达到90%触发AI驱动的历史压缩
-                    if total_tokens >= context_limit * 0.9:
-                        logger.warning(f"[Compression Trigger] Step {step_count}: Token达到{total_tokens}/{context_limit}(90%),触发压缩")
-                        
-                        yield create_sse_data({
-                            'type': 'compressing',
-                            'message': '⚙️ Token达到90%,正在压缩记忆...',
-                            'step': step_count,
-                            'current_tokens': total_tokens,
-                            'context_limit': context_limit
-                        })
-                        
-                        compression_actions: List[str] = []
-                        try:
-                            history_compressed = await sync_to_async(blackboard.compress_old_history)(context_limit, model_name)
-                            if history_compressed:
-                                compression_actions.append('执行记录')
-                        except Exception as compress_err:
-                            logger.error(f"[Compression] 调用Blackboard压缩失败: {compress_err}", exc_info=True)
-                        
-                        try:
-                            updated_conv = await refresh_conversation_history_snapshot()
-                            if updated_conv:
-                                compression_actions.append('对话历史')
-                        except Exception as conv_err:
-                            logger.error(f"[Compression] 更新对话历史失败: {conv_err}", exc_info=True)
-                        
-                        if compression_actions:
-                            history = blackboard.get_recent_history(orchestrator.DEFAULT_HISTORY_WINDOW)
-                            new_history_text = '\n'.join([f"- {h}" for h in history]) if history else '（无历史）'
-                            
-                            new_conversation_history = blackboard.current_state.get('conversation_history', '') if blackboard.current_state else ''
-                            new_conversation_history_text = new_conversation_history if new_conversation_history else '（无对话历史）'
-                            
-                            state_for_token_after = {k: v for k, v in (blackboard.current_state or {}).items() if k != 'conversation_history'}
-                            state_text_after = json.dumps(state_for_token_after, ensure_ascii=False, indent=2) if state_for_token_after else '（无）'
-                            
-                            new_token_counts = {
-                                'goal': token_counts['goal'],
-                                'conversation_history': context_checker.count_tokens(new_conversation_history_text, model_name),
-                                'blackboard_history': context_checker.count_tokens(new_history_text, model_name),
-                                'current_state': context_checker.count_tokens(state_text_after, model_name),
-                                'context_variables': token_counts['context_variables'],
-                                'prompt_template': token_counts['prompt_template']
-                            }
-                            
-                            new_total_tokens = sum(new_token_counts.values())
-                            reduction = max(total_tokens - new_total_tokens, 0)
-                            actions_text = '、'.join(compression_actions)
-                            
-                            yield create_sse_data({
-                                'type': 'compression_done',
-                                'message': f'{actions_text}已压缩: {total_tokens}→{new_total_tokens} tokens',
-                                'step': step_count,
-                                'token_reduction': reduction
-                            })
-                            
-                            yield create_sse_data({
-                                'type': 'context_update',
-                                'context_token_count': new_total_tokens,
-                                'context_limit': context_limit,
-                                'step': step_count
-                            })
-                            
-                            logger.info(f"[Compression Done] Step {step_count}: Token {total_tokens}→{new_total_tokens} (动作: {actions_text})")
-                            total_tokens = new_total_tokens
-                        else:
-                            logger.warning(f"[Compression] Step {step_count}: 没有可压缩的内容")
-                
+                                    elif node_name == "tools" and isinstance(
+                                        node_output, dict
+                                    ):
+                                        # 工具执行完成
+                                        tool_messages = node_output.get("messages", [])
+                                        for tool_msg in tool_messages:
+                                            if hasattr(tool_msg, "content"):
+                                                content = tool_msg.content
+                                                tool_name = getattr(
+                                                    tool_msg, "name", None
+                                                ) or getattr(
+                                                    tool_msg, "tool_name", "unknown"
+                                                )
+
+                                                # 使用辅助函数处理 MCP 工具输出
+                                                content, summary = (
+                                                    process_mcp_tool_output(content)
+                                                )
+
+                                                yield create_sse_data(
+                                                    {
+                                                        "type": "tool_result",
+                                                        "tool_name": tool_name,
+                                                        "tool_output": content,
+                                                        "summary": summary,
+                                                        "step": step_count,
+                                                    }
+                                                )
+                                        # 步骤完成
+                                        if step_count > 0:
+                                            yield create_sse_data(
+                                                {
+                                                    "type": "step_complete",
+                                                    "step": step_count,
+                                                }
+                                            )
+
+                        elif stream_mode == "messages":
+                            # LLM Token 流式输出
+                            # messages 模式返回元组 (token, metadata)
+                            if isinstance(chunk, tuple) and len(chunk) >= 1:
+                                token = chunk[0]
+                                # 只发送 AI 消息，过滤掉 ToolMessage（工具结果已通过 tool_result 事件发送）
+                                if hasattr(token, "content") and token.content:
+                                    # 检查是否是 ToolMessage（通过类名或 type 属性）
+                                    token_type = type(token).__name__
+                                    if "ToolMessage" not in token_type:
+                                        yield create_sse_data(
+                                            {"type": "stream", "data": token.content}
+                                        )
+                            elif hasattr(chunk, "content") and chunk.content:
+                                # 兼容旧版本可能直接返回 message 的情况
+                                # 同样过滤掉 ToolMessage
+                                chunk_type = type(chunk).__name__
+                                if "ToolMessage" not in chunk_type:
+                                    yield create_sse_data(
+                                        {"type": "stream", "data": chunk.content}
+                                    )
+
                 except Exception as e:
-                    logger.warning(f"AgentLoopStreamAPI Step {step_count}: Failed to calculate token count: {e}")
-
-                # 检查是否完成
-                if step_result.get('is_final'):
-                    logger.info(f"AgentLoopStreamAPI: Task is_final=True, saving task...")
-                    task.status = 'completed'
-                    task.final_response = step_result.get('response', '')
-                    task.completed_at = timezone.now()
-                    await orchestrator._save_task(task)
-                    
-                    # 对话历史已在每步保存，此处无需重复保存
-                    logger.info(f"AgentLoopStreamAPI: Task completed, history already saved ({len(conversation_messages)} messages)")
-                    
-                    complete_data = {
-                        'type': 'complete',
-                        'total_steps': step_count,
-                        'task_id': task.id
-                    }
-                    
-                    # Playwright 脚本管理工具已通过 builtin_tools 加载
-                    if generate_playwright_script:
-                        complete_data['script_generation'] = {
-                            'enabled': True,
-                            'message': '脚本管理工具已启用（保存/查询/执行等）'
-                        }
-                    
-                    yield create_sse_data(complete_data)
-                    break
-
-                # 检查错误：工具调用失败时继续循环让 LLM 重试
-                if step_result.get('error') and not step_result.get('tool_results'):
-                    # 非工具调用错误，直接失败
-                    task.status = 'failed'
-                    task.error_message = step_result['error']
-                    task.completed_at = timezone.now()
-                    await orchestrator._save_task(task)
-                    
-                    logger.info(f"AgentLoopStreamAPI: Task failed at step {step_count}, history already saved")
-                    
-                    yield create_sse_data({
-                        'type': 'error',
-                        'message': step_result['error']
-                    })
-                    break
-                
-                # 检查工具调用失败计数
-                if step_result.get('error') and step_result.get('tool_results'):
-                    error_msg = step_result['error']
-                    is_session_error = AgentOrchestrator._is_session_terminated_error(error_msg)
-                    is_recoverable_error = AgentOrchestrator._is_recoverable_tool_error(error_msg)
-                    if is_session_error:
-                        logger.warning(f"工具调用会话断开（已自动刷新重试，不计入连续失败）: {error_msg[:100]}")
-                    elif is_recoverable_error:
-                        logger.warning(f"工具调用可恢复错误（AI可自行调整策略，不计入连续失败）: {error_msg[:100]}")
+                    friendly_error = get_user_friendly_llm_error(e)
+                    if friendly_error:
+                        logger.warning(
+                            "AgentLoopStreamAPI: Friendly model error. session_id=%s, error_code=%s, message=%s",
+                            session_id,
+                            friendly_error.get("error_code"),
+                            friendly_error.get("message"),
+                        )
+                        yield create_sse_data(_build_sse_error_event(e))
                     else:
-                        consecutive_tool_failures += 1
-                        logger.warning(f"工具调用失败 ({consecutive_tool_failures}/{max_consecutive_tool_failures}): {error_msg[:100]}")
-                    
-                    if consecutive_tool_failures >= max_consecutive_tool_failures:
-                        task.status = 'failed'
-                        task.error_message = f'工具调用连续失败 {consecutive_tool_failures} 次: {step_result["error"]}'
-                        task.completed_at = timezone.now()
-                        await orchestrator._save_task(task)
-                        
-                        yield create_sse_data({
-                            'type': 'error',
-                            'message': task.error_message
-                        })
-                        break
+                        logger.error(
+                            "AgentLoopStreamAPI: Streaming error. session_id=%s, thread_id=%s, "
+                            "model=%s, error_type=%s, error=%s",
+                            session_id,
+                            thread_id,
+                            model_name,
+                            type(e).__name__,
+                            e,
+                            exc_info=True,
+                        )
+                        yield create_sse_data(
+                            {"type": "error", "message": f"Streaming error: {str(e)}"}
+                        )
+
+                # 16. 处理结束状态
+                # 无论是否发生 interrupt，都需要计算和发送 context_update
+                try:
+                    current_state = await agent.aget_state(invoke_config)
+                    all_messages = (
+                        current_state.values.get("messages", [])
+                        if current_state.values
+                        else []
+                    )
+
+                    # 获取当前上下文 token 使用量（优先 usage_metadata，回退估算）
+                    input_tokens, output_tokens, total_tokens = (
+                        calculate_context_tokens(
+                            all_messages, model_name,
+                            tools=tools, system_prompt=effective_prompt,
+                        )
+                    )
+
+                    yield create_sse_data(
+                        {
+                            "type": "context_update",
+                            "context_token_count": total_tokens,
+                            "context_limit": context_limit,
+                        }
+                    )
+
+                    # 记录 Token 使用量到 ChatSession + TokenUsageRecord
+                    if input_tokens > 0 or output_tokens > 0:
+                        # 提取缓存命中信息
+                        cache_read_tokens = 0
+                        for msg in reversed(all_messages):
+                            if hasattr(msg, "usage_metadata") and msg.usage_metadata:
+                                cache_info = msg.usage_metadata.get("input_token_details", {})
+                                cache_read_tokens = cache_info.get("cache_read", 0) or 0
+                                logger.info(
+                                    "AgentLoopStreamAPI: Token usage - input=%d, output=%d, cache_read=%d, cache_info=%s",
+                                    input_tokens, output_tokens, cache_read_tokens, cache_info,
+                                )
+                                break
+                        else:
+                            logger.info(
+                                f"AgentLoopStreamAPI: Token usage recorded - input={input_tokens}, output={output_tokens}"
+                            )
+
+                        await sync_to_async(self._update_session_token_usage)(
+                            session_id, input_tokens, output_tokens,
+                            cache_read_tokens=cache_read_tokens,
+                            user_id=request.user.id,
+                            project_id=int(project_id) if project_id else None,
+                        )
+                except Exception as e:
+                    logger.warning(
+                        f"AgentLoopStreamAPI: Failed to calculate token count: {e}"
+                    )
+
+                if user_stopped:
+                    yield create_sse_data(
+                        {"type": "complete", "status": "stopped", "steps": step_count}
+                    )
+                elif interrupt_detected:
+                    logger.info(
+                        "AgentLoopStreamAPI: Interrupt detected, returning early"
+                    )
                 else:
-                    # 成功时重置计数器
-                    consecutive_tool_failures = 0
+                    complete_data = {"type": "complete", "total_steps": step_count}
+                    if generate_playwright_script:
+                        complete_data["script_generation"] = {
+                            "enabled": True,
+                            "message": "脚本管理工具已启用",
+                        }
+                    yield create_sse_data(complete_data)
 
-                # 小延迟确保流式效果
-                await asyncio.sleep(0.05)
-
-            # 超过最大步骤
-            if step_count >= orchestrator.max_steps:
-                task.status = 'failed'
-                task.error_message = f'超过最大步骤数 {orchestrator.max_steps}'
-                task.completed_at = timezone.now()
-                await orchestrator._save_task(task)
-                
-                yield create_sse_data({
-                    'type': 'error',
-                    'message': task.error_message
-                })
-
-            # 发送流结束标记
-            yield "data: [DONE]\n\n"
+                yield "data: [DONE]\n\n"
 
         except Exception as e:
-            logger.error(f"AgentLoopStreamAPI: Error: {e}", exc_info=True)
-            yield create_sse_data({
-                'type': 'error',
-                'message': f'执行错误: {str(e)}'
-            })
+            friendly_error = get_user_friendly_llm_error(e)
+            if friendly_error:
+                logger.warning(
+                    "AgentLoopStreamAPI: Friendly model error. session_id=%s, error_code=%s, message=%s",
+                    session_id,
+                    friendly_error.get("error_code"),
+                    friendly_error.get("message"),
+                )
+                yield create_sse_data(_build_sse_error_event(e))
+            else:
+                logger.error(
+                    "AgentLoopStreamAPI: Error. session_id=%s, thread_id=%s, model=%s, "
+                    "error_type=%s, error=%s",
+                    session_id,
+                    thread_id,
+                    model_name if "model_name" in locals() else "unknown",
+                    type(e).__name__,
+                    e,
+                    exc_info=True,
+                )
+                yield create_sse_data(
+                    {"type": "error", "message": f"执行错误: {str(e)}"}
+                )
 
     async def post(self, request, *args, **kwargs):
-        """处理流式聊天请求"""
+        """
+        处理聊天请求
+
+        支持 stream 参数：
+        - stream=true (默认)：返回 SSE 流式响应
+        - stream=false：返回普通 JSON 响应
+        """
         # 1. 认证
         try:
             user = await self.authenticate_request(request)
             request.user = user
         except AuthenticationFailed as e:
-            return StreamingHttpResponse(
-                iter([create_sse_data({'type': 'error', 'message': str(e), 'code': 401})]),
-                content_type='text/event-stream; charset=utf-8',
-                status=401
-            )
+            return api_error_response(str(e), 401)
 
         # 2. 解析请求
         try:
-            body_data = json.loads(request.body.decode('utf-8'))
+            body_data = json.loads(request.body.decode("utf-8"))
         except json.JSONDecodeError as e:
-            return StreamingHttpResponse(
-                iter([create_sse_data({'type': 'error', 'message': f'Invalid JSON: {e}', 'code': 400})]),
-                content_type='text/event-stream; charset=utf-8',
-                status=400
-            )
+            return api_error_response(f"Invalid JSON: {e}", 400)
 
-        user_message = body_data.get('message')
-        session_id = body_data.get('session_id')
-        project_id = body_data.get('project_id')
-        knowledge_base_id = body_data.get('knowledge_base_id')
-        use_knowledge_base = body_data.get('use_knowledge_base', True)
-        prompt_id = body_data.get('prompt_id')
-        image_base64 = body_data.get('image')
-        
+        user_message = body_data.get("message")
+        session_id = body_data.get("session_id")
+        project_id = body_data.get("project_id")
+        knowledge_base_id = body_data.get("knowledge_base_id")
+        use_knowledge_base = body_data.get("use_knowledge_base", True)
+        prompt_id = body_data.get("prompt_id")
+
+        # 调试日志：知识库参数
+        logger.info(
+            f"AgentLoopStreamAPI: knowledge_base_id={knowledge_base_id}, use_knowledge_base={use_knowledge_base}"
+        )
+        uploaded_images_base64 = _normalize_uploaded_image_base64_list(
+            body_data.get("images"),
+            body_data.get("image"),
+        )
+
+        # stream 参数：控制流式/非流式输出（默认 true）
+        stream_mode = body_data.get("stream", True)
+        if isinstance(stream_mode, str):
+            stream_mode = stream_mode.lower() in ("true", "1", "yes")
+
         # Playwright 脚本生成参数
-        generate_playwright_script = body_data.get('generate_playwright_script', False)
-        test_case_id = body_data.get('test_case_id')  # 用于关联生成的脚本
-        use_pytest = body_data.get('use_pytest', True)  # 生成 pytest 格式还是简单格式
+        generate_playwright_script = body_data.get("generate_playwright_script", False)
+        test_case_id = body_data.get("test_case_id")  # 用于关联生成的脚本
+        use_pytest = body_data.get("use_pytest", True)  # 生成 pytest 格式还是简单格式
 
         # 兜底：如果前端没传 test_case_id，尝试从消息中解析
         if not test_case_id and user_message:
             import re
+
             # 匹配 "执行ID为 11 的测试用例" 或 "测试用例 ID：11" 等模式
-            match = re.search(r'(?:执行\s*ID\s*为|测试用例\s*(?:ID|id)[：:]\s*|case[_-]?id[：:=]\s*)(\d+)', user_message)
+            match = re.search(
+                r"(?:执行\s*ID\s*为|测试用例\s*(?:ID|id)[：:]\s*|case[_-]?id[：:=]\s*)(\d+)",
+                user_message,
+            )
             if match:
                 test_case_id = int(match.group(1))
-                logger.info(f"AgentLoopStreamAPI: Parsed test_case_id from message: {test_case_id}")
+                logger.info(
+                    f"AgentLoopStreamAPI: Parsed test_case_id from message: {test_case_id}"
+                )
 
         # 3. 参数验证
         if not project_id:
-            return StreamingHttpResponse(
-                iter([create_sse_data({'type': 'error', 'message': 'project_id is required', 'code': 400})]),
-                content_type='text/event-stream; charset=utf-8',
-                status=400
-            )
+            return api_error_response("project_id is required", 400)
 
         if not user_message:
-            return StreamingHttpResponse(
-                iter([create_sse_data({'type': 'error', 'message': 'message is required', 'code': 400})]),
-                content_type='text/event-stream; charset=utf-8',
-                status=400
-            )
+            return api_error_response("message is required", 400)
 
         # 4. 项目权限检查
-        project = await sync_to_async(self._check_project_permission)(request.user, project_id)
+        project = await sync_to_async(check_project_permission)(
+            request.user, project_id
+        )
         if not project:
-            return StreamingHttpResponse(
-                iter([create_sse_data({'type': 'error', 'message': 'Project access denied', 'code': 403})]),
-                content_type='text/event-stream; charset=utf-8',
-                status=403
-            )
+            return api_error_response("Project access denied", 403)
 
         # 5. 生成 session_id
         if not session_id:
             session_id = uuid.uuid4().hex
             logger.info(f"AgentLoopStreamAPI: Generated new session_id: {session_id}")
 
-        # 6. 返回流式响应
-        async def async_generator():
+        # 5.1 清理陈旧停止信号，避免上一次"停止"残留影响本轮首次发送
+        # 场景：前端先断开 SSE，再调用 stop API，可能导致信号留存到下一次请求
+        if clear_stop_signal(session_id):
+            logger.info(
+                f"AgentLoopStreamAPI: Cleared stale stop signal for session {session_id}"
+            )
+
+        # 6. 根据 stream 参数决定响应方式
+        if stream_mode:
+            # 流式响应 (SSE)
+            async def async_generator():
+                async for chunk in self._create_stream_generator(
+                    request,
+                    user_message,
+                    session_id,
+                    project_id,
+                    project,
+                    knowledge_base_id,
+                    use_knowledge_base,
+                    prompt_id,
+                    uploaded_images_base64,
+                    generate_playwright_script,
+                    test_case_id,
+                    use_pytest,
+                ):
+                    yield chunk
+
+            response = StreamingHttpResponse(
+                async_generator(), content_type="text/event-stream; charset=utf-8"
+            )
+            response["Cache-Control"] = "no-cache"
+            response["X-Accel-Buffering"] = "no"
+            return response
+        else:
+            # 非流式响应 (JSON)
+            return await self._handle_non_stream_request(
+                request,
+                user_message,
+                session_id,
+                project_id,
+                project,
+                knowledge_base_id,
+                use_knowledge_base,
+                prompt_id,
+                uploaded_images_base64,
+                generate_playwright_script,
+                test_case_id,
+                use_pytest,
+            )
+
+    async def _handle_non_stream_request(
+        self,
+        request,
+        user_message: str,
+        session_id: str,
+        project_id: str,
+        project: Project,
+        knowledge_base_id: Optional[int] = None,
+        use_knowledge_base: bool = True,
+        prompt_id: Optional[int] = None,
+        uploaded_images_base64: Optional[List[str]] = None,
+        generate_playwright_script: bool = False,
+        test_case_id: Optional[int] = None,
+        use_pytest: bool = True,
+    ) -> JsonResponse:
+        """
+        处理非流式请求，收集所有流式事件后返回统一 JSON 响应
+        """
+        final_content = ""
+        final_session_id = session_id
+        tool_results = []
+        total_steps = 0
+        context_token_count = 0
+        context_limit = 128000
+        error_message = None
+        error_status_code = 500
+        error_details = None
+        interrupt_info = None
+        script_generation = None
+
+        try:
             async for chunk in self._create_stream_generator(
-                request, user_message, session_id, project_id, project,
-                knowledge_base_id, use_knowledge_base, prompt_id, image_base64,
-                generate_playwright_script, test_case_id, use_pytest
+                request,
+                user_message,
+                session_id,
+                project_id,
+                project,
+                knowledge_base_id,
+                use_knowledge_base,
+                prompt_id,
+                uploaded_images_base64,
+                generate_playwright_script,
+                test_case_id,
+                use_pytest,
             ):
-                yield chunk
+                # 解析 SSE 数据
+                if isinstance(chunk, str) and chunk.startswith("data: "):
+                    data_str = chunk[6:].strip()
+                    if data_str == "[DONE]":
+                        continue
+                    try:
+                        event = json.loads(data_str)
+                        event_type = event.get("type")
 
-        response = StreamingHttpResponse(
-            async_generator(),
-            content_type='text/event-stream; charset=utf-8'
-        )
-        response['Cache-Control'] = 'no-cache'
-        response['X-Accel-Buffering'] = 'no'
-        return response
+                        if event_type == "start":
+                            final_session_id = event.get("session_id", session_id)
+                        elif event_type == "stream":
+                            # 累积流式内容
+                            final_content += event.get("data", "")
+                        elif event_type == "tool_result":
+                            tool_results.append(
+                                {
+                                    "summary": event.get("summary", ""),
+                                    "tool_output": event.get("tool_output"),
+                                    "tool_name": event.get("tool_name"),
+                                    "step": event.get("step", 0),
+                                }
+                            )
+                        elif event_type == "step_complete":
+                            total_steps = max(total_steps, event.get("step", 0))
+                        elif event_type == "context_update":
+                            context_token_count = event.get("context_token_count", 0)
+                            context_limit = event.get("context_limit", 128000)
+                        elif event_type == "error":
+                            error_message = event.get("message", "Unknown error")
+                            error_status_code = event.get("code", 500)
+                            error_details = event.get("errors")
+                        elif event_type == "interrupt":
+                            interrupt_info = {
+                                "interrupt_id": event.get("interrupt_id"),
+                                "action_requests": event.get("action_requests", []),
+                            }
+                        elif event_type == "complete":
+                            if event.get("script_generation"):
+                                script_generation = event.get("script_generation")
+                    except json.JSONDecodeError:
+                        continue
+
+            # 构建响应
+            if error_message:
+                return api_error_response(
+                    error_message, error_status_code, error_details
+                )
+
+            response_data = {
+                "session_id": final_session_id,
+                "content": final_content,
+                "total_steps": total_steps,
+                "tool_results": tool_results,
+                "context_token_count": context_token_count,
+                "context_limit": context_limit,
+            }
+
+            if interrupt_info:
+                response_data["interrupt"] = interrupt_info
+
+            if script_generation:
+                response_data["script_generation"] = script_generation
+
+            return api_success_response("Chat completed", response_data)
+
+        except Exception as e:
+            logger.error(
+                "AgentLoopStreamAPI: Non-stream request error. session_id=%s, project_id=%s, "
+                "error_type=%s, error=%s",
+                session_id,
+                project_id,
+                type(e).__name__,
+                e,
+                exc_info=True,
+            )
+            friendly_error = get_user_friendly_llm_error(e)
+            if friendly_error:
+                return api_error_response(
+                    friendly_error["message"],
+                    friendly_error["status_code"],
+                    friendly_error["errors"],
+                )
+            return api_error_response(f"执行错误: {str(e)}", 500)
 
 
-@method_decorator(csrf_exempt, name='dispatch')
+@method_decorator(csrf_exempt, name="dispatch")
 class AgentLoopStopAPIView(View):
     """
     Agent Loop 停止 API
@@ -1774,11 +1736,11 @@ class AgentLoopStopAPIView(View):
 
     async def authenticate_request(self, request):
         """JWT 认证（复用 AgentLoopStreamAPIView 的逻辑）"""
-        auth_header = request.META.get('HTTP_AUTHORIZATION')
-        if not auth_header or not auth_header.startswith('Bearer '):
-            raise AuthenticationFailed('Authentication credentials were not provided.')
+        auth_header = request.META.get("HTTP_AUTHORIZATION")
+        if not auth_header or not auth_header.startswith("Bearer "):
+            raise AuthenticationFailed("Authentication credentials were not provided.")
 
-        token = auth_header.split(' ')[1]
+        token = auth_header.split(" ")[1]
         jwt_auth = JWTAuthentication()
 
         try:
@@ -1786,11 +1748,10 @@ class AgentLoopStopAPIView(View):
             user = await sync_to_async(jwt_auth.get_user)(validated_token)
             return user
         except Exception as e:
-            raise AuthenticationFailed(f'Invalid token: {str(e)}')
+            raise AuthenticationFailed(f"Invalid token: {str(e)}")
 
     async def post(self, request, *args, **kwargs):
         """处理停止请求"""
-        from django.http import JsonResponse
         from .stop_signal import set_stop_signal
 
         # 1. 认证
@@ -1798,25 +1759,636 @@ class AgentLoopStopAPIView(View):
             user = await self.authenticate_request(request)
             request.user = user
         except AuthenticationFailed as e:
-            return JsonResponse({'error': str(e), 'code': 401}, status=401)
+            return api_error_response(str(e), 401)
 
         # 2. 解析请求
         try:
-            body_data = json.loads(request.body.decode('utf-8'))
+            body_data = json.loads(request.body.decode("utf-8"))
         except json.JSONDecodeError as e:
-            return JsonResponse({'error': f'Invalid JSON: {e}', 'code': 400}, status=400)
+            return api_error_response(f"Invalid JSON: {e}", 400)
 
-        session_id = body_data.get('session_id')
+        session_id = body_data.get("session_id")
         if not session_id:
-            return JsonResponse({'error': 'session_id is required', 'code': 400}, status=400)
+            return api_error_response("session_id is required", 400)
 
         # 3. 设置停止信号
         success = set_stop_signal(session_id)
 
-        logger.info(f"AgentLoopStopAPI: Stop signal set for session {session_id} by user {user.id}")
+        logger.info(
+            f"AgentLoopStopAPI: Stop signal set for session {session_id} by user {user.id}"
+        )
 
-        return JsonResponse({
-            'success': success,
-            'session_id': session_id,
-            'message': '已发送停止信号'
-        })
+        return api_success_response(
+            "已发送停止信号", {"session_id": session_id, "success": success}
+        )
+
+
+@method_decorator(csrf_exempt, name="dispatch")
+class AgentLoopResumeAPIView(View):
+    """
+    Agent Loop Resume API (SSE 流式版)
+
+    用于恢复被 HITL 中断的 Agent Loop 任务。
+    接收用户对工具调用的审批决策，然后通过 SSE 流式返回后续执行结果。
+
+    这样前端可以像处理主流一样处理 resume 后的工具执行和 LLM 响应。
+    """
+
+    # 最大步骤数（与主流保持一致）
+    MAX_STEPS = 500
+
+    async def authenticate_request(self, request):
+        """JWT 认证（复用 AgentLoopStreamAPIView 的逻辑）"""
+        auth_header = request.META.get("HTTP_AUTHORIZATION")
+        if not auth_header or not auth_header.startswith("Bearer "):
+            raise AuthenticationFailed("Authentication credentials were not provided.")
+
+        token = auth_header.split(" ")[1]
+        jwt_auth = JWTAuthentication()
+
+        try:
+            validated_token = await sync_to_async(jwt_auth.get_validated_token)(token)
+            user = await sync_to_async(jwt_auth.get_user)(validated_token)
+            return user
+        except Exception as e:
+            raise AuthenticationFailed(f"Invalid token: {str(e)}")
+
+    async def _create_resume_stream_generator(
+        self,
+        user,
+        session_id: str,
+        project_id: str,
+        resume_data: dict,
+        knowledge_base_id: Optional[str] = None,
+        use_knowledge_base: bool = False,
+    ):
+        """
+        创建 Resume SSE 流式生成器
+
+        与主流的 _create_stream_generator 类似，但使用 Command(resume=...) 来恢复执行。
+        """
+        from langgraph.types import Command
+
+        # 1. 解析 resume 数据
+        interrupt_id = list(resume_data.keys())[0] if resume_data else None
+        if not interrupt_id:
+            yield create_sse_data(
+                {"type": "error", "message": "Invalid resume data format"}
+            )
+            return
+
+        decision_info = resume_data[interrupt_id].get("decisions", [{}])[0]
+        decision_type = decision_info.get("type", "reject")
+
+        # 获取工具调用数量（前端传递）
+        action_count = resume_data[interrupt_id].get("action_count", 1)
+
+        # 构建 resume 值 - HITL middleware 需要 decisions 格式
+        # 为每个 pending 工具调用生成相同的决策
+        resume_value = {
+            "decisions": [{"type": decision_type} for _ in range(action_count)]
+        }
+
+        # 2. 发送 resume 开始信号
+        yield create_sse_data(
+            {
+                "type": "resume_start",
+                "session_id": session_id,
+                "decision": decision_type,
+            }
+        )
+
+        try:
+            async with get_async_checkpointer() as checkpointer:
+                # 3. 获取 LLM 配置
+                active_config = await sync_to_async(
+                    LLMConfig.objects.filter(is_active=True).first
+                )()
+
+                if not active_config:
+                    yield create_sse_data(
+                        {"type": "error", "message": "没有可用的 LLM 配置"}
+                    )
+                    return
+
+                context_limit = active_config.context_limit or 128000
+                model_name = active_config.name or "gpt-4o"
+                llm = await sync_to_async(create_llm_instance)(active_config)
+                context_limit = resolve_runtime_context_limit(
+                    active_config.context_limit, llm, model_name
+                )
+
+                # 4. 加载工具
+                tools = []
+
+                # 加载 MCP 工具
+                try:
+                    active_mcp_configs = await sync_to_async(list)(
+                        RemoteMCPConfig.objects.filter(is_active=True)
+                    )
+                    if active_mcp_configs:
+                        client_config = {}
+                        for cfg in active_mcp_configs:
+                            key = cfg.name or f"remote_{cfg.id}"
+                            client_config[key] = {
+                                "url": cfg.url,
+                                "transport": (
+                                    cfg.transport or "streamable_http"
+                                ).replace("-", "_"),
+                            }
+                            if cfg.headers:
+                                client_config[key]["headers"] = cfg.headers
+
+                        if client_config:
+                            mcp_tools = await mcp_session_manager.get_tools_for_config(
+                                client_config,
+                                user_id=str(user.id),
+                                project_id=str(project_id) if project_id else "0",
+                                session_id=session_id,
+                            )
+                            tools.extend(mcp_tools)
+                            logger.info(
+                                f"AgentLoopResumeAPI: Loaded {len(mcp_tools)} MCP tools"
+                            )
+                except Exception as e:
+                    logger.warning(f"AgentLoopResumeAPI: MCP tools loading failed: {e}")
+
+                # 加载知识库工具
+                if knowledge_base_id and use_knowledge_base:
+                    try:
+                        from knowledge.langgraph_integration import (
+                            create_knowledge_tool,
+                        )
+
+                        kb_tool = await sync_to_async(create_knowledge_tool)(
+                            knowledge_base_id=knowledge_base_id, user=user
+                        )
+                        tools.append(kb_tool)
+                        logger.info(
+                            f"AgentLoopResumeAPI: ✅ 知识库工具已添加: {kb_tool.name}"
+                        )
+                    except Exception as e:
+                        logger.warning(
+                            f"AgentLoopResumeAPI: ❌ Knowledge tool creation failed: {e}"
+                        )
+
+                # 加载内置工具
+                try:
+                    from orchestrator_integration.builtin_tools import get_builtin_tools
+
+                    builtin_tools = get_builtin_tools(
+                        user_id=user.id,
+                        project_id=int(project_id) if project_id else 0,
+                        test_case_id=None,
+                        chat_session_id=session_id,
+                    )
+                    tools.extend(builtin_tools)
+                    logger.info(
+                        f"AgentLoopResumeAPI: Added {len(builtin_tools)} builtin tools"
+                    )
+                except Exception as e:
+                    logger.warning(
+                        f"AgentLoopResumeAPI: Builtin tools loading failed: {e}"
+                    )
+
+                # 5. 获取工具名列表和中间件配置
+                # 尝试从 ChatSession 关联的 prompt 获取系统提示词，用于精确计算 overhead
+                resume_system_prompt = None
+                try:
+                    chat_session = await sync_to_async(
+                        ChatSession.objects.filter(session_id=session_id).select_related("prompt").first
+                    )()
+                    if chat_session and chat_session.prompt and chat_session.prompt.content:
+                        resume_system_prompt = chat_session.prompt.content
+                except Exception:
+                    pass
+
+                tool_names = [t.name for t in tools] if tools else []
+                middleware = await sync_to_async(get_middleware_from_config)(
+                    active_config,
+                    llm,
+                    user=user,
+                    session_id=session_id,
+                    all_tool_names=tool_names,
+                    tools=tools,
+                    system_prompt=resume_system_prompt,
+                )
+
+                # 6. 创建 agent
+                agent = create_agent(
+                    llm,
+                    tools,
+                    checkpointer=checkpointer,
+                    middleware=middleware,
+                )
+
+                thread_id = (
+                    f"{user.id}_{project_id}_{session_id}" if project_id else session_id
+                )
+                config = {
+                    "configurable": {"thread_id": thread_id},
+                    "recursion_limit": 1000,
+                }
+
+                # 6.1 恢复执行前，先修复历史消息（配对错误 + 风险工具输出）
+                await _sanitize_history_before_model_call(
+                    agent=agent,
+                    invoke_config=config,
+                    log_prefix="AgentLoopResumeAPI",
+                )
+
+                # 7. 构建 Command 来 resume
+                command = Command(resume=resume_value)
+
+                # 8. 步骤跟踪状态
+                step_count = 0
+                interrupt_detected = False
+
+                # 9. 流式执行
+                try:
+                    async for stream_mode, chunk in agent.astream(
+                        command, config=config, stream_mode=["updates", "messages"]
+                    ):
+                        if stream_mode == "updates":
+                            # 检查中断事件 (HITL) - resume 后可能又触发新的中断
+                            if isinstance(chunk, dict) and "__interrupt__" in chunk:
+                                interrupt_info = chunk["__interrupt__"]
+                                logger.info(
+                                    f"AgentLoopResumeAPI: HITL interrupt detected after resume: {interrupt_info}"
+                                )
+
+                                action_requests = []
+                                new_interrupt_id = None
+
+                                if isinstance(interrupt_info, (list, tuple)):
+                                    interrupts_list = list(interrupt_info)
+                                else:
+                                    interrupts_list = [interrupt_info]
+
+                                for intr in interrupts_list:
+                                    if hasattr(intr, "id"):
+                                        new_interrupt_id = intr.id
+                                    elif isinstance(intr, dict) and "id" in intr:
+                                        new_interrupt_id = intr["id"]
+
+                                    intr_value = (
+                                        getattr(intr, "value", intr)
+                                        if hasattr(intr, "value")
+                                        else intr
+                                    )
+                                    if isinstance(intr_value, dict):
+                                        ars = intr_value.get("action_requests", [])
+                                    elif hasattr(intr_value, "action_requests"):
+                                        ars = intr_value.action_requests
+                                    else:
+                                        ars = []
+
+                                    for ar in ars:
+                                        if isinstance(ar, dict):
+                                            action_requests.append(
+                                                {
+                                                    "name": ar.get(
+                                                        "name",
+                                                        ar.get(
+                                                            "action_name", "unknown"
+                                                        ),
+                                                    ),
+                                                    "args": ar.get(
+                                                        "arguments", ar.get("args", {})
+                                                    ),
+                                                    "description": ar.get(
+                                                        "description", ""
+                                                    ),
+                                                }
+                                            )
+                                        else:
+                                            action_requests.append(
+                                                {
+                                                    "name": getattr(
+                                                        ar, "name", "unknown"
+                                                    ),
+                                                    "args": getattr(
+                                                        ar,
+                                                        "arguments",
+                                                        getattr(ar, "args", {}),
+                                                    ),
+                                                    "description": getattr(
+                                                        ar, "description", ""
+                                                    ),
+                                                }
+                                            )
+
+                                if action_requests:
+                                    # 获取用户工具偏好，为 always_reject 的工具添加 auto_reject 标记
+                                    user_approvals = await sync_to_async(
+                                        get_user_tool_approvals
+                                    )(user, session_id)
+                                    for ar in action_requests:
+                                        tool_name = ar.get("name", "")
+                                        if (
+                                            user_approvals.get(tool_name)
+                                            == "always_reject"
+                                        ):
+                                            ar["auto_reject"] = True
+                                            logger.info(
+                                                f"AgentLoopResumeAPI: Tool {tool_name} marked as auto_reject"
+                                            )
+
+                                    interrupt_detected = True
+                                    yield create_sse_data(
+                                        {
+                                            "type": "interrupt",
+                                            "interrupt_id": new_interrupt_id
+                                            or str(id(interrupt_info)),
+                                            "action_requests": action_requests,
+                                            "session_id": session_id,
+                                            "thread_id": thread_id,
+                                        }
+                                    )
+
+                            # 检测工具调用开始
+                            elif isinstance(chunk, dict):
+                                for node_name, node_output in chunk.items():
+                                    if node_name == "agent" and isinstance(
+                                        node_output, dict
+                                    ):
+                                        messages = node_output.get("messages", [])
+                                        for msg in messages:
+                                            if (
+                                                hasattr(msg, "tool_calls")
+                                                and msg.tool_calls
+                                            ):
+                                                step_count += 1
+                                                tool_names_in_step = [
+                                                    tc.get("name", "unknown")
+                                                    if isinstance(tc, dict)
+                                                    else getattr(tc, "name", "unknown")
+                                                    for tc in msg.tool_calls
+                                                ]
+                                                yield create_sse_data(
+                                                    {
+                                                        "type": "step_start",
+                                                        "step": step_count,
+                                                        "max_steps": self.MAX_STEPS,
+                                                        "tools": tool_names_in_step,
+                                                    }
+                                                )
+
+                                    elif node_name == "tools" and isinstance(
+                                        node_output, dict
+                                    ):
+                                        tool_messages = node_output.get("messages", [])
+                                        for tool_msg in tool_messages:
+                                            if hasattr(tool_msg, "content"):
+                                                content = tool_msg.content
+                                                tool_name = getattr(
+                                                    tool_msg, "name", None
+                                                ) or getattr(
+                                                    tool_msg, "tool_name", "unknown"
+                                                )
+
+                                                # 使用辅助函数处理 MCP 工具输出
+                                                content, summary = (
+                                                    process_mcp_tool_output(content)
+                                                )
+
+                                                yield create_sse_data(
+                                                    {
+                                                        "type": "tool_result",
+                                                        "tool_name": tool_name,
+                                                        "tool_output": content,
+                                                        "summary": summary,
+                                                        "step": step_count,
+                                                    }
+                                                )
+                                        if step_count > 0:
+                                            yield create_sse_data(
+                                                {
+                                                    "type": "step_complete",
+                                                    "step": step_count,
+                                                }
+                                            )
+
+                        elif stream_mode == "messages":
+                            # LLM Token 流式输出
+                            # messages 模式返回元组 (token, metadata)
+                            if isinstance(chunk, tuple) and len(chunk) >= 1:
+                                token = chunk[0]
+                                # 只发送 AI 消息，过滤掉 ToolMessage（工具结果已通过 tool_result 事件发送）
+                                if hasattr(token, "content") and token.content:
+                                    # 检查是否是 ToolMessage（通过类名或 type 属性）
+                                    token_type = type(token).__name__
+                                    if "ToolMessage" not in token_type:
+                                        yield create_sse_data(
+                                            {"type": "stream", "data": token.content}
+                                        )
+                            elif hasattr(chunk, "content") and chunk.content:
+                                # 兼容旧版本可能直接返回 message 的情况
+                                # 同样过滤掉 ToolMessage
+                                chunk_type = type(chunk).__name__
+                                if "ToolMessage" not in chunk_type:
+                                    yield create_sse_data(
+                                        {"type": "stream", "data": chunk.content}
+                                    )
+
+                except Exception as e:
+                    friendly_error = get_user_friendly_llm_error(e)
+                    if friendly_error:
+                        logger.warning(
+                            "AgentLoopResumeAPI: Friendly model error. session_id=%s, error_code=%s, message=%s",
+                            session_id,
+                            friendly_error.get("error_code"),
+                            friendly_error.get("message"),
+                        )
+                        yield create_sse_data(_build_sse_error_event(e))
+                    else:
+                        logger.error(
+                            "AgentLoopResumeAPI: Streaming error: %s", e, exc_info=True
+                        )
+                        yield create_sse_data(
+                            {"type": "error", "message": f"Streaming error: {str(e)}"}
+                        )
+
+                # 10. 处理结束状态
+                # 无论是否发生 interrupt，都需要计算和发送 context_update
+                try:
+                    current_state = await agent.aget_state(config)
+                    all_messages = (
+                        current_state.values.get("messages", [])
+                        if current_state.values
+                        else []
+                    )
+
+                    # 获取当前上下文 token 使用量（优先 usage_metadata，回退估算）
+                    input_tokens, output_tokens, total_tokens = (
+                        calculate_context_tokens(
+                            all_messages, model_name,
+                            tools=tools, system_prompt=resume_system_prompt,
+                        )
+                    )
+
+                    yield create_sse_data(
+                        {
+                            "type": "context_update",
+                            "context_token_count": total_tokens,
+                            "context_limit": context_limit,
+                        }
+                    )
+
+                    # 记录 Token 使用量到 ChatSession + TokenUsageRecord
+                    if input_tokens > 0 or output_tokens > 0:
+                        # 提取缓存命中信息
+                        cache_read_tokens = 0
+                        for msg in reversed(all_messages):
+                            if hasattr(msg, "usage_metadata") and msg.usage_metadata:
+                                cache_info = msg.usage_metadata.get("input_token_details", {})
+                                cache_read_tokens = cache_info.get("cache_read", 0) or 0
+                                break
+
+                        await sync_to_async(
+                            AgentLoopStreamAPIView()._update_session_token_usage
+                        )(
+                            session_id, input_tokens, output_tokens,
+                            cache_read_tokens=cache_read_tokens,
+                            user_id=user.id,
+                            project_id=int(project_id) if project_id else None,
+                        )
+                        logger.info(
+                            "AgentLoopResumeAPI: Token usage - input=%d, output=%d, cache_read=%d",
+                            input_tokens, output_tokens, cache_read_tokens,
+                        )
+                except Exception as e:
+                    logger.warning(
+                        f"AgentLoopResumeAPI: Failed to calculate token count: {e}"
+                    )
+
+                if interrupt_detected:
+                    logger.info(
+                        "AgentLoopResumeAPI: New interrupt detected after resume"
+                    )
+                else:
+                    yield create_sse_data(
+                        {
+                            "type": "complete",
+                            "total_steps": step_count,
+                            "decision": decision_type,
+                        }
+                    )
+
+                yield "data: [DONE]\n\n"
+
+        except Exception as e:
+            friendly_error = get_user_friendly_llm_error(e)
+            if friendly_error:
+                logger.warning(
+                    "AgentLoopResumeAPI: Friendly model error. session_id=%s, error_code=%s, message=%s",
+                    session_id,
+                    friendly_error.get("error_code"),
+                    friendly_error.get("message"),
+                )
+                yield create_sse_data(_build_sse_error_event(e))
+            else:
+                logger.exception(
+                    "AgentLoopResumeAPI: Error in resume stream for session %s",
+                    session_id,
+                )
+                yield create_sse_data({"type": "error", "message": str(e)})
+
+    async def post(self, request, *args, **kwargs):
+        """处理 HITL resume 请求 - 返回 SSE 流式响应"""
+        # 1. 认证
+        try:
+            user = await self.authenticate_request(request)
+            request.user = user
+        except AuthenticationFailed as e:
+            return StreamingHttpResponse(
+                iter(
+                    [create_sse_data({"type": "error", "message": str(e), "code": 401})]
+                ),
+                content_type="text/event-stream; charset=utf-8",
+                status=401,
+            )
+
+        # 2. 解析请求
+        try:
+            body_data = json.loads(request.body.decode("utf-8"))
+        except json.JSONDecodeError as e:
+            return StreamingHttpResponse(
+                iter(
+                    [
+                        create_sse_data(
+                            {
+                                "type": "error",
+                                "message": f"Invalid JSON: {e}",
+                                "code": 400,
+                            }
+                        )
+                    ]
+                ),
+                content_type="text/event-stream; charset=utf-8",
+                status=400,
+            )
+
+        session_id = body_data.get("session_id")
+        project_id = body_data.get("project_id")
+        resume_data = body_data.get("resume", {})
+        # 知识库参数（用于 resume 时重新加载知识库工具）
+        knowledge_base_id = body_data.get("knowledge_base_id")
+        use_knowledge_base = body_data.get("use_knowledge_base", False)
+
+        if not session_id:
+            return StreamingHttpResponse(
+                iter(
+                    [
+                        create_sse_data(
+                            {
+                                "type": "error",
+                                "message": "session_id is required",
+                                "code": 400,
+                            }
+                        )
+                    ]
+                ),
+                content_type="text/event-stream; charset=utf-8",
+                status=400,
+            )
+
+        if not resume_data:
+            return StreamingHttpResponse(
+                iter(
+                    [
+                        create_sse_data(
+                            {
+                                "type": "error",
+                                "message": "resume data is required",
+                                "code": 400,
+                            }
+                        )
+                    ]
+                ),
+                content_type="text/event-stream; charset=utf-8",
+                status=400,
+            )
+
+        logger.info(
+            f"AgentLoopResumeAPI: Resume request for session {session_id}, knowledge_base_id={knowledge_base_id}"
+        )
+
+        # 3. 返回 SSE 流式响应
+        async def async_generator():
+            async for chunk in self._create_resume_stream_generator(
+                user,
+                session_id,
+                project_id,
+                resume_data,
+                knowledge_base_id,
+                use_knowledge_base,
+            ):
+                yield chunk
+
+        response = StreamingHttpResponse(
+            async_generator(), content_type="text/event-stream; charset=utf-8"
+        )
+        response["Cache-Control"] = "no-cache"
+        response["X-Accel-Buffering"] = "no"
+        return response

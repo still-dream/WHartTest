@@ -5,8 +5,8 @@ export interface ApiResponse<T = any> {
   status: 'success' | 'error';
   code: number;
   message: string;
-  data: T | null;  // 成功时为数据，错误时为 null
-  errors?: Record<string, any> | null;  // 错误详情（仅 error 状态时使用）
+  data: T | null;
+  errors?: Record<string, any> | null;
 }
 
 // 分页响应类型
@@ -66,6 +66,12 @@ export interface CreateDocumentRequest {
   content?: string;
 }
 
+export interface DocxEditorSession {
+  iframe_url: string;
+  expires_at?: string;
+  document_id: string;
+  title: string;
+}
 // 文档模块接口
 export interface DocumentModule {
   id: string;
@@ -152,6 +158,13 @@ export interface DocumentInfo {
   content_length: number;
   word_count: number;
   page_count: number;
+}
+
+export interface DocxEditorLaunchResult {
+  bindingId?: string;
+  documentId?: string;
+  launch_url: string;
+  expires_at?: string;
 }
 
 // 上下文检测响应
@@ -370,7 +383,8 @@ export const IssueTypeDisplay: Record<IssueType, string> = {
   clarity: '清晰度',
   completeness: '完整性',
   consistency: '一致性',
-  feasibility: '可行性'
+  feasibility: '可行性',
+  logic: '逻辑性'
 };
 
 export const IssuePriorityDisplay: Record<IssuePriority, string> = {

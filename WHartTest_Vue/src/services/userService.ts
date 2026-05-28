@@ -1,14 +1,8 @@
-// src/services/userService.ts
-// src/services/userService.ts
+// 用户管理服务
+// 用户管理服务
 import axios from 'axios';
 import { request } from '@/utils/request';
 import { useAuthStore } from '@/store/authStore';
-
-// 删除用户时后端可能返回的数据结构
-export interface DeleteUserData {
-  message?: string;
-  code?: number;
-}
 
 // 用户数据接口
 export interface User {
@@ -246,7 +240,7 @@ export const deleteUser = async (userId: number): Promise<OperationResponse> => 
   }
 
   try {
-    const response = await request<DeleteUserData>({
+    const response = await request<{ message?: string; code?: number }>({
       url: `/accounts/users/${userId}/`,
       method: 'DELETE'
     });
@@ -260,7 +254,7 @@ export const deleteUser = async (userId: number): Promise<OperationResponse> => 
     } else {
       return {
         success: false,
-        error: response.data?.message || '删除用户失败：响应数据格式不正确',
+        error: response.data?.message || response.error || '删除用户失败：响应数据格式不正确',
         statusCode: response.data?.code,
       };
     }
@@ -370,38 +364,6 @@ export const updateUser = async (userId: number, userData: UpdateUserRequest): P
       success: false,
       error: errorMessage,
     };
-  }
-};
-
-/**
- * 检查用户名是否存在
- * @param username 用户名
- * @returns 返回一个Promise，解析为是否存在的布尔值
- */
-export const checkUsernameExists = async (username: string): Promise<boolean> => {
-  const authStore = useAuthStore();
-  const accessToken = authStore.getAccessToken;
-
-  if (!accessToken) {
-    return false;
-  }
-
-  try {
-    const response = await request<{ count: number }>({
-      url: '/accounts/users/',
-      method: 'GET',
-      params: {
-        username_exact: username,
-      }
-    });
-
-    if (response.success && response.data) {
-      return response.data.count > 0;
-    }
-    return false;
-  } catch (error) {
-    console.error('检查用户名是否存在失败:', error);
-    return false;
   }
 };
 

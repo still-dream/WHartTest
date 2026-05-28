@@ -74,7 +74,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, reactive, computed, onMounted, watch } from 'vue';
+import { ref, computed, onMounted, watch } from 'vue';
 import { Message, Modal } from '@arco-design/web-vue';
 import { IconSave } from '@arco-design/web-vue/es/icon';
 import {
@@ -84,7 +84,6 @@ import {
   updateUserPermissions,
   updateGroupPermissions,
   type Permission,
-  type PaginationParams
 } from '@/services/permissionService';
 
 // 权限树节点接口
@@ -264,24 +263,6 @@ const buildPermissionTree = (permissions: Permission[], userPerms: Permission[])
   });
 };
 
-// 获取应用子名称（在系统管理下的子分类）
-const getAppSubName = (appLabel: string): string => {
-  const subNames: Record<string, string> = {
-    'admin': '日志管理',
-    'auth': '认证授权',
-    'contenttypes': '内容类型',
-    'sessions': '会话管理',
-    'api_keys': 'API密钥',
-    'llm_config': 'LLM配置',
-    'llms': 'LLM服务',
-    'mcp_tools': 'MCP工具',
-  };
-
-  return subNames[appLabel] || appLabel;
-};
-
-// 注意：现在直接使用后端提供的中文名称，不需要前端映射
-
 // 获取所有权限
 const fetchAllPermissions = async () => {
   loading.value = true;
@@ -350,7 +331,7 @@ const onPermissionCheck = (checkedKeysValue: (string | number)[], info: any) => 
 };
 
 // 节点展开处理
-const onNodeExpand = (expandedKeysValue: (string | number)[], info: any) => {
+const onNodeExpand = (expandedKeysValue: (string | number)[]) => {
   expandedKeys.value = expandedKeysValue;
 };
 
@@ -501,13 +482,16 @@ defineExpose({
   align-items: center;
   margin-bottom: 16px;
   padding: 16px;
-  background: #f7f8fa;
+  background: var(--theme-surface);
+  border: 1px solid var(--theme-border);
+  box-shadow: 0 8px 20px rgba(15, 23, 42, 0.06);
   border-radius: 6px;
 }
 
 .tree-container {
   flex: 1;
-  border: 1px solid #e5e6eb;
+  background: var(--theme-shell-soft, var(--theme-surface-soft));
+  border: 1px solid var(--theme-border);
   border-radius: 6px;
   padding: 16px;
   min-height: 0;
@@ -522,10 +506,11 @@ defineExpose({
 
 .permission-name {
   flex: 1;
+  color: var(--theme-text);
 }
 
 .permission-count {
-  color: #86909c;
+  color: var(--theme-text-tertiary);
   font-size: 12px;
 }
 
@@ -535,5 +520,43 @@ defineExpose({
 
 :deep(.arco-tree-node-title) {
   flex: 1;
+  color: var(--theme-text);
+  border-radius: 6px;
+  transition: background-color 0.2s ease, color 0.2s ease;
+}
+
+:deep(.arco-tree-node-title:hover) {
+  background: rgba(var(--theme-accent-rgb), 0.08);
+}
+
+:deep(.arco-tree-node-selected .arco-tree-node-title) {
+  background: rgba(var(--theme-accent-rgb), 0.12);
+}
+
+:deep(.arco-empty-description) {
+  color: var(--theme-empty-text);
+}
+
+:deep(.arco-empty-icon) {
+  color: var(--theme-empty-icon);
+}
+
+:deep(.arco-tree-node-switcher) {
+  color: var(--theme-text-tertiary);
+}
+
+:deep(.arco-tree-node-indent-line) {
+  border-color: var(--theme-border);
+}
+
+:deep(.arco-btn-secondary) {
+  background: var(--theme-surface);
+  border-color: var(--theme-border);
+  color: var(--theme-text-secondary);
+}
+
+:deep(.arco-btn-secondary:hover) {
+  color: var(--theme-accent);
+  border-color: var(--theme-accent);
 }
 </style>

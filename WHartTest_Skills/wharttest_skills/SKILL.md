@@ -1,6 +1,6 @@
 ---
 name: whart-test
-description: WHartTest测试管理平台工具集。用于管理项目、模块、测试用例的增删改查，以及截图上传和drawio图表操作。当用户需要操作测试用例、查询项目信息、上传截图或创建编辑图表时使用。
+description: WHartTest测试管理平台工具集。用于管理项目、模块、测试用例的增删改查，以及测试截图上传。当用户需要操作测试用例、查询项目信息或上传截图时使用。
 ---
 
 # WHartTest 测试管理平台
@@ -33,8 +33,8 @@ python whart_tools.py --action <action_name> [--参数名 参数值]
 | `get_current_user` | 获取当前登录用户信息 | 无 |
 | `get_testcases` | 获取模块下的用例列表 | `--project_id`, `--module_id` |
 | `get_testcase_detail` | 获取用例详情 | `--project_id`, `--case_id` |
-| `add_testcase` | 新增测试用例 | `--project_id`, `--module_id`, `--name`, `--level`, `--precondition`, `--steps`, `--notes`, `--review_status` |
-| `edit_testcase` | 编辑测试用例 | `--project_id`, `--case_id`, `--name`, `--level`, `--module_id`, `--precondition`, `--steps`, `--notes`, `--review_status`, `--is_optimization` |
+| `add_testcase` | 新增测试用例 | `--project_id`, `--module_id`, `--name`, `--level`, `--precondition`, `--steps`, `--notes`, `--review_status`, `--test_type` |
+| `edit_testcase` | 编辑测试用例 | `--project_id`, `--case_id`, `--name`, `--level`, `--module_id`, `--precondition`, `--steps`, `--notes`, `--review_status`, `--test_type`, `--is_optimization` |
 
 ### 截图管理
 
@@ -48,13 +48,6 @@ python whart_tools.py --action <action_name> [--参数名 参数值]
 **单张上传**：`--file_path "case_11_step1.png"`
 **批量上传**：`--file_paths "step1.png,step2.png,step3.png"`（最多10张，逗号分隔）
 
-### 图表操作
-
-| Action | 描述 | 参数 |
-|--------|------|------|
-| `create_diagram` | 创建drawio图表 | `--xml`, `--page_name` |
-| `edit_diagram` | 编辑drawio图表 | `--operations` (JSON格式) |
-
 ### 审核状态
 
 `--review_status` 可选值：
@@ -63,6 +56,17 @@ python whart_tools.py --action <action_name> [--参数名 参数值]
 - `needs_optimization` - 优化
 - `optimization_pending_review` - 优化待审核
 - `unavailable` - 不可用
+
+### 测试类型
+
+`--test_type` 可选值：
+- `smoke` - 冒烟测试
+- `functional` - 功能测试（默认）
+- `boundary` - 边界测试
+- `exception` - 异常测试
+- `permission` - 权限测试
+- `security` - 安全测试
+- `compatibility` - 兼容性测试
 
 `--is_optimization` 标志（布尔型，无需传值）：在 edit_testcase 时带上此标志，会自动将状态设为 `optimization_pending_review`（优化待审核），用于AI优化后的用例提交。**一次调用即可完成编辑+状态更新。**
 - ✅ 正确用法：`python whart_tools.py --action edit_testcase --project_id 1 --case_id 51 ... --is_optimization`

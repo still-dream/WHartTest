@@ -35,7 +35,7 @@ function getApiBaseUrl() {
 // 创建axios实例
 const service = axios.create({
   baseURL: getApiBaseUrl(),
-  timeout: 60000, // 请求超时时间
+  timeout: 600000, // 请求超时时间
   headers: {
     'Content-Type': 'application/json',
   },
@@ -331,6 +331,7 @@ service.interceptors.response.use(
       success: false,
       status,
       error: message,
+      errors: response?.data?.errors, // 保留原始的字段验证错误
     });
   }
 );

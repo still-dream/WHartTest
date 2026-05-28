@@ -114,6 +114,49 @@ import {
 import type { ChatRequest } from '@/features/langgraph/types/chat';
 import { updateTestCaseReviewStatus } from '@/services/testcaseService';
 
+// 测试类型提示词映射
+const TEST_TYPE_PROMPTS: Record<string, string> = {
+  smoke: `【测试类型：冒烟测试】
+- 目标：生成最小化用例，仅验证核心主流程可用性
+- 要求：每个功能点最多1-2条用例，覆盖最基本的正向场景
+- 原则：快速验证系统基本功能是否正常，不深入边界和异常场景`,
+  functional: `【测试类型：功能测试】
+- 目标：使用等价类划分技术，全面验证功能正确性
+- 要求：覆盖有效等价类和无效等价类，每类至少1条用例
+- 原则：确保正向场景完整，主要功能路径全覆盖`,
+  boundary: `【测试类型：边界测试】
+- 目标：使用边界值分析技术，测试临界条件
+- 要求：测试边界值、边界值±1、典型值，每个边界至少3条用例
+- 原则：重点关注数值范围、长度限制、日期边界等`,
+  exception: `【测试类型：异常测试】
+- 目标：使用错误推测法，验证系统容错能力
+- 要求：覆盖异常输入、网络异常、数据异常、并发冲突等场景
+- 原则：验证错误提示友好性和系统稳定性`,
+  permission: `【测试类型：权限测试】
+- 目标：验证角色权限控制的正确性
+- 要求：识别角色矩阵，验证有权限/无权限/越权场景
+- 原则：确保数据隔离和操作权限符合设计`,
+  security: `【测试类型：安全测试】
+- 目标：关注OWASP Top 10安全风险
+- 要求：验证XSS/SQL注入防护、敏感数据保护、认证授权安全
+- 原则：确保系统安全性符合行业标准`,
+  compatibility: `【测试类型：兼容性测试】
+- 目标：验证多设备、多浏览器、多环境的兼容性
+- 要求：从需求中提取目标设备/浏览器列表，为每个环境生成独立用例
+- 原则：确保用户在不同环境下的体验一致性`
+};
+
+// 根据测试类型列表生成提示词片段
+const getTestTypePrompt = (testTypes: string[]): string => {
+  if (!testTypes || testTypes.length === 0) {
+    return TEST_TYPE_PROMPTS['functional'];
+  }
+  const prompts = testTypes
+    .filter(type => type in TEST_TYPE_PROMPTS)
+    .map(type => TEST_TYPE_PROMPTS[type]);
+  return prompts.length > 0 ? prompts.join('\n\n') : TEST_TYPE_PROMPTS['functional'];
+};
+
 const router = useRouter();
 const projectStore = useProjectStore();
 const currentProjectId = computed(() => projectStore.currentProjectId || null);
@@ -265,7 +308,7 @@ const handleModuleUpdated = () => {
   // 同时刷新模块数据给表单用
   fetchAllModulesForForm();
   // 如果用例列表依赖模块信息（比如显示模块名），也可能需要刷新用例列表
-  // testCaseListRef.value?.refreshTestCases();
+  // 如需强制刷新用例列表，可在此调用列表刷新方法。
 };
 
 const showAddTestCaseForm = () => {
@@ -372,14 +415,15 @@ const showGenerateCasesModal = () => {
 const handleGenerateCasesSubmit = async (formData: {
   generateMode: 'full' | 'title_only' | 'kb_complete' | 'kb_generate',
   requirementDocumentId: string,
-  requirementModuleId: string,
+  requirementModuleIds: string[],
   promptId: number,
   useKnowledgeBase: boolean,
   knowledgeBaseId?: string | null,
   testCaseModuleId: number,
-  selectedModule: { title: string, content: string },
+  selectedModules: { title: string, content: string }[],
   selectedTestCaseIds: number[],
   selectedTestCases: TestCase[],
+  testTypes: string[],
 }) => {
   if (!currentProjectId.value) {
     Message.error('没有有效的项目ID');
@@ -393,20 +437,25 @@ const handleGenerateCasesSubmit = async (formData: {
   let notificationContent = '';
   let notificationIdPrefix = '';
 
+  // 获取测试类型提示词
+  const testTypePrompt = getTestTypePrompt(formData.testTypes);
+
   switch (formData.generateMode) {
     case 'full':
-      // 完整生成模式（原有逻辑）
+      // 完整生成模式
       message = `
 请根据以下需求模块信息，为我生成测试用例。
 
----
-[需求模块标题]
-${formData.selectedModule.title}
+${testTypePrompt}
+
+${formData.selectedModules.map((mod, idx) => `---
+[需求模块${formData.selectedModules.length > 1 ? ` ${idx + 1}` : ''}标题]
+${mod.title}
 
 ---
-[需求模块内容]
-${formData.selectedModule.content}
----
+[需求模块${formData.selectedModules.length > 1 ? ` ${idx + 1}` : ''}内容]
+${mod.content}
+---`).join('\n\n')}
 
 请注意：生成的测试用例最终需要被保存在 **项目ID "${currentProjectId.value}"** 下的 **测试用例模块ID "${formData.testCaseModuleId}"** 中。
 (此需求模块来源于需求文档ID: ${formData.requirementDocumentId})
@@ -421,14 +470,16 @@ ${formData.selectedModule.content}
       message = `
 请根据以下需求模块信息，只保存测试用例的标题，禁止生成测试步骤。
 
----
-[需求模块标题]
-${formData.selectedModule.title}
+${testTypePrompt}
+
+${formData.selectedModules.map((mod, idx) => `---
+[需求模块${formData.selectedModules.length > 1 ? ` ${idx + 1}` : ''}标题]
+${mod.title}
 
 ---
-[需求模块内容]
-${formData.selectedModule.content}
----
+[需求模块${formData.selectedModules.length > 1 ? ` ${idx + 1}` : ''}内容]
+${mod.content}
+---`).join('\n\n')}
 
 请注意：
 - 只需要生成用例标题，不需要生成详细的测试步骤和预期结果
@@ -466,6 +517,8 @@ ${formData.selectedTestCases.map(tc => `- 用例ID: ${tc.id}, 名称: ${tc.name}
       message = `
 请根据知识库和需求文档的知识，为以下用例生成测试步骤并保存对应用例中。
 
+${testTypePrompt}
+
 【重要约束】
 - 必须基于知识库和需求文档中的实际内容
 - 严禁猜测或假设任何功能行为
@@ -476,8 +529,7 @@ ${formData.selectedTestCases.map(tc => `- 用例ID: ${tc.id}, 名称: ${tc.name}
 ${formData.selectedTestCases.map(tc => `- 用例ID: ${tc.id}, 名称: ${tc.name}, 优先级: ${tc.level}, 模块ID: ${tc.module_id ?? '未分配'}, 模块: ${tc.module_detail || '未分配'}`).join('\n')}
 
 [需求模块参考]
-标题: ${formData.selectedModule?.title || '无'}
-内容: ${formData.selectedModule?.content || '无'}
+${formData.selectedModules.length > 0 ? formData.selectedModules.map((mod, idx) => `模块${formData.selectedModules.length > 1 ? ` ${idx + 1}` : ''} 标题: ${mod.title}\n模块${formData.selectedModules.length > 1 ? ` ${idx + 1}` : ''} 内容: ${mod.content}`).join('\n\n') : '无'}
 
 项目ID: ${currentProjectId.value}
       `.trim();
@@ -540,7 +592,7 @@ const handleExecuteConfirm = (options: { generatePlaywrightScript: boolean }) =>
 2. 调用工具执行测试用例，并验证相应的断言。
 3. 每一步执行后截图，可以单张上传，也可以批量上传。
 4. 必须上传截图以供查看。
-5. 执行结束后告知用户本次测试是否通过，并总结关键截图链接。
+5. 执行结束后告知用户本次测试是否通过，并总结。
 
 附加信息：
 - 测试用例名称：${testCase.name}
@@ -559,7 +611,7 @@ const handleExecuteConfirm = (options: { generatePlaywrightScript: boolean }) =>
   };
 
   const notificationContent = options.generatePlaywrightScript
-    ? '测试用例执行任务已在后台开始处理，完成后将自动生成 Playwright 脚本。'
+    ? '测试用例执行任务已在后台开始处理，完成后将自动生成 UI 自动化用例。'
     : '测试用例执行任务已在后台开始处理。';
 
   startAutomationTask(
@@ -809,10 +861,9 @@ onBeforeUnmount(() => {
 .right-content-area > * {
   flex: 1;
   height: 100%;
-  overflow: auto; /* 允许子组件自行滚动，修复表单无法滚动的问题 */
   /* 移除子组件自身的阴影、边框和内边距，因为它们现在在右侧内容区域内 */
   box-shadow: none !important;
   border-radius: 0 !important;
-  padding: 0 !important;
+  /* 不要用 !important 覆盖 overflow 和 padding，让子组件自行控制滚动 */
 }
 </style>

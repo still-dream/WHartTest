@@ -265,7 +265,7 @@ const userData = ref<User[]>([]);
 // 用户权限管理相关
 const permissionsModalVisible = ref(false);
 const selectedUserId = ref<number>(0);
-const permissionTreeSelectorRef = ref<{ loadPermissions: () => Promise<void> } | null>(null);
+const permissionTreeSelectorRef = ref<{ loadPermissions: (userId?: number) => Promise<void> } | null>(null);
 
 // 查看用户权限
 const viewUserPermissions = async (user: User) => {
@@ -555,7 +555,7 @@ const editUserRules = {
 };
 
 // 显示编辑用户模态框
-// Tab change handler for edit user modal
+// 编辑用户弹窗中的标签切换处理
 const onEditUserTabChange = async (key: string) => {
   if (key === 'permissions' && editUserForm.id) {
     await nextTick()

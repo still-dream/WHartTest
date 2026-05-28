@@ -23,8 +23,19 @@
           </a-form-item>
         </a-col>
 
-        <!-- 第二行：模型名称 (全宽 + 刷新按钮内联) -->
-        <a-col :span="24">
+        <!-- 第二行：供应商 + 模型名称 -->
+        <a-col :span="8">
+          <a-form-item field="provider" label="供应商" required>
+            <a-select
+              v-model="formData.provider"
+              :options="providerOptions"
+              placeholder="请选择供应商"
+              allow-clear
+              @change="handleProviderChange"
+            />
+          </a-form-item>
+        </a-col>
+        <a-col :span="16">
           <a-form-item field="name" label="模型名称" required>
             <div class="model-input-wrapper">
               <a-auto-complete
@@ -53,7 +64,7 @@
         <!-- 第三行：API URL + API Key -->
         <a-col :span="12">
           <a-form-item field="api_url" label="API URL" required>
-            <a-input v-model="formData.api_url" placeholder="https://api.openai.com/v1" />
+            <a-input v-model="formData.api_url" :placeholder="apiUrlPlaceholder" />
           </a-form-item>
         </a-col>
         <a-col :span="12">
@@ -67,7 +78,7 @@
 
         <!-- 提示信息 + 测试按钮 -->
         <a-col :span="24" class="test-button-row">
-          <span class="api-hint">仅支持 OpenAI 兼容格式的 API</span>
+          <span class="api-hint">{{ apiHintText }}</span>
           <a-button 
             type="outline"
             status="success"
@@ -86,15 +97,15 @@
             <a-textarea
               v-model="formData.system_prompt"
               placeholder="设置模型的默认 System Prompt（可选）"
-              :auto-size="{ minRows: 3, maxRows: 6 }"
+              :auto-size="{ minRows: 1, maxRows: 6 }"
               :max-length="2000"
               show-word-limit
             />
           </a-form-item>
         </a-col>
 
-        <!-- 第五行：开关区域 + 上下文限制 -->
-        <a-col :span="8">
+        <!-- 第五行：上下文限制 + 基础开关 -->
+        <a-col :span="6">
           <a-form-item field="context_limit" label="上下文限制">
             <a-input-number
               v-model="formData.context_limit"
@@ -105,19 +116,45 @@
             />
           </a-form-item>
         </a-col>
-        <a-col :span="8">
-          <a-form-item field="supports_vision" label="图片">
+        <a-col :span="6">
+          <a-form-item field="supports_vision" label="多模态">
             <a-space>
               <a-switch v-model="formData.supports_vision" />
               <span class="switch-desc">Vision</span>
             </a-space>
           </a-form-item>
         </a-col>
-        <a-col :span="8">
-          <a-form-item field="is_active" label="配置状态">
+        <a-col :span="6">
+          <a-form-item field="enable_streaming" label="流式输出">
+            <a-space>
+              <a-switch v-model="formData.enable_streaming" checked-color="#722ed1" />
+              <span class="switch-desc">Stream</span>
+            </a-space>
+          </a-form-item>
+        </a-col>
+        <a-col :span="6">
+          <a-form-item field="is_active" label="状态">
             <a-space>
               <a-switch v-model="formData.is_active" checked-color="#00b42a" />
-              <span class="switch-desc">已激活</span>
+              <span class="switch-desc">激活</span>
+            </a-space>
+          </a-form-item>
+        </a-col>
+
+        <!-- 第六行：中间件配置 -->
+        <a-col :span="8">
+          <a-form-item field="enable_summarization" label="上下文摘要">
+            <a-space>
+              <a-switch v-model="formData.enable_summarization" checked-color="#165dff" />
+              <span class="switch-desc">超限时自动压缩对话历史</span>
+            </a-space>
+          </a-form-item>
+        </a-col>
+        <a-col :span="8">
+          <a-form-item field="enable_hitl" label="人工审批">
+            <a-space>
+              <a-switch v-model="formData.enable_hitl" checked-color="#f77234" />
+              <span class="switch-desc">高风险操作需确认</span>
             </a-space>
           </a-form-item>
         </a-col>
@@ -138,6 +175,7 @@ import {
   Textarea as ATextarea,
   Switch as ASwitch,
   AutoComplete as AAutoComplete,
+  Select as ASelect,
   Button as AButton,
   Row as ARow,
   Col as ACol,
@@ -148,7 +186,7 @@ import {
   type FieldRule,
 } from '@arco-design/web-vue';
 import { IconRefresh, IconThunderbolt } from '@arco-design/web-vue/es/icon';
-import { createLlmConfig, partialUpdateLlmConfig, testLlmConnection, fetchModels } from '@/features/langgraph/services/llmConfigService';
+import { createLlmConfig, partialUpdateLlmConfig, testLlmConnection, fetchModels, getProviders } from '@/features/langgraph/services/llmConfigService';
 import type { LlmConfig, CreateLlmConfigRequest, PartialUpdateLlmConfigRequest } from '@/features/langgraph/types/llmConfig';
 
 interface Props {
@@ -166,12 +204,18 @@ const props = withDefaults(defineProps<Props>(), {
 const emit = defineEmits<{
   (e: 'submit', data: CreateLlmConfigRequest | PartialUpdateLlmConfigRequest, id?: number): void;
   (e: 'cancel'): void;
+  (e: 'auto-saved', closeModal?: boolean): void;
 }>();
 
 const formRef = ref<FormInstance | null>(null);
 const modelOptions = ref<string[]>([]);
+const providerOptions = ref<Array<{ label: string; value: string }>>([
+  { label: 'OpenAI 兼容', value: 'openai_compatible' },
+  { label: 'Qwen/通义千问', value: 'qwen' },
+]);
 const loadingModels = ref(false);
 const testingModel = ref(false);
+const QWEN_DEFAULT_API_URL = 'https://dashscope.aliyuncs.com/compatible-mode/v1';
 const defaultFormData: CreateLlmConfigRequest = {
   config_name: '',
   provider: 'openai_compatible',
@@ -181,15 +225,25 @@ const defaultFormData: CreateLlmConfigRequest = {
   system_prompt: '',
   supports_vision: false,
   context_limit: 128000,
+  enable_summarization: true,
+  enable_hitl: false,
+  enable_streaming: true,
   is_active: false,
 };
 const formData = ref<CreateLlmConfigRequest>({ ...defaultFormData });
 const currentConfigId = ref<number | null>(null);
+const modalSessionId = ref(0);
+const modelRequestId = ref(0);
+const testRequestId = ref(0);
 
-const isEditing = computed(() => !!props.configData?.id);
+// 编辑模式：考虑 props.configData 或自动保存后的 currentConfigId
+const isEditing = computed(() => !!(props.configData?.id || currentConfigId.value));
+// 获取当前配置ID（优先 props，其次是自动保存后的 currentConfigId）
+const effectiveConfigId = computed(() => props.configData?.id || currentConfigId.value);
 
 const formRules: Record<string, FieldRule[]> = {
   config_name: [{ required: true, message: '配置名称不能为空' }],
+  provider: [{ required: true, message: '供应商不能为空' }],
   name: [{ required: true, message: '模型名称不能为空' }],
   api_url: [
     { required: true, message: 'API URL 不能为空' },
@@ -197,29 +251,89 @@ const formRules: Record<string, FieldRule[]> = {
   ],
 };
 
+const apiUrlPlaceholder = computed(() => (
+  formData.value.provider === 'qwen'
+    ? QWEN_DEFAULT_API_URL
+    : 'https://api.openai.com/v1'
+));
+
+const apiHintText = computed(() => (
+  formData.value.provider === 'qwen'
+    ? 'Qwen 建议使用 DashScope 兼容地址（可自定义）'
+    : 'OpenAI 兼容供应商请填写兼容 API 地址'
+));
+
+const invalidateAsyncState = () => {
+  modalSessionId.value += 1;
+  modelRequestId.value += 1;
+  testRequestId.value += 1;
+  loadingModels.value = false;
+  testingModel.value = false;
+};
+
+const isActiveModelRequest = (sessionId: number, requestId: number) => (
+  props.visible
+  && modalSessionId.value === sessionId
+  && modelRequestId.value === requestId
+);
+
+const isActiveTestRequest = (sessionId: number, requestId: number) => (
+  props.visible
+  && modalSessionId.value === sessionId
+  && testRequestId.value === requestId
+);
+
+const loadProviderOptions = async () => {
+  try {
+    const response = await getProviders();
+    if (response.status === 'success' && response.data?.choices?.length) {
+      providerOptions.value = response.data.choices.map((item) => ({
+        label: item.label,
+        value: item.value,
+      }));
+    }
+  } catch (error) {
+    console.warn('加载供应商列表失败，使用默认选项', error);
+  }
+};
+
+const handleProviderChange = (provider?: string) => {
+  if (provider === 'qwen' && !formData.value.api_url) {
+    formData.value.api_url = QWEN_DEFAULT_API_URL;
+  }
+};
+
 
 watch(
   () => props.visible,
   (newVal) => {
+    invalidateAsyncState();
+    modelOptions.value = [];
+
     if (newVal) {
       currentConfigId.value = null;
+      void loadProviderOptions();
       if (props.configData && props.configData.id) {
         // 编辑模式：填充表单，但不包括 API Key（除非用户想修改）
         formData.value = {
           config_name: props.configData.config_name,
-          provider: props.configData.provider,
+          provider: props.configData.provider || 'openai_compatible',
           name: props.configData.name,
           api_url: props.configData.api_url,
           api_key: '', // 编辑时不显示旧 Key，留空表示不修改
           system_prompt: props.configData.system_prompt || '',
           supports_vision: props.configData.supports_vision || false,
           context_limit: props.configData.context_limit || 128000,
+          enable_summarization: props.configData.enable_summarization ?? true,
+          enable_hitl: props.configData.enable_hitl || false,
+          enable_streaming: props.configData.enable_streaming ?? true,
           is_active: props.configData.is_active,
         };
       } else {
         // 新增模式：重置表单
         formData.value = { ...defaultFormData };
       }
+      handleProviderChange(formData.value.provider);
       // 清除之前的校验状态
       nextTick(() => {
         formRef.value?.clearValidate();
@@ -239,8 +353,8 @@ const handleSubmit = async () => {
 
   let submitData: CreateLlmConfigRequest | PartialUpdateLlmConfigRequest;
 
-  if (isEditing.value && props.configData?.id) {
-    // 编辑模式
+  if (isEditing.value && effectiveConfigId.value) {
+    // 编辑模式（包括自动保存后的情况）
     const partialData: PartialUpdateLlmConfigRequest = {
       config_name: formData.value.config_name,
       provider: formData.value.provider,
@@ -260,8 +374,17 @@ const handleSubmit = async () => {
     if (formData.value.context_limit !== undefined) { // 包含上下文限制
       partialData.context_limit = formData.value.context_limit;
     }
+    if (formData.value.enable_summarization !== undefined) { // 包含上下文摘要
+      partialData.enable_summarization = formData.value.enable_summarization;
+    }
+    if (formData.value.enable_hitl !== undefined) { // 包含人工审批
+      partialData.enable_hitl = formData.value.enable_hitl;
+    }
+    if (formData.value.enable_streaming !== undefined) { // 包含流式输出
+      partialData.enable_streaming = formData.value.enable_streaming;
+    }
     submitData = partialData;
-    emit('submit', submitData, props.configData.id);
+    emit('submit', submitData, effectiveConfigId.value);
   } else {
     // 新增模式
     submitData = { ...formData.value };
@@ -270,6 +393,7 @@ const handleSubmit = async () => {
 };
 
 const handleCancel = () => {
+  invalidateAsyncState();
   emit('cancel');
 };
 
@@ -280,6 +404,8 @@ const fetchAvailableModels = async () => {
     return;
   }
 
+  const sessionId = modalSessionId.value;
+  const requestId = ++modelRequestId.value;
   loadingModels.value = true;
 
   try {
@@ -290,7 +416,11 @@ const fetchAvailableModels = async () => {
       formData.value.api_key || undefined,
       configId
     );
-    
+
+    if (!isActiveModelRequest(sessionId, requestId)) {
+      return;
+    }
+
     if (response.status === 'success' && response.data?.models) {
       modelOptions.value = response.data.models;
       if (response.data.models.length > 0) {
@@ -303,11 +433,16 @@ const fetchAvailableModels = async () => {
       modelOptions.value = [];
     }
   } catch (error: any) {
+    if (!isActiveModelRequest(sessionId, requestId)) {
+      return;
+    }
     console.error('获取模型列表失败:', error);
     Message.error('获取模型列表失败');
     modelOptions.value = [];
   } finally {
-    loadingModels.value = false;
+    if (isActiveModelRequest(sessionId, requestId)) {
+      loadingModels.value = false;
+    }
   }
 };
 
@@ -320,6 +455,8 @@ const testLlmModel = async () => {
     return;
   }
 
+  const sessionId = modalSessionId.value;
+  const requestId = ++testRequestId.value;
   testingModel.value = true;
   try {
     let configId = props.configData?.id || currentConfigId.value;
@@ -327,6 +464,9 @@ const testLlmModel = async () => {
     // 如果是新建且未保存，先保存
     if (!configId) {
       const createResp = await createLlmConfig(formData.value);
+      if (!isActiveTestRequest(sessionId, requestId)) {
+        return;
+      }
       if (createResp.status !== 'success' || !createResp.data) {
         Message.error(createResp.message || '保存配置失败');
         return;
@@ -334,6 +474,7 @@ const testLlmModel = async () => {
       configId = createResp.data.id;
       currentConfigId.value = configId;
       Message.success('配置已自动保存');
+      emit('auto-saved', false); // false 表示不关闭弹窗
     } else if (isEditing.value) {
       // 编辑模式：先保存更改
       const partialData: PartialUpdateLlmConfigRequest = {
@@ -348,6 +489,9 @@ const testLlmModel = async () => {
       if (formData.value.supports_vision !== undefined) partialData.supports_vision = formData.value.supports_vision;
       if (formData.value.context_limit !== undefined) partialData.context_limit = formData.value.context_limit;
       const updateResp = await partialUpdateLlmConfig(configId, partialData);
+      if (!isActiveTestRequest(sessionId, requestId)) {
+        return;
+      }
       if (updateResp.status !== 'success') {
         Message.error(updateResp.message || '保存配置失败');
         return;
@@ -356,16 +500,24 @@ const testLlmModel = async () => {
 
     // 调用后端测试接口
     const testResp = await testLlmConnection(configId);
+    if (!isActiveTestRequest(sessionId, requestId)) {
+      return;
+    }
     if (testResp.status === 'success') {
       Message.success(testResp.data?.message || '连接测试成功');
     } else {
       Message.error(testResp.message || '连接测试失败');
     }
   } catch (error: any) {
+    if (!isActiveTestRequest(sessionId, requestId)) {
+      return;
+    }
     console.error('测试失败:', error);
     Message.error('测试失败: ' + (error.message || '未知错误'));
   } finally {
-    testingModel.value = false;
+    if (isActiveTestRequest(sessionId, requestId)) {
+      testingModel.value = false;
+    }
   }
 };
 

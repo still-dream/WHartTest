@@ -115,7 +115,7 @@ def get_testcase_detail(project_id: int, case_id: int):
 
 def add_testcase(project_id: int, module_id: int, name: str, level: str = "P1",
                  precondition: str = "无", steps: list = None, notes: str = "",
-                 review_status: str = "pending_review"):
+                 review_status: str = "pending_review", test_type: str = "functional"):
     """新增测试用例"""
     url = f"{BASE_URL}/api/projects/{project_id}/testcases/"
     data = {
@@ -125,7 +125,8 @@ def add_testcase(project_id: int, module_id: int, name: str, level: str = "P1",
         "module_id": module_id,
         "steps": steps or [],
         "notes": notes,
-        "review_status": review_status
+        "review_status": review_status,
+        "test_type": test_type
     }
     try:
         resp = requests.post(url, headers=HEADERS, json=data)
@@ -140,7 +141,7 @@ def add_testcase(project_id: int, module_id: int, name: str, level: str = "P1",
 
 def edit_testcase(project_id: int, case_id: int, name: str = None, level: str = None,
                   module_id: int = None, precondition: str = None, steps: list = None, notes: str = None,
-                  review_status: str = None, is_optimization: bool = False):
+                  review_status: str = None, test_type: str = None, is_optimization: bool = False):
     """编辑测试用例"""
     url = f"{BASE_URL}/api/projects/{project_id}/testcases/{case_id}/"
     data = {}
@@ -150,6 +151,7 @@ def edit_testcase(project_id: int, case_id: int, name: str = None, level: str = 
     if precondition is not None: data["precondition"] = precondition
     if steps is not None: data["steps"] = steps
     if notes is not None: data["notes"] = notes
+    if test_type is not None: data["test_type"] = test_type
 
     # 处理优化工作流
     if is_optimization:
@@ -308,7 +310,7 @@ ACTIONS = {
         add_testcase(
             args.project_id, args.module_id, args.name, args.level,
             args.precondition or "", _parse_steps(args.steps), args.notes or "",
-            args.review_status or "pending_review"
+            args.review_status or "pending_review", args.test_type or "functional"
         )
     ),
     "edit_testcase": lambda args: (
@@ -316,7 +318,7 @@ ACTIONS = {
         edit_testcase(
             args.project_id, args.case_id, args.name, args.level, args.module_id,
             args.precondition, _parse_steps(args.steps) if args.steps else None, args.notes,
-            args.review_status, args.is_optimization
+            args.review_status, args.test_type, args.is_optimization
         )
     ),
     "upload_screenshot": lambda args: upload_screenshot(
@@ -348,6 +350,7 @@ def main():
     parser.add_argument("--step_number", type=int, help="步骤编号")
     parser.add_argument("--page_url", help="页面URL")
     parser.add_argument("--review_status", help="审核状态 (pending_review/approved/needs_optimization/optimization_pending_review/unavailable)")
+    parser.add_argument("--test_type", help="测试类型 (smoke/functional/boundary/exception/permission/security/compatibility)", default="functional")
     parser.add_argument("--is_optimization", action="store_true", help="是否为优化操作（自动设置状态为optimization_pending_review）")
 
     args = parser.parse_args()

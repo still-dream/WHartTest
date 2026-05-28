@@ -68,15 +68,12 @@
 <script setup lang="ts">
 import { ref, reactive, onMounted, computed, watch, toRefs } from 'vue';
 import { Message, Modal } from '@arco-design/web-vue';
-import type { TreeNodeData, FormInstance } from '@arco-design/web-vue';
+import type { TreeNodeData } from '@arco-design/web-vue';
 import {
   getTestCaseModules,
-  createTestCaseModule,
-  updateTestCaseModule,
   deleteTestCaseModule,
   type TestCaseModule,
   type CreateTestCaseModuleRequest,
-  type UpdateTestCaseModuleRequest,
 } from '@/services/testcaseModuleService';
 import ModuleEditModal from './ModuleEditModal.vue'; // 引入模块编辑模态框
 
@@ -208,7 +205,7 @@ const onModuleSearch = () => {
 
 // 模块树节点选择
 const onModuleSelect = (
-  newSelectedKeys: (string | number)[],
+  _newSelectedKeys: (string | number)[],
   data: { selected?: boolean; selectedNodes: TreeNodeData[]; node?: TreeNodeData; e?: Event }
 ) => {
   if (data.selected && data.node) {
@@ -221,7 +218,7 @@ const onModuleSelect = (
 };
 
 // 树节点展开/收起处理
-const onTreeExpand = (newExpandedKeys: (string | number)[], info: any) => {
+const onTreeExpand = (newExpandedKeys: (string | number)[]) => {
   expandedKeys.value = newExpandedKeys;
 };
 
@@ -444,7 +441,7 @@ defineExpose({
   justify-content: center; /* 居中对齐 */
   margin-top: 8px;
   margin-bottom: 16px;
-  /* flex-shrink is now on the parent .module-panel-header */
+  /* flex-shrink 已移动到父级 .module-panel-header */
 }
 
 /* 下拉菜单相关样式 */

@@ -26,10 +26,9 @@
         <a-form-item>
           <a-checkbox v-model="formData.generatePlaywrightScript">
             <span class="checkbox-label">
-              <icon-code class="checkbox-icon" />
               <span class="checkbox-text">
-                <span class="checkbox-title">是否自动生成 Playwright 脚本</span>
-                <span class="checkbox-desc">注意！！！断言失败或对话异常时，不生成脚本</span>
+                <span class="checkbox-title">生成 UI 自动化用例</span>
+                <span class="checkbox-desc">注意！！！断言失败或对话异常时，会生成失败。</span>
               </span>
             </span>
           </a-checkbox>
@@ -41,7 +40,6 @@
 
 <script setup lang="ts">
 import { ref, watch, computed } from 'vue';
-import { IconCode } from '@arco-design/web-vue/es/icon';
 import type { TestCase } from '@/services/testcaseService';
 
 interface Props {
@@ -113,10 +111,6 @@ const handleCancel = () => {
     font-weight: 500;
   }
 
-  .checkbox-icon {
-    color: var(--color-primary-6);
-    margin-top: 2px;
-  }
 
   .checkbox-text {
     display: flex;

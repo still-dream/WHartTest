@@ -1,7 +1,7 @@
 {
   "name": "wharttest_vue",
   "private": false,
-  "version": "0.0.0",
+  "version": "2.3.0",
   "type": "module",
   "license": "MIT",
   "author": "WHartTest Team",
@@ -23,7 +23,7 @@
   "homepage": "http://code.mgdaas-int.com/MGdaas-Lab/wharttest-vue#readme",
   "scripts": {
     "dev": "vite",
-    "build": "vite build",
+    "build": "vue-tsc -b && vite build",
     "preview": "vite preview"
   },
   "dependencies": {
@@ -37,6 +37,7 @@
     "marked": "^15.0.12",
     "monaco-editor": "^0.55.1",
     "pinia": "^3.0.2",
+    "qrcode": "^1.5.4",
     "vue": "^3.5.13",
     "vue-router": "^4.5.1",
     "vuedraggable": "^4.1.0",
@@ -47,10 +48,11 @@
     "@types/node": "^22.15.17",
     "@vitejs/plugin-vue": "^5.2.3",
     "@vue/tsconfig": "^0.7.0",
-    "autoprefixer": "^10.4.24",
+    "autoprefixer": "^10.4.21",
     "less": "^4.4.2",
-    "postcss": "^8.5.6",
-    "tailwindcss": "^4.1.18",
+    "postcss": "^8.5.3",
+    "sass-embedded": "^1.97.2",
+    "tailwindcss": "^4.1.6",
     "typescript": "~5.8.3",
     "vite": "^6.3.5",
     "vue-tsc": "^2.2.8"

@@ -1,9 +1,17 @@
 """
 模型上下文限制配置和检测
+
+支持两种数据源：
+1. LangChain Model Profiles (v1.1+) - 优先使用，数据来自 models.dev
+2. 手动配置 MODEL_CONTEXT_LIMITS - 后备方案，用于代理服务/自定义模型
 """
 
 import tiktoken
 import logging
+from typing import Optional, TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from langchain_core.language_models import BaseChatModel
 
 logger = logging.getLogger(__name__)
 
@@ -35,11 +43,18 @@ MODEL_CONTEXT_LIMITS = {
     'chatglm': 8192,
     
     # 默认值
-    'default': 4096
+    'default': 128000
 }
 
-# 预留token数（用于系统提示词、响应等）
-RESERVED_TOKENS = 1000
+# 预留token数（用于系统提示词模板指令、消息结构开销、模型输出空间等）
+# 按上下文窗口的 5% 预留，最少 4000 tokens
+RESERVED_RATIO = 0.05
+MIN_RESERVED_TOKENS = 4000
+
+
+def get_reserved_tokens(context_limit: int) -> int:
+    """根据模型上下文窗口动态计算预留 token 数"""
+    return max(MIN_RESERVED_TOKENS, int(context_limit * RESERVED_RATIO))
 
 class ContextLimitChecker:
     """上下文限制检测器"""
@@ -93,14 +108,15 @@ class ContextLimitChecker:
         """检查文本是否超过模型上下文限制"""
         token_count = self.count_tokens(text, model_name)
         context_limit = self.get_context_limit(model_name)
-        available_tokens = context_limit - RESERVED_TOKENS
-        
+        reserved_tokens = get_reserved_tokens(context_limit)
+        available_tokens = context_limit - reserved_tokens
+
         result = {
             'model_name': model_name,
             'token_count': token_count,
             'context_limit': context_limit,
             'available_tokens': available_tokens,
-            'reserved_tokens': RESERVED_TOKENS,
+            'reserved_tokens': reserved_tokens,
             'exceeds_limit': token_count > available_tokens,
             'usage_percentage': (token_count / available_tokens) * 100,
             'remaining_tokens': available_tokens - token_count
@@ -122,7 +138,8 @@ class ContextLimitChecker:
     def calculate_optimal_chunk_size(self, total_text: str, model_name: str = 'gpt-3.5-turbo') -> dict:
         """计算最优的分块大小"""
         total_tokens = self.count_tokens(total_text, model_name)
-        available_tokens = self.get_context_limit(model_name) - RESERVED_TOKENS
+        context_limit = self.get_context_limit(model_name)
+        available_tokens = context_limit - get_reserved_tokens(context_limit)
         
         if total_tokens <= available_tokens:
             return {
@@ -151,6 +168,53 @@ class ContextLimitChecker:
 
 # 全局实例
 context_checker = ContextLimitChecker()
+
+
+def get_context_limit_from_llm(llm: "BaseChatModel", fallback_model_name: Optional[str] = None) -> int:
+    """
+    从 LLM 实例获取上下文限制（Model Profiles 优先）
+
+    LangChain v1.1+ 支持 Model Profiles，提供 max_input_tokens 等元数据。
+    对于代理服务或自定义模型，profile 可能为空，此时使用手动配置后备。
+
+    Args:
+        llm: LangChain Chat Model 实例
+        fallback_model_name: 后备查询的模型名（如果 profile 为空）
+
+    Returns:
+        int: 上下文 Token 限制
+    """
+    profile = getattr(llm, 'profile', None)
+    if profile and isinstance(profile, dict):
+        max_input_tokens = profile.get('max_input_tokens')
+        if max_input_tokens and isinstance(max_input_tokens, int):
+            logger.debug("从 Model Profile 获取上下文限制: %d", max_input_tokens)
+            return max_input_tokens
+
+    # Profile 为空或无效，使用后备配置
+    model_name = fallback_model_name or getattr(llm, 'model_name', None) or getattr(llm, 'model', 'gpt-4o')
+    limit = context_checker.get_context_limit(model_name)
+    logger.debug("Model Profile 不可用，使用后备配置 (%s): %d", model_name, limit)
+    return limit
+
+
+def get_vision_support_from_llm(llm: "BaseChatModel", fallback: bool = False) -> bool:
+    """
+    从 LLM 实例获取是否支持图片输入
+
+    Args:
+        llm: LangChain Chat Model 实例
+        fallback: Profile 不可用时的默认值
+
+    Returns:
+        bool: 是否支持图片输入
+    """
+    profile = getattr(llm, 'profile', None)
+    if profile and isinstance(profile, dict):
+        image_inputs = profile.get('image_inputs')
+        if isinstance(image_inputs, bool):
+            return image_inputs
+    return fallback
 
 def check_document_context_limit(content: str, model_name: str = None) -> dict:
     """检查文档是否超过上下文限制的便捷函数"""

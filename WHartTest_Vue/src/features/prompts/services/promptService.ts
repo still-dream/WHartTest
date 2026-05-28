@@ -9,10 +9,8 @@ import type {
   UserPromptListResponseData,
   BatchOperationResponseData,
   // 新增需求评审相关类型
-  PromptType,
   RequirementPromptsResponse,
   GetRequirementPromptParams,
-  RequirementPromptApiResponse
 } from '../types/prompt';
 
 const API_BASE_URL = '/prompts/user-prompts';
@@ -249,8 +247,7 @@ export async function setDefaultPrompt(id: number): Promise<ApiResponse<UserProm
         errors: null
       };
     } else {
-      // The `request` utility returns a response object even on failure.
-      // We'll extract the specific error message if it exists.
+      // `request` 工具在失败时也会返回响应对象，这里提取更具体的错误信息。
       const specificError =
         (response as any).response?.data?.errors?.message ||
         (response as any).response?.data?.errors?.errors?.prompt_type?.[0] ||
@@ -260,7 +257,7 @@ export async function setDefaultPrompt(id: number): Promise<ApiResponse<UserProm
       throw new Error(specificError);
     }
   } catch (error: any) {
-    // Re-throw the error to be handled by the calling component
+    // 将错误继续抛出，由调用组件统一处理
     throw new Error(error.message || 'An unknown error occurred');
   }
 }
@@ -376,7 +373,7 @@ export async function getRequirementPrompt(
   } else {
     return {
       status: 'error',
-      code: response.status || 404,
+      code: 404,
       message: response.error || '未找到需求评审提示词',
       data: null,
       errors: { prompt: ['请先创建需求评审提示词'] }

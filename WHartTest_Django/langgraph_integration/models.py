@@ -11,6 +11,7 @@ class LLMConfig(models.Model):
     
     PROVIDER_CHOICES = [
         ('openai_compatible', 'OpenAI 兼容'),
+        ('qwen', 'Qwen/通义千问'),
     ]
     
     # 配置标识字段（新增）
@@ -40,7 +41,36 @@ class LLMConfig(models.Model):
     # 上下文限制（用于Token计数和对话压缩）
     context_limit = models.IntegerField(default=128000, verbose_name="上下文限制",
                                        help_text="模型最大上下文Token数（GPT-4o: 128000, Claude: 200000, Gemini: 1000000）")
-    
+
+    # 请求超时和重试配置
+    request_timeout = models.IntegerField(
+        default=120,
+        verbose_name="请求超时(秒)",
+        help_text="单次LLM请求的超时时间，默认120秒。如果模型响应较慢可适当增加"
+    )
+    max_retries = models.IntegerField(
+        default=3,
+        verbose_name="最大重试次数",
+        help_text="请求失败时的自动重试次数，默认3次。设为0禁用重试"
+    )
+
+    # v2.0.0: 中间件配置
+    enable_summarization = models.BooleanField(
+        default=True,
+        verbose_name="启用上下文摘要",
+        help_text="启用后，当对话Token超过阈值时自动压缩上下文（需配合SummarizationMiddleware）"
+    )
+    enable_hitl = models.BooleanField(
+        default=True,
+        verbose_name="启用人工审批",
+        help_text="启用后，执行高风险操作（如自动化脚本）前需用户确认（需配合HumanInTheLoopMiddleware）"
+    )
+    enable_streaming = models.BooleanField(
+        default=True,
+        verbose_name="启用流式输出",
+        help_text="启用后，AI回复将以流式方式逐字输出；禁用则等待完整回复后一次性返回"
+    )
+
     # 状态字段（保持不变）
     is_active = models.BooleanField(default=False, verbose_name="是否激活",
                                    help_text="是否为当前激活的LLM配置")
@@ -70,12 +100,25 @@ class ChatSession(models.Model):
     实际聊天数据存储在 chat_history.sqlite 中，此模型仅用于Django权限系统
     """
     user = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE, verbose_name="用户")
-    session_id = models.CharField(max_length=255, unique=True, verbose_name="会话ID", 
+    session_id = models.CharField(max_length=255, unique=True, verbose_name="会话ID",
                                   help_text="LangGraph会话的唯一标识符")
     title = models.CharField(max_length=200, verbose_name="对话标题", default="新对话")
     project = models.ForeignKey('projects.Project', on_delete=models.CASCADE, null=True, blank=True, verbose_name="关联项目")
     prompt = models.ForeignKey('prompts.UserPrompt', on_delete=models.SET_NULL, null=True, blank=True,
                                verbose_name="关联提示词", help_text="该会话使用的提示词")
+
+    # Token 使用统计
+    total_input_tokens = models.BigIntegerField(default=0, verbose_name="累计输入 Token",
+                                                help_text="该会话累计消耗的输入 Token 数")
+    total_output_tokens = models.BigIntegerField(default=0, verbose_name="累计输出 Token",
+                                                 help_text="该会话累计消耗的输出 Token 数")
+    total_tokens = models.BigIntegerField(default=0, verbose_name="累计总 Token",
+                                          help_text="该会话累计消耗的总 Token 数（输入+输出）")
+    total_cache_read_tokens = models.BigIntegerField(default=0, verbose_name="累计缓存命中 Token",
+                                                      help_text="该会话累计缓存命中的 Token 数")
+    request_count = models.IntegerField(default=0, verbose_name="请求次数",
+                                        help_text="该会话的 LLM 请求次数")
+
     created_at = models.DateTimeField(auto_now_add=True, verbose_name="创建时间")
     updated_at = models.DateTimeField(auto_now=True, verbose_name="更新时间")
 
@@ -86,6 +129,115 @@ class ChatSession(models.Model):
         
     def __str__(self):
         return f"{self.user.username} - {self.title}"
+
+
+class TokenUsageRecord(models.Model):
+    """
+    独立的 Token 使用记录 — 不随会话删除而丢失
+
+    每次 LLM 请求产生一条记录。session_id 仅存字符串，不依赖 ChatSession 外键，
+    因此删除对话不影响统计数据。
+    """
+    user = models.ForeignKey(
+        settings.AUTH_USER_MODEL, on_delete=models.CASCADE,
+        verbose_name="用户",
+    )
+    project = models.ForeignKey(
+        'projects.Project', on_delete=models.SET_NULL,
+        null=True, blank=True, verbose_name="关联项目",
+    )
+    session_id = models.CharField(
+        max_length=255, verbose_name="会话ID",
+        help_text="关联的会话标识（非外键）",
+    )
+    created_at = models.DateTimeField(auto_now_add=True, verbose_name="创建时间")
+
+    input_tokens = models.IntegerField(default=0, verbose_name="输入 Token")
+    output_tokens = models.IntegerField(default=0, verbose_name="输出 Token")
+    total_tokens = models.IntegerField(default=0, verbose_name="总 Token")
+    cache_read_tokens = models.IntegerField(default=0, verbose_name="缓存命中 Token")
+
+    class Meta:
+        verbose_name = "Token 使用记录"
+        verbose_name_plural = "Token 使用记录"
+        ordering = ['-created_at']
+        indexes = [
+            models.Index(fields=['user', 'created_at']),
+            models.Index(fields=['created_at']),
+        ]
+
+    def __str__(self):
+        return f"{self.user_id} - {self.session_id} - {self.total_tokens} tokens"
+
+
+class UserToolApproval(models.Model):
+    """
+    用户工具审批偏好 - 记住用户对高风险工具的审批选择
+
+    当 HITL（Human-in-the-Loop）启用时，用户可以选择"记住此选择"，
+    后续相同工具的调用将自动应用之前的决策。
+    """
+
+    POLICY_CHOICES = [
+        ('always_allow', '始终允许'),
+        ('always_reject', '始终拒绝'),
+        ('ask_every_time', '每次询问'),
+    ]
+
+    SCOPE_CHOICES = [
+        ('session', '仅本次会话'),
+        ('permanent', '永久生效'),
+    ]
+
+    user = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.CASCADE,
+        related_name='tool_approvals',
+        verbose_name="用户"
+    )
+    tool_name = models.CharField(
+        max_length=100,
+        verbose_name="工具名称",
+        help_text="需要审批的工具名称，如 execute_script, run_playwright"
+    )
+    policy = models.CharField(
+        max_length=20,
+        choices=POLICY_CHOICES,
+        default='ask_every_time',
+        verbose_name="审批策略"
+    )
+    scope = models.CharField(
+        max_length=20,
+        choices=SCOPE_CHOICES,
+        default='permanent',
+        verbose_name="生效范围"
+    )
+    session_id = models.CharField(
+        max_length=255,
+        blank=True,
+        null=True,
+        verbose_name="会话ID",
+        help_text="当 scope='session' 时，仅在此会话内生效"
+    )
+    created_at = models.DateTimeField(auto_now_add=True, verbose_name="创建时间")
+    updated_at = models.DateTimeField(auto_now=True, verbose_name="更新时间")
+
+    class Meta:
+        verbose_name = "用户工具审批偏好"
+        verbose_name_plural = "用户工具审批偏好"
+        # 每个用户对每个工具只能有一个偏好（永久）或每个会话一个偏好
+        constraints = [
+            models.UniqueConstraint(
+                fields=['user', 'tool_name', 'scope', 'session_id'],
+                name='unique_user_tool_approval'
+            )
+        ]
+        indexes = [
+            models.Index(fields=['user', 'tool_name']),
+        ]
+
+    def __str__(self):
+        return f"{self.user.username} - {self.tool_name}: {self.policy}"
 
 
 class ChatMessage(models.Model):

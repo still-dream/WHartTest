@@ -38,6 +38,18 @@
             {{ option.label }}
           </a-option>
         </a-select>
+        <a-select
+          v-model="selectedTestType"
+          :placeholder="isSmallScreen ? '类型' : '筛选测试类型'"
+          allow-clear
+          class="test-type-filter"
+          :style="{ width: isSmallScreen ? '90px' : '130px' }"
+          @change="onTestTypeChange"
+        >
+          <a-option v-for="option in TEST_TYPE_OPTIONS" :key="option.value" :value="option.value">
+            {{ option.label }}
+          </a-option>
+        </a-select>
         <a-button type="outline" class="io-btn" @click="handleExport">
           <template #icon>
             <icon-download />
@@ -79,14 +91,13 @@
       :data="testCaseData"
       :pagination="paginationConfig"
       :loading="loading"
-      :scroll="{ x: 1500 }"
+      :scroll="tableScroll"
       :bordered="{ cell: true }"
-      :sticky-header="true"
-      column-resizable
       class="test-case-table"
       @page-change="onPageChange"
       @page-size-change="onPageSizeChange"
-      @column-resize="handleColumnResize"
+
+
     >
       <template #selection="{ record }">
         <div data-checkbox>
@@ -116,6 +127,9 @@
       </template>
       <template #level="{ record }">
         <a-tag :color="getLevelColor(record.level)">{{ record.level }}</a-tag>
+      </template>
+      <template #testType="{ record }">
+        <a-tag>{{ getTestTypeLabel(record.test_type) }}</a-tag>
       </template>
       <template #reviewStatus="{ record }">
         <a-dropdown trigger="click" @select="(value: string) => handleReviewStatusChange(record, value)">
@@ -159,6 +173,7 @@
       ref="exportModalRef"
       :project-id="currentProjectId"
       :selected-ids="selectedTestCaseIds"
+      :module-tree="moduleTree"
     />
   </div>
 </template>
@@ -177,8 +192,8 @@ import {
   type TestCase,
   type ReviewStatus,
 } from '@/services/testcaseService';
-import { formatDate, getLevelColor, getReviewStatusLabel, getReviewStatusColor, REVIEW_STATUS_OPTIONS } from '@/utils/formatters';
-import type { TreeNodeData, TableColumnData } from '@arco-design/web-vue';
+import { formatDate, getLevelColor, getReviewStatusLabel, getReviewStatusColor, getTestTypeLabel, REVIEW_STATUS_OPTIONS, TEST_TYPE_OPTIONS } from '@/utils/formatters';
+import type { TreeNodeData } from '@arco-design/web-vue';
 
 const props = defineProps<{
   currentProjectId: number | null;
@@ -205,6 +220,7 @@ const localSelectedModuleId = ref<number | null>(props.selectedModuleId || null)
 const loading = ref(false);
 const localSearchKeyword = ref('');
 const selectedLevel = ref<string>('');
+const selectedTestType = ref<string>('');
 // 默认选中除"不可用"之外的所有状态
 const DEFAULT_REVIEW_STATUSES: ReviewStatus[] = ['pending_review', 'approved', 'needs_optimization', 'optimization_pending_review'];
 const selectedReviewStatuses = ref<ReviewStatus[]>([...DEFAULT_REVIEW_STATUSES]);
@@ -215,9 +231,18 @@ const exportModalRef = ref<InstanceType<typeof ExportModal> | null>(null);
 
 // 响应式屏幕宽度检测
 const isSmallScreen = ref(window.innerWidth < 1222);
+const tableContainerHeight = ref(400); // 默认高度
 const handleResize = () => {
   isSmallScreen.value = window.innerWidth < 1222;
+  // 计算表格容器高度：视口高度 - 头部(56) - 边距(86) - 搜索栏(60) - 分页(50) - 其他间距(40)
+  tableContainerHeight.value = Math.max(300, window.innerHeight - 56 - 86 - 60 - 50 - 40);
 };
+
+// 表格滚动配置
+const tableScroll = computed(() => ({
+  x: 900,
+  y: tableContainerHeight.value,
+}));
 
 const paginationConfig = reactive({
   total: 0,
@@ -292,9 +317,7 @@ const handleSelectCurrentPage = (checked: boolean) => {
   }
 };
 
-const TEST_CASE_TABLE_COLUMN_WIDTH_STORAGE_KEY = 'wharttest:testcase-list-column-widths';
-
-const defaultColumns: TableColumnData[] = [
+const columns = [
   {
     title: '选择',
     slotName: 'selection',
@@ -304,15 +327,16 @@ const defaultColumns: TableColumnData[] = [
     align: 'center'
   },
   { title: 'ID', dataIndex: 'id', width: 50, align: 'center' },
-  { title: '用例名称', dataIndex: 'name', slotName: 'name', width: 200, ellipsis: true, tooltip: true, align: 'center' },
+  { title: '用例名称', dataIndex: 'name', slotName: 'name', width: 180, ellipsis: true, tooltip: false, align: 'center' },
   { title: '前置条件', dataIndex: 'precondition', width: 120, ellipsis: true, tooltip: true, align: 'center' },
-  { title: '优先级', dataIndex: 'level', slotName: 'level', width: 60, align: 'center' },
-  { title: '审核状态', dataIndex: 'review_status', slotName: 'reviewStatus', width: 100, align: 'center' },
+  { title: '优先级', dataIndex: 'level', slotName: 'level', width: 80, align: 'center' },
+  { title: '测试类型', dataIndex: 'test_type', slotName: 'testType', width: 90, align: 'center' },
+  { title: '审核状态', dataIndex: 'review_status', slotName: 'reviewStatus', width: 120, align: 'center' },
   { title: '所属模块', dataIndex: 'module_detail', slotName: 'module', width: 100, ellipsis: true, tooltip: true, align: 'center' },
   {
     title: '创建者',
     dataIndex: 'creator_detail',
-    render: ({ record }: { record: TestCase }) => record.creator_detail?.last_name || '-',
+    render: ({ record }: { record: TestCase }) => record.creator_detail?.username || '-',
     width: 80,
     align: 'center',
   },
@@ -320,76 +344,11 @@ const defaultColumns: TableColumnData[] = [
     title: '创建时间',
     dataIndex: 'created_at',
     render: ({ record }: { record: TestCase }) => formatDate(record.created_at),
-    width: 100,
+    width: 130,
     align: 'center',
   },
-  { title: '操作', slotName: 'operations', width: 200, align: 'center' },
+  { title: '操作', slotName: 'operations', width: 200, fixed: 'right', align: 'center' },
 ];
-
-const getStoredColumnWidths = () => {
-  if (typeof window === 'undefined') {
-    return {} as Record<string, number>;
-  }
-
-  try {
-    const storedValue = window.localStorage.getItem(TEST_CASE_TABLE_COLUMN_WIDTH_STORAGE_KEY);
-    if (!storedValue) {
-      return {} as Record<string, number>;
-    }
-
-    const parsed = JSON.parse(storedValue) as Record<string, unknown>;
-    return Object.entries(parsed).reduce((acc, [key, value]) => {
-      if (typeof value === 'number' && Number.isFinite(value)) {
-        acc[key] = value;
-      }
-      return acc;
-    }, {} as Record<string, number>);
-  } catch (error) {
-    return {} as Record<string, number>;
-  }
-};
-
-const buildColumnsWithStoredWidths = () => {
-  const storedWidths = getStoredColumnWidths();
-  return defaultColumns.map((column) => {
-    const dataIndex = typeof column.dataIndex === 'string' ? column.dataIndex : '';
-    const storedWidth = dataIndex ? storedWidths[dataIndex] : undefined;
-
-    return {
-      ...column,
-      width: storedWidth ?? column.width,
-      fixed: column.fixed,
-    };
-  });
-};
-
-const columns = ref<TableColumnData[]>(buildColumnsWithStoredWidths());
-
-const persistColumnWidths = () => {
-  if (typeof window === 'undefined') {
-    return;
-  }
-
-  const columnWidths = columns.value.reduce((acc: Record<string, number>, column: TableColumnData) => {
-    if (typeof column.dataIndex === 'string' && typeof column.width === 'number') {
-      acc[column.dataIndex] = column.width;
-    }
-    return acc;
-  }, {} as Record<string, number>);
-
-  window.localStorage.setItem(
-    TEST_CASE_TABLE_COLUMN_WIDTH_STORAGE_KEY,
-    JSON.stringify(columnWidths)
-  );
-};
-
-const handleColumnResize = (dataIndex: string, width: number) => {
-  const targetColumn = columns.value.find((column: TableColumnData) => column.dataIndex === dataIndex);
-  if (targetColumn) {
-    targetColumn.width = width;
-    persistColumnWidths();
-  }
-};
 
 const fetchTestCases = async () => {
   if (!currentProjectId.value) {
@@ -406,6 +365,7 @@ const fetchTestCases = async () => {
       search: localSearchKeyword.value,
       module_id: localSelectedModuleId.value || undefined, // 使用本地模块筛选
       level: selectedLevel.value || undefined, // 添加优先级筛选
+      test_type: selectedTestType.value || undefined, // 添加测试类型筛选
       // 多选审核状态筛选：有选中项则传递，否则不限制（显示全部）
       review_status_in: selectedReviewStatuses.value.length > 0 ? selectedReviewStatuses.value : undefined,
     });
@@ -445,6 +405,12 @@ const onLevelChange = (value: string) => {
 
 const onReviewStatusChange = (value: ReviewStatus[]) => {
   selectedReviewStatuses.value = value;
+  paginationConfig.current = 1;
+  fetchTestCases();
+};
+
+const onTestTypeChange = (value: string) => {
+  selectedTestType.value = value;
   paginationConfig.current = 1;
   fetchTestCases();
 };
@@ -618,6 +584,7 @@ const onImportSuccess = () => {
 };
 
 onMounted(() => {
+  handleResize(); // 初始化表格高度
   fetchTestCases();
   window.addEventListener('resize', handleResize);
 });
@@ -630,6 +597,7 @@ watch(currentProjectId, () => {
   paginationConfig.current = 1;
   localSearchKeyword.value = '';
   selectedLevel.value = ''; // 项目切换时清空优先级筛选
+  selectedTestType.value = ''; // 项目切换时清空测试类型筛选
   selectedReviewStatuses.value = [...DEFAULT_REVIEW_STATUSES]; // 项目切换时重置审核状态筛选
   fetchTestCases();
 });
@@ -664,8 +632,7 @@ defineExpose({
   display: flex;
   flex-direction: column;
   overflow: hidden;
-  position: relative;
-  padding-bottom: 60px;
+  min-height: 0;
 }
 
 .page-header {
@@ -719,6 +686,10 @@ defineExpose({
   flex-shrink: 0;
 }
 
+.test-type-filter {
+  flex-shrink: 1;
+}
+
 .review-status-filter :deep(.arco-select-view-multiple) {
   flex-wrap: nowrap;
   overflow: hidden;
@@ -751,13 +722,11 @@ defineExpose({
 }
 
 .test-case-table {
-  flex-grow: 1;
+  flex: 1;
   overflow: hidden;
-  height: 0;
+  min-height: 0;
   display: flex;
   flex-direction: column;
-  min-height: 0;
-  max-height: calc(100% - 60px);
 }
 
 :deep(.test-case-table .arco-table) {
@@ -766,7 +735,6 @@ defineExpose({
 
 :deep(.test-case-table .arco-table-content-scroll) {
   overflow-x: auto !important;
-  position: relative;
 }
 
 .text-gray {
@@ -781,7 +749,11 @@ defineExpose({
   height: 100% !important;
   display: flex;
   flex-direction: column;
-  position: relative;
+}
+
+/* 强制显示单元格下边框 */
+:deep(.test-case-table .arco-table-td) {
+  border-bottom: 1px solid var(--color-neutral-3) !important;
 }
 
 :deep(.test-case-table .arco-table-header) {
@@ -790,17 +762,8 @@ defineExpose({
 
 :deep(.test-case-table .arco-table-body) {
   flex: 1;
-  overflow-y: auto !important;
   min-height: 0;
   padding-bottom: 16px;
-}
-
-:deep(.test-case-table .arco-table-body tr:last-child td) {
-  border-bottom: none !important;
-  box-shadow: 0 8px 16px -4px rgba(0, 0, 0, 0.15) !important;
-  position: relative;
-  z-index: 9;
-  background-color: #fff;
 }
 
 :deep(.test-case-table .arco-pagination) {
@@ -817,6 +780,10 @@ defineExpose({
   z-index: 1;
   padding: 8px 0;
   box-shadow: 0 -2px 8px rgba(0, 0, 0, 0.04);
+}
+
+:deep(.test-case-table .arco-table-cell-fixed-right) {
+  padding: 6px 4px;
 }
 
 :deep(.test-case-table .arco-space-compact) {
@@ -840,8 +807,8 @@ defineExpose({
 }
 
 .testcase-name-link {
-  display: block;
-  width: 100%;
+  display: inline-block;
+  max-width: 160px;
   color: #1890ff;
   cursor: pointer;
   text-decoration: none;
@@ -849,7 +816,6 @@ defineExpose({
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
-  line-height: 1.5;
 }
 
 .testcase-name-link:hover {
