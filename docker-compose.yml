@@ -50,11 +50,11 @@ services:
 
   # 后端 Django 服务（包含Celery Worker和Beat）
   backend:
-    image: ${DOCKER_BACKEND_IMAGE:-ghcr.io/mgdaaslab/wharttest-backend:latest}
+    # image: ${DOCKER_BACKEND_IMAGE:-ghcr.io/mgdaaslab/wharttest-backend:latest}
     # 如果需要本地构建，注释掉上面的image行，取消注释下面的build部分
-    # build:
-    #   context: ./WHartTest_Django
-    #   dockerfile: Dockerfile
+    build:
+      context: ./WHartTest_Django
+      dockerfile: Dockerfile
     container_name: wharttest-backend
     # 启动逻辑已移至 Dockerfile 的 ENTRYPOINT 和 supervisord.conf
     ports:
@@ -145,11 +145,11 @@ services:
 
   # 前端 Vue 服务
   frontend:
-    image: ${DOCKER_FRONTEND_IMAGE:-ghcr.io/mgdaaslab/wharttest-frontend:latest}
+    # image: ${DOCKER_FRONTEND_IMAGE:-ghcr.io/mgdaaslab/wharttest-frontend:latest}
     # 如果需要本地构建，注释掉上面的image行，取消注释下面的build部分
-    # build:
-    #   context: ./WHartTest_Vue
-    #   dockerfile: Dockerfile
+    build:
+      context: ./WHartTest_Vue
+      dockerfile: Dockerfile
     container_name: wharttest-frontend
     ports:
       - "8913:80"

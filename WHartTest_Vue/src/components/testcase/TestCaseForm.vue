@@ -642,7 +642,7 @@ const handleSubmit = async () => {
   }
   try {
     const formValidation = await testCaseFormRef.value?.validate();
-    if (formValidation) {
+    if (!formValidation) {
       return; // 表单基础字段验证失败
     }
 

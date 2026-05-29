@@ -17,7 +17,7 @@
         <a-input
           v-model="formData.name"
           placeholder="请输入知识库名称"
-          :max-length="100"
+          :max-length="200"
         />
       </a-form-item>
 

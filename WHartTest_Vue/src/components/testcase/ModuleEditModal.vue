@@ -106,7 +106,7 @@ const handleSubmit = async () => {
   }
   try {
     const validation = await moduleFormRef.value?.validate();
-    if (validation) {
+    if (!validation) {
       return; // 验证失败
     }
 

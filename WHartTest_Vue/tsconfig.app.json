@@ -5,6 +5,7 @@
     "paths": {
       "@/*": ["./src/*"]
     },
+    "types": ["vite/client"],
 
     /* Linting - 放宽一些检查以解决遗留问题 */
     "strict": true,

@@ -7,6 +7,7 @@ export interface UserDetail {
   id: number;
   username: string;
   email: string;
+  last_name: string;
 }
 
 // 项目成员接口

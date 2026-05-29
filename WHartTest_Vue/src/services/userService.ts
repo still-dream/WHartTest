@@ -422,3 +422,63 @@ export const getUserDetail = async (userId: number): Promise<{ success: boolean;
     };
   }
 };
+
+/**
+ * 检查用户名是否存在
+ * @param username 用户名
+ * @returns 返回一个Promise，解析为包含检查结果的响应对象
+ */
+export const checkUsernameExists = async (username: string): Promise<{ success: boolean; exists: boolean; error?: string }> => {
+  const authStore = useAuthStore();
+  const accessToken = authStore.getAccessToken;
+
+  if (!accessToken) {
+    return {
+      success: false,
+      exists: false,
+      error: '未登录或会话已过期',
+    };
+  }
+
+  try {
+    const response = await request<{ exists: boolean }>({
+      url: '/accounts/users/check-username/',
+      method: 'GET',
+      params: {
+        username,
+      },
+    });
+
+    if (response.success) {
+      return {
+        success: true,
+        exists: response.data?.exists || false,
+      };
+    } else {
+      return {
+        success: false,
+        exists: false,
+        error: response.error || '检查用户名失败：响应数据格式不正确',
+      };
+    }
+  } catch (error) {
+    let errorMessage = '检查用户名失败，请稍后再试';
+
+    if (axios.isAxiosError(error) && error.response) {
+      const statusCode = error.response.status;
+      const responseData = error.response.data;
+
+      if (responseData && typeof responseData.message === 'string') {
+        errorMessage = responseData.message;
+      } else {
+        errorMessage = `检查用户名失败：服务器错误 (${statusCode})`;
+      }
+    }
+
+    return {
+      success: false,
+      exists: false,
+      error: errorMessage,
+    };
+  }
+};

@@ -236,7 +236,10 @@ class AgentBlackboard(models.Model):
             from langgraph_integration.models import LLMConfig
             from langgraph_integration.views import create_llm_instance
             
-            active_config = LLMConfig.objects.get(is_active=True)
+            active_config = LLMConfig.objects.filter(is_active=True).first()
+            if not active_config:
+                logger.error("[Compression] 没有找到激活的LLM配置")
+                return False
             llm = create_llm_instance(active_config)
             logger.info(f"[Compression] LLM实例创建成功,模型: {active_config.name}")
             
@@ -281,7 +284,6 @@ class AgentBlackboard(models.Model):
             return True
             
         except Exception as e:
-            logger = __import__('logging').getLogger(__name__)
             logger.error(f"AI压缩失败: {e}", exc_info=True)
             # 失败时至少保留最近10条
             self.history_summary = history[-10:]
