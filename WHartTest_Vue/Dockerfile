@@ -22,18 +22,15 @@ RUN npm config set registry "${NPM_REGISTRY}" && \
 RUN npm ci
 
 # 复制TypeScript配置和构建配置
-COPY tsconfig*.json ./
-COPY vite.config.ts ./
-COPY postcss.config.js ./
-COPY tailwind.config.js ./
-
-# 复制源代码
-COPY src/ ./src/
-COPY public/ ./public/
-COPY index.html ./
+COPY tsconfig*.json vite.config.ts postcss.config.js tailwind.config.js ./
 
 # 复制生产环境配置
 COPY .env.production .env.production
+
+# 复制源代码和静态资源
+COPY public/ ./public/
+COPY src/ ./src/
+COPY index.html ./
 
 # 构建应用（指定生产模式）
 RUN npx vite build --mode production

@@ -138,7 +138,7 @@ ENV PATH="/opt/venv/bin:$PATH"
 # 安装 Playwright 浏览器（在构建镜像时安装）
 RUN npx playwright install chromium
 
-# 复制 Python 项目文件
+# 复制 Python 项目文件（按顺序复制以优化缓存）
 COPY manage.py ./
 COPY wharttest_django/ /app/wharttest_django/
 COPY accounts/ /app/accounts/
