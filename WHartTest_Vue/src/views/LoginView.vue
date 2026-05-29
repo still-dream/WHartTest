@@ -5,8 +5,8 @@
     <div class="content-layer">
       <div class="brand-area">
         <img :src="brandLogoUrl" alt="Logo" class="brand-logo" />
-        <h1 class="brand-title">WHartTest</h1>
-        <p class="brand-subtitle">小麦智测自动化平台</p>
+        <h1 class="brand-title">SkillForgeTest</h1>
+        <p class="brand-subtitle">J&T智萃平台</p>
         <div class="brand-tags">
           <span v-for="tag in featureTags" :key="tag" class="tag">{{ tag }}</span>
         </div>
@@ -316,6 +316,22 @@ onBeforeUnmount(() => {
   min-height: 100vh;
   overflow: hidden;
   background: radial-gradient(ellipse at 20% 50%, #0a1628 0%, #020810 100%);
+}
+
+.login-page::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background-image: url('/img/jt3.png');
+  background-size: cover;
+  background-position: center;
+  background-repeat: no-repeat;
+  opacity: 0.7;
+  z-index: 0;
+  pointer-events: none;
 }
 
 .starry-canvas,

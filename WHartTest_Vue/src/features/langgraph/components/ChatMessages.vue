@@ -4,7 +4,7 @@
       <div class="empty-icon">
         <img :src="brandLogoUrl" alt="" class="empty-logo" />
       </div>
-      <p>开始与 WGHTest 的对话吧</p>
+      <p>开始与 SkillForgeTest 的对话吧</p>
     </div>
 
     <MessageItem

@@ -34,10 +34,10 @@
   --theme-shadow: -4px -4px 10px rgba(0, 0, 0, 0.2), 4px 0 10px rgba(0, 0, 0, 0.2), 0 0 10px rgba(0, 0, 0, 0.15);
   --theme-toggle-bg: #ffffff;
   --theme-toggle-hover: #f7f9fc;
-  --theme-accent: #00a0e9;
-  --theme-accent-hover: #1aaaeb;
-  --theme-accent-active: #0090d1;
-  --theme-accent-rgb: 0, 160, 233;
+  --theme-accent: #e53935;
+  --theme-accent-hover: #ef5350;
+  --theme-accent-active: #c62828;
+  --theme-accent-rgb: 229, 57, 53;
 
   font-synthesis: none;
   text-rendering: optimizeLegibility;
@@ -77,8 +77,8 @@
   --theme-nav-item-bg: #1f2937;
   --theme-nav-item-hover: #253347;
   --theme-nav-item-active: #2a3a52;
-  --theme-nav-item-text: #60a5fa;
-  --theme-nav-item-text-active: #93c5fd;
+  --theme-nav-item-text: #ef5350;
+  --theme-nav-item-text-active: #ff6b60;
   --theme-page-text: #cbd5e1;
   --theme-text: #e2e8f0;
   --theme-text-secondary: #cbd5e1;
@@ -87,10 +87,10 @@
   --theme-shadow: 0 0 0 1px rgba(148, 163, 184, 0.12), 0 20px 42px rgba(2, 6, 23, 0.38);
   --theme-toggle-bg: #162136;
   --theme-toggle-hover: #1d2a41;
-  --theme-accent: #3b82f6;
-  --theme-accent-hover: #60a5fa;
-  --theme-accent-active: #1d4ed8;
-  --theme-accent-rgb: 59, 130, 246;
+  --theme-accent: #f44336;
+  --theme-accent-hover: #ef5350;
+  --theme-accent-active: #d32f2f;
+  --theme-accent-rgb: 244, 67, 54;
 }
 
 :root[data-theme='black'] body[arco-theme='dark'] {
@@ -827,8 +827,8 @@ button:focus-visible {
 }
 
 :root[data-theme='black'] .chat-layout .user-avatar {
-  background: linear-gradient(135deg, #3b82f6 0%, #2563eb 52%, #1d4ed8 100%) !important;
-  border-color: rgba(191, 219, 254, 0.34) !important;
+  background: linear-gradient(135deg, #f44336 0%, #e53935 52%, #d32f2f 100%) !important;
+  border-color: rgba(255, 224, 224, 0.34) !important;
 }
 
 :root[data-theme='black'] .chat-layout .tool-avatar {
@@ -993,10 +993,10 @@ button:focus-visible {
 }
 
 :root[data-theme='black'] .user-message .message-bubble {
-  background: linear-gradient(135deg, #2563eb 0%, #1d4ed8 100%) !important;
-  border-color: rgba(191, 219, 254, 0.28) !important;
-  color: #eff6ff !important;
-  box-shadow: 0 14px 28px rgba(29, 78, 216, 0.28), 0 12px 26px rgba(2, 6, 23, 0.22) !important;
+  background: linear-gradient(135deg, #e53935 0%, #c62828 100%) !important;
+  border-color: rgba(255, 224, 224, 0.28) !important;
+  color: #ffebee !important;
+  box-shadow: 0 14px 28px rgba(198, 40, 40, 0.28), 0 12px 26px rgba(2, 6, 23, 0.22) !important;
 }
 
 :root[data-theme='black'] .tool-message .message-bubble {

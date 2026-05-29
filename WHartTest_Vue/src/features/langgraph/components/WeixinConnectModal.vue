@@ -14,7 +14,7 @@
           <span class="hero-eyebrow">WeChat Bridge</span>
           <h2 class="hero-title">把当前项目接到微信对话里</h2>
           <p class="hero-description">
-            扫码后，用户可以直接在微信里与当前项目对应的 WHartTest 会话沟通，消息仍然走你现有的对话链路。
+            扫码后，用户可以直接在微信里与当前项目对应的 SkillForgeTest 会话沟通，消息仍然走你现有的对话链路。
           </p>
         </div>
 
