@@ -1,8 +1,8 @@
 <template>
   <div class="remote-mcp-management">
     <div class="page-header">
-      <h2>MCP配置管理</h2>
-      <a-button type="primary" @click="showAddForm">添加远程MCP</a-button>
+      <h2>{{ pageText.pageTitle }}</h2>
+      <a-button type="primary" @click="showAddForm">{{ pageText.addRemoteMcp }}</a-button>
     </div>
 
     <!-- 远程MCP配置列表 -->
@@ -18,7 +18,7 @@
       >
         <template #is_active="{ record }">
           <a-tag :color="record.is_active ? 'green' : 'red'">
-            {{ record.is_active ? '启用' : '禁用' }}
+            {{ record.is_active ? pageText.enabled : pageText.disabled }}
           </a-tag>
         </template>
 
@@ -30,11 +30,11 @@
           <a-space>
             <a-button type="text" size="small" @click="showEditForm(record)">
               <template #icon><icon-edit /></template>
-              编辑
+              {{ pageText.edit }}
             </a-button>
             <a-button type="text" status="danger" size="small" @click="showDeleteConfirm(record)">
               <template #icon><icon-delete /></template>
-              删除
+              {{ pageText.delete }}
             </a-button>
             <a-button
               type="text"
@@ -46,7 +46,7 @@
                 <icon-eye-invisible v-if="record.is_active" />
                 <icon-eye v-else />
               </template>
-              {{ record.is_active ? '禁用' : '启用' }}
+              {{ record.is_active ? pageText.disable : pageText.enable }}
             </a-button>
             <a-button
               type="text"
@@ -56,7 +56,7 @@
               :loading="record.pinging"
             >
               <template #icon><icon-link /></template>
-              检查连通性
+              {{ pageText.checkConnectivity }}
             </a-button>
           </a-space>
         </template>
@@ -64,42 +64,44 @@
 
       <!-- 调试信息 -->
       <div v-if="mcpConfigs.length === 0 && !loading" class="empty-data">
-        <p>暂无数据</p>
+        <p>{{ pageText.noData }}</p>
       </div>
       <div v-if="mcpConfigs.length > 0" class="debug-info" style="margin-top: 10px; font-size: 12px; color: var(--theme-text-tertiary);">
-        <p>当前数据条数: {{ mcpConfigs.length }}</p>
+        <p>{{ pageText.currentDataCount(mcpConfigs.length) }}</p>
       </div>
     </a-card>
 
     <!-- 添加/编辑远程MCP配置的弹窗 -->
     <a-modal
       v-model:visible="modalVisible"
-      :title="isEditing ? '编辑远程MCP配置' : '添加远程MCP配置'"
+      :title="isEditing ? pageText.editRemoteMcpTitle : pageText.addRemoteMcpTitle"
+      :ok-text="pageText.confirm"
+      :cancel-text="pageText.cancel"
       @cancel="closeModal"
       @before-ok="handleSubmit"
     >
       <a-form ref="formRef" :model="formData" :rules="formRules" label-align="left">
-        <a-form-item field="name" label="名称" required>
-          <a-input v-model="formData.name" placeholder="请输入配置名称" />
+        <a-form-item field="name" :label="pageText.name" required>
+          <a-input v-model="formData.name" :placeholder="pageText.namePlaceholder" />
         </a-form-item>
-        <a-form-item field="url" label="URL" required>
-          <a-input v-model="formData.url" placeholder="请输入MCP服务器URL" />
+        <a-form-item field="url" :label="pageText.url" required>
+          <a-input v-model="formData.url" :placeholder="pageText.urlPlaceholder" />
         </a-form-item>
-        <a-form-item field="transport" label="通信方式" required>
-          <a-select v-model="formData.transport" placeholder="请选择通信方式">
+        <a-form-item field="transport" :label="pageText.transport" required>
+          <a-select v-model="formData.transport" :placeholder="pageText.transportPlaceholder">
             <a-option value="stdio">stdio</a-option>
             <a-option value="streamable_http">streamable_http</a-option>
             <a-option value="sse">sse</a-option>
           </a-select>
         </a-form-item>
-        <a-form-item field="headers" label="请求头">
+        <a-form-item field="headers" :label="pageText.headers">
           <a-textarea
             v-model="formData.headersStr"
-            placeholder='请输入请求头 (JSON格式, 例如: {"Authorization": "Bearer token"})'
+            :placeholder="pageText.headersPlaceholder"
             :auto-size="{ minRows: 3, maxRows: 5 }"
           />
         </a-form-item>
-        <a-form-item field="is_active" label="状态">
+        <a-form-item field="is_active" :label="pageText.status">
           <a-switch v-model="formData.is_active" />
         </a-form-item>
       </a-form>
@@ -108,18 +110,20 @@
     <!-- 删除确认弹窗 -->
     <a-modal
       v-model:visible="deleteModalVisible"
-      title="确认删除"
+      :title="pageText.deleteConfirmTitle"
+      :ok-text="pageText.confirm"
+      :cancel-text="pageText.cancel"
       @ok="handleDelete"
       @cancel="deleteModalVisible = false"
       simple
     >
-      <p>确定要删除远程MCP配置 "{{ currentConfig?.name }}" 吗？此操作不可撤销。</p>
+      <p>{{ pageText.deleteConfirmContent(currentConfig?.name || '') }}</p>
     </a-modal>
   </div>
 </template>
 
 <script setup lang="ts">
-import { ref, reactive, onMounted } from 'vue';
+import { ref, reactive, onMounted, computed } from 'vue';
 import { Message } from '@arco-design/web-vue';
 import {
   IconEdit,
@@ -136,6 +140,114 @@ import {
   pingRemoteMcpConfig,
   type RemoteMcpConfig
 } from '@/services/remoteMcpConfigService';
+import { useAppI18n } from '@/composables/useAppI18n';
+
+const { isEnglish } = useAppI18n();
+const pageText = computed(() => (
+  isEnglish.value
+    ? {
+        pageTitle: 'MCP Configuration Management',
+        addRemoteMcp: 'Add Remote MCP',
+        enabled: 'Enabled',
+        disabled: 'Disabled',
+        edit: 'Edit',
+        delete: 'Delete',
+        enable: 'Enable',
+        disable: 'Disable',
+        checkConnectivity: 'Check connectivity',
+        noData: 'No data',
+        currentDataCount: (count: number) => `Current records: ${count}`,
+        editRemoteMcpTitle: 'Edit Remote MCP Config',
+        addRemoteMcpTitle: 'Add Remote MCP Config',
+        confirm: 'Confirm',
+        cancel: 'Cancel',
+        name: 'Name',
+        namePlaceholder: 'Enter config name',
+        url: 'URL',
+        urlPlaceholder: 'Enter MCP server URL',
+        transport: 'Transport',
+        transportPlaceholder: 'Select transport',
+        headers: 'Headers',
+        headersPlaceholder: 'Enter headers in JSON format, e.g. {"Authorization": "Bearer token"}',
+        status: 'Status',
+        nameColumn: 'Name',
+        statusColumn: 'Status',
+        createdAtColumn: 'Created at',
+        actionsColumn: 'Actions',
+        nameRequired: 'Enter config name',
+        urlRequired: 'Enter MCP server URL',
+        urlInvalid: 'URL must start with http:// or https://',
+        headersInvalid: 'Headers must be valid JSON',
+        fetchListFailed: 'Failed to fetch remote MCP configs',
+        headersFormatIncorrect: 'Invalid headers format',
+        updateSuccess: 'Remote MCP config updated successfully',
+        createSuccess: 'Remote MCP config added successfully',
+        updateFailed: 'Failed to update remote MCP config',
+        createFailed: 'Failed to add remote MCP config',
+        deleteConfirmTitle: 'Confirm deletion',
+        deleteConfirmContent: (name: string) => `Delete remote MCP config "${name}"? This action cannot be undone.`,
+        deleteSuccess: 'Remote MCP config deleted successfully',
+        deleteFailed: 'Failed to delete remote MCP config',
+        disableSuccess: 'Remote MCP config disabled successfully',
+        enableSuccess: 'Remote MCP config enabled successfully',
+        disableFailed: 'Failed to disable remote MCP config',
+        enableFailed: 'Failed to enable remote MCP config',
+        responseTime: (time: number) => `Response time: ${time}ms`,
+        connectionFailed: (message: string) => `Connection failed: ${message}`,
+        connectivityCheckFailed: 'Connectivity check failed, please try again later',
+      }
+    : {
+        pageTitle: 'MCP配置管理',
+        addRemoteMcp: '添加远程MCP',
+        enabled: '启用',
+        disabled: '禁用',
+        edit: '编辑',
+        delete: '删除',
+        enable: '启用',
+        disable: '禁用',
+        checkConnectivity: '检查连通性',
+        noData: '暂无数据',
+        currentDataCount: (count: number) => `当前数据条数: ${count}`,
+        editRemoteMcpTitle: '编辑远程MCP配置',
+        addRemoteMcpTitle: '添加远程MCP配置',
+        confirm: '确认',
+        cancel: '取消',
+        name: '名称',
+        namePlaceholder: '请输入配置名称',
+        url: 'URL',
+        urlPlaceholder: '请输入MCP服务器URL',
+        transport: '通信方式',
+        transportPlaceholder: '请选择通信方式',
+        headers: '请求头',
+        headersPlaceholder: '请输入请求头 (JSON格式, 例如: {"Authorization": "Bearer token"})',
+        status: '状态',
+        nameColumn: '名称',
+        statusColumn: '状态',
+        createdAtColumn: '创建时间',
+        actionsColumn: '操作',
+        nameRequired: '请输入配置名称',
+        urlRequired: '请输入MCP服务器URL',
+        urlInvalid: 'URL必须以http://或https://开头',
+        headersInvalid: '请求头必须是有效的JSON格式',
+        fetchListFailed: '获取远程MCP配置列表失败',
+        headersFormatIncorrect: '请求头格式不正确',
+        updateSuccess: '更新远程MCP配置成功',
+        createSuccess: '添加远程MCP配置成功',
+        updateFailed: '更新远程MCP配置失败',
+        createFailed: '添加远程MCP配置失败',
+        deleteConfirmTitle: '确认删除',
+        deleteConfirmContent: (name: string) => `确定要删除远程MCP配置 "${name}" 吗？此操作不可撤销。`,
+        deleteSuccess: '删除远程MCP配置成功',
+        deleteFailed: '删除远程MCP配置失败',
+        disableSuccess: '禁用远程MCP配置成功',
+        enableSuccess: '启用远程MCP配置成功',
+        disableFailed: '禁用远程MCP配置失败',
+        enableFailed: '启用远程MCP配置失败',
+        responseTime: (time: number) => `响应时间: ${time}ms`,
+        connectionFailed: (message: string) => `连接失败: ${message}`,
+        connectivityCheckFailed: '检查连通性失败，请稍后重试',
+      }
+));
 
 // 表格数据和加载状态
 const mcpConfigs = ref<RemoteMcpConfig[]>([]);
@@ -147,9 +259,9 @@ const pagination = reactive({
 });
 
 // 表格列定义
-const columns = [
+const columns = computed(() => [
   {
-    title: '名称',
+    title: pageText.value.nameColumn,
     dataIndex: 'name',
   },
   {
@@ -157,21 +269,21 @@ const columns = [
     dataIndex: 'url',
   },
   {
-    title: '状态',
+    title: pageText.value.statusColumn,
     dataIndex: 'is_active',
     slotName: 'is_active',
   },
   {
-    title: '创建时间',
+    title: pageText.value.createdAtColumn,
     dataIndex: 'created_at',
     slotName: 'created_at',
   },
   {
-    title: '操作',
+    title: pageText.value.actionsColumn,
     slotName: 'operations',
     align: 'center',
   },
-];
+]);
 
 // 表单数据和验证规则
 const formRef = ref();
@@ -184,13 +296,13 @@ const formData = reactive({
   is_active: true,
 });
 
-const formRules = {
-  name: [{ required: true, message: '请输入配置名称' }],
+const formRules = computed(() => ({
+  name: [{ required: true, message: pageText.value.nameRequired }],
   url: [
-    { required: true, message: '请输入MCP服务器URL' },
+    { required: true, message: pageText.value.urlRequired },
     {
       match: /^https?:\/\/.+/,
-      message: 'URL必须以http://或https://开头'
+      message: pageText.value.urlInvalid
     }
   ],
   headersStr: [
@@ -204,10 +316,10 @@ const formRules = {
           return false;
         }
       },
-      message: '请求头必须是有效的JSON格式'
+      message: pageText.value.headersInvalid
     }
   ]
-};
+}));
 
 // 弹窗状态
 const modalVisible = ref(false);
@@ -227,7 +339,7 @@ const loadMcpConfigs = async () => {
     console.log('处理后的MCP配置数据:', mcpConfigs.value);
   } catch (error) {
     console.error('获取远程MCP配置列表失败:', error);
-    Message.error('获取远程MCP配置列表失败');
+    Message.error(pageText.value.fetchListFailed);
     mcpConfigs.value = [];
     pagination.total = 0;
   } finally {
@@ -248,7 +360,7 @@ const onPageSizeChange = (pageSize: number) => {
 const formatDate = (dateStr?: string) => {
   if (!dateStr) return '-';
   const date = new Date(dateStr);
-  return date.toLocaleString('zh-CN', {
+  return date.toLocaleString(isEnglish.value ? 'en-US' : 'zh-CN', {
     year: 'numeric',
     month: '2-digit',
     day: '2-digit',
@@ -301,7 +413,7 @@ const handleSubmit = async (done: (closed: boolean) => void) => {
       try {
         headers = JSON.parse(formData.headersStr);
       } catch (e) {
-        Message.error('请求头格式不正确');
+        Message.error(pageText.value.headersFormatIncorrect);
         done(false);
         return;
       }
@@ -318,17 +430,17 @@ const handleSubmit = async (done: (closed: boolean) => void) => {
     if (isEditing.value && formData.id) {
       // 更新配置
       await updateRemoteMcpConfig(formData.id, configData);
-      Message.success('更新远程MCP配置成功');
+      Message.success(pageText.value.updateSuccess);
     } else {
       // 创建新配置
       await createRemoteMcpConfig(configData);
-      Message.success('添加远程MCP配置成功');
+      Message.success(pageText.value.createSuccess);
     }
 
     await loadMcpConfigs(); // 重新加载列表
     done(true); // 关闭弹窗
   } catch (error) {
-    Message.error(isEditing.value ? '更新远程MCP配置失败' : '添加远程MCP配置失败');
+    Message.error(isEditing.value ? pageText.value.updateFailed : pageText.value.createFailed);
     done(false); // 不关闭弹窗
   }
 };
@@ -345,10 +457,10 @@ const handleDelete = async () => {
 
   try {
     await deleteRemoteMcpConfig(currentConfig.value.id);
-    Message.success('删除远程MCP配置成功');
+    Message.success(pageText.value.deleteSuccess);
     await loadMcpConfigs(); // 重新加载列表
   } catch (error) {
-    Message.error('删除远程MCP配置失败');
+    Message.error(pageText.value.deleteFailed);
   } finally {
     deleteModalVisible.value = false;
   }
@@ -362,10 +474,10 @@ const toggleStatus = async (record: RemoteMcpConfig) => {
     await updateRemoteMcpConfig(record.id, {
       is_active: !record.is_active
     });
-    Message.success(`${record.is_active ? '禁用' : '启用'}远程MCP配置成功`);
+    Message.success(record.is_active ? pageText.value.disableSuccess : pageText.value.enableSuccess);
     await loadMcpConfigs(); // 重新加载列表
   } catch (error) {
-    Message.error(`${record.is_active ? '禁用' : '启用'}远程MCP配置失败`);
+    Message.error(record.is_active ? pageText.value.disableFailed : pageText.value.enableFailed);
   }
 };
 
@@ -384,14 +496,14 @@ const pingConfig = async (record: RemoteMcpConfig) => {
     if (result.success) {
       let successMessage = result.message;
       if (result.response_time !== undefined) {
-        successMessage += ` (响应时间: ${result.response_time}ms)`;
+        successMessage += ` (${pageText.value.responseTime(result.response_time)})`;
       }
       Message.success(successMessage);
     } else {
-      Message.error(`连接失败: ${result.message}`);
+      Message.error(pageText.value.connectionFailed(result.message));
     }
   } catch (error) {
-    Message.error('检查连通性失败，请稍后重试');
+    Message.error(pageText.value.connectivityCheckFailed);
   } finally {
     // 重置pinging状态
     mcpConfigs.value = mcpConfigs.value.map(config =>

@@ -195,16 +195,18 @@ class UserPromptViewSet(BaseModelViewSet):
     @action(detail=False, methods=['post'])
     def initialize(self, request):
         """初始化用户的默认提示词
-        
+
         支持参数:
         - force_update: bool, 是否强制更新已存在的提示词（默认False）
-        
-        使用 services.initialize_user_prompts 实现，提示词模板统一在 services.get_default_prompts 中维护
+        - language: str, 提示词语言('zh' 或 'en')，默认 'zh'
+
+        使用 services.initialize_user_prompts 实现，提示词模板按语言拆分到 prompts.default_templates
         """
         force_update = request.data.get('force_update', False)
-        
+        language = request.data.get('language', 'zh')
+
         # 使用服务层函数初始化提示词
-        result = initialize_user_prompts(request.user, force_update=force_update)
+        result = initialize_user_prompts(request.user, force_update=force_update, language=language)
         
         # 获取创建的提示词详细信息（用于前端展示）
         created_prompts = []

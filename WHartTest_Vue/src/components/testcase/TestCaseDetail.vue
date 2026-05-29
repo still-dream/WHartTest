@@ -1007,10 +1007,12 @@ const handleBatchDeleteScreenshots = () => {
 
 <style scoped>
 .testcase-form-container { /* 复用 TestCaseForm.vue 的样式 */
-  background-color: #fff;
+  background-color: var(--theme-card-bg);
+  color: var(--theme-page-text);
+  border: 1px solid var(--theme-card-border);
   border-radius: 8px;
   padding: 20px;
-  box-shadow: 4px 0 10px rgba(0, 0, 0, 0.2), 0 4px 10px rgba(0, 0, 0, 0.2), 0 0 10px rgba(0, 0, 0, 0.15);
+  box-shadow: var(--theme-card-shadow);
   height: 100%;
   max-height: 100vh; /* 确保不超过视口高度 */
   box-sizing: border-box;
@@ -1065,18 +1067,18 @@ const handleBatchDeleteScreenshots = () => {
 }
 
 .testcase-detail-content::-webkit-scrollbar-track {
-  background: #f1f1f1;
+  background: var(--theme-surface-soft);
   border-radius: 3px;
 }
 
 .testcase-detail-content::-webkit-scrollbar-thumb {
-  background: #c1c1c1;
+  background: color-mix(in srgb, var(--theme-text-tertiary) 72%, transparent);
   border-radius: 3px;
   transition: background 0.3s ease;
 }
 
 .testcase-detail-content::-webkit-scrollbar-thumb:hover {
-  background: #a8a8a8;
+  background: color-mix(in srgb, var(--theme-text-secondary) 78%, transparent);
 }
 
 .precondition-section {
@@ -1179,7 +1181,7 @@ const handleBatchDeleteScreenshots = () => {
   top: 8px;
   left: 8px;
   z-index: 10;
-  background-color: rgba(255, 255, 255, 0.9);
+  background-color: color-mix(in srgb, var(--theme-card-bg) 90%, transparent);
   border-radius: 4px;
   padding: 2px;
 }
@@ -1275,7 +1277,7 @@ const handleBatchDeleteScreenshots = () => {
 
 .error-url {
   font-size: 10px;
-  color: #ccc;
+  color: var(--theme-text-tertiary);
   word-break: break-all;
   line-height: 1.2;
 }
@@ -1437,7 +1439,7 @@ const handleBatchDeleteScreenshots = () => {
 .enhanced-preview-container {
   display: flex;
   height: 100%;
-  background-color: #f7f8fa;
+  background-color: var(--theme-page-bg);
 }
 
 /* 左侧信息面板 */
@@ -1550,7 +1552,7 @@ const handleBatchDeleteScreenshots = () => {
   display: flex;
   align-items: center;
   justify-content: center;
-  background-color: #f7f8fa;
+  background-color: var(--theme-page-bg);
 }
 
 .main-image-container {
@@ -1568,7 +1570,7 @@ const handleBatchDeleteScreenshots = () => {
   object-fit: contain;
   border-radius: 8px;
   box-shadow: 0 4px 20px rgba(0, 0, 0, 0.15);
-  background-color: #fff;
+  background-color: var(--theme-card-bg);
 }
 
 /* 图片切换按钮 */
@@ -1585,8 +1587,8 @@ const handleBatchDeleteScreenshots = () => {
 .nav-button {
   position: absolute;
   pointer-events: auto;
-  background-color: rgba(255, 255, 255, 0.9);
-  border: 1px solid #e5e6eb;
+  background-color: color-mix(in srgb, var(--theme-card-bg) 90%, transparent);
+  border: 1px solid var(--theme-border);
   width: 40px;
   height: 40px;
   display: flex;
@@ -1596,7 +1598,7 @@ const handleBatchDeleteScreenshots = () => {
 }
 
 .nav-button:hover:not(:disabled) {
-  background-color: #fff;
+  background-color: var(--theme-card-bg);
   box-shadow: 0 2px 8px rgba(0, 0, 0, 0.15);
   transform: scale(1.1);
 }
@@ -1617,8 +1619,8 @@ const handleBatchDeleteScreenshots = () => {
 /* 导航指示器样式 */
 .nav-indicator {
   cursor: default !important;
-  background-color: #f2f3f5 !important;
-  color: #1d2129 !important;
+  background-color: var(--theme-surface-soft) !important;
+  color: var(--theme-text) !important;
   font-weight: 500;
   min-width: 70px;
 }

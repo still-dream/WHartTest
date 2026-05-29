@@ -211,6 +211,36 @@ PERMISSION_NAME_TRANSLATIONS = {
     "Can change 向量数据库索引": "修改向量数据库索引",
     "Can delete 向量数据库索引": "删除向量数据库索引",
     "Can view 向量数据库索引": "查看向量数据库索引",
+    # 定时任务权限（django_celery_beat）
+    "Can add clocked": "添加定时触发",
+    "Can change clocked": "修改定时触发",
+    "Can delete clocked": "删除定时触发",
+    "Can view clocked": "查看定时触发",
+    "Can add crontab": "添加Cron表达式",
+    "Can change crontab": "修改Cron表达式",
+    "Can delete crontab": "删除Cron表达式",
+    "Can view crontab": "查看Cron表达式",
+    "Can add interval": "添加间隔调度",
+    "Can change interval": "修改间隔调度",
+    "Can delete interval": "删除间隔调度",
+    "Can view interval": "查看间隔调度",
+    "Can add periodic task": "添加周期任务",
+    "Can change periodic task": "修改周期任务",
+    "Can delete periodic task": "删除周期任务",
+    "Can view periodic task": "查看周期任务",
+    "Can add periodic task track": "添加周期任务追踪",
+    "Can change periodic task track": "修改周期任务追踪",
+    "Can delete periodic task track": "删除周期任务追踪",
+    "Can view periodic task track": "查看周期任务追踪",
+    "Can add solar event": "添加日照事件调度",
+    "Can change solar event": "修改日照事件调度",
+    "Can delete solar event": "删除日照事件调度",
+    "Can view solar event": "查看日照事件调度",
+    # Skills 权限
+    "Can add Skill": "添加技能",
+    "Can change Skill": "修改技能",
+    "Can delete Skill": "删除技能",
+    "Can view Skill": "查看技能",
 }
 
 
@@ -343,10 +373,13 @@ class ContentTypeSerializer(serializers.ModelSerializer):
     """
 
     app_label_cn = serializers.SerializerMethodField()
+    app_label_en = serializers.SerializerMethodField()
     app_label_sort = serializers.SerializerMethodField()
     app_label_subcategory = serializers.SerializerMethodField()  # 新增第二层分类
+    app_label_subcategory_en = serializers.SerializerMethodField()
     app_label_subcategory_sort = serializers.SerializerMethodField()  # 第二层排序
     model_cn = serializers.SerializerMethodField()
+    model_en = serializers.SerializerMethodField()
     model_verbose = serializers.SerializerMethodField()
 
     class Meta:
@@ -355,11 +388,14 @@ class ContentTypeSerializer(serializers.ModelSerializer):
             "id",
             "app_label",
             "app_label_cn",
+            "app_label_en",
             "app_label_subcategory",
+            "app_label_subcategory_en",
             "app_label_subcategory_sort",
             "app_label_sort",
             "model",
             "model_cn",
+            "model_en",
             "model_verbose",
         )
 
@@ -385,7 +421,15 @@ class ContentTypeSerializer(serializers.ModelSerializer):
             # 前端一级菜单
             "projects": "项目管理",
             "requirements": "需求管理",
-            "orchestrator_integration": "智能图表",
+            "api_database_configs": "接口自动化",
+            "api_environments": "接口自动化",
+            "api_functions": "接口自动化",
+            "api_interfaces": "接口自动化",
+            "api_modules": "接口自动化",
+            "api_sync": "接口自动化",
+            "api_testcases": "接口自动化",
+            "api_testtasks": "接口自动化",
+
             "ui_automation": "UI自动化",
             "task_center": "任务中心",
             "django_celery_beat": "任务中心",
@@ -408,6 +452,53 @@ class ContentTypeSerializer(serializers.ModelSerializer):
         }
         return app_labels.get(app_label, "系统管理")
 
+    def get_app_label_en(self, obj):
+        """
+        Return the English first-level category name for the permission tree.
+        """
+        app_label = obj.app_label
+        model_name = (obj.model or "").lower()
+
+        if app_label == "langgraph_integration":
+            if model_name == "llmconfig":
+                return "System Settings"
+            if model_name in ["chatsession", "chatmessage"]:
+                return "LLM Chat"
+
+        if app_label == "prompts":
+            return "LLM Chat"
+
+        app_labels = {
+            "projects": "Project Management",
+            "requirements": "Requirements",
+            "api_database_configs": "API Testing",
+            "api_environments": "API Testing",
+            "api_functions": "API Testing",
+            "api_interfaces": "API Testing",
+            "api_modules": "API Testing",
+            "api_sync": "API Testing",
+            "api_testcases": "API Testing",
+            "api_testtasks": "API Testing",
+            "ui_automation": "UI Automation",
+            "task_center": "Task Center",
+            "django_celery_beat": "Task Center",
+            "testcases": "Test Management",
+            "testcase_templates": "Test Management",
+            "knowledge": "Knowledge Base",
+            "auth": "System Settings",
+            "accounts": "System Settings",
+            "api_keys": "System Settings",
+            "apikey": "System Settings",
+            "mcp_tools": "System Settings",
+            "skills": "System Settings",
+            "llms": "System Settings",
+            "llm_config": "System Settings",
+            "message": "System Settings",
+            "mcpserverconfig": "System Settings",
+            "authtoken": "System Settings",
+        }
+        return app_labels.get(app_label, "System Settings")
+
     def get_app_label_subcategory(self, obj):
         """
         返回与前端菜单一致的第二层分类（用于子菜单分组）。
@@ -415,6 +506,20 @@ class ContentTypeSerializer(serializers.ModelSerializer):
         menu_category = self.get_app_label_cn(obj)
         app_label = obj.app_label
         model_name = (obj.model or "").lower()
+
+        # 条件：一级菜单是接口自动化；动作：按功能页签分流到子菜单；结果：权限树与前端导航一致。
+        if menu_category == "接口自动化":
+            subcategories = {
+                "api_database_configs": "环境管理",
+                "api_environments": "环境管理",
+                "api_functions": "自定义函数",
+                "api_interfaces": "接口管理",
+                "api_modules": "接口管理",
+                "api_sync": "同步配置",
+                "api_testcases": "测试用例",
+                "api_testtasks": "测试任务",
+            }
+            return subcategories.get(app_label)
 
         # 条件：一级菜单是测试管理；动作：按模型分流到子菜单；结果：用例/套件/执行历史结构清晰。
         if menu_category == "测试管理":
@@ -458,6 +563,76 @@ class ContentTypeSerializer(serializers.ModelSerializer):
         }
         return subcategories.get(app_label, None)
 
+    def get_app_label_subcategory_en(self, obj):
+        """
+        Return the English second-level subcategory name.
+        """
+        menu_category = self.get_app_label_en(obj)
+        app_label = obj.app_label
+        model_name = (obj.model or "").lower()
+
+        if menu_category == "API Testing":
+            subcategories = {
+                "api_database_configs": "Environments",
+                "api_environments": "Environments",
+                "api_functions": "Custom Functions",
+                "api_interfaces": "Interfaces",
+                "api_modules": "Interfaces",
+                "api_sync": "Sync Config",
+                "api_testcases": "Test Cases",
+                "api_testtasks": "Test Tasks",
+            }
+            return subcategories.get(app_label)
+
+        if menu_category == "Test Management":
+            if app_label == "testcase_templates":
+                return "Test Cases"
+            if app_label == "testcases":
+                if model_name == "testsuite":
+                    return "Test Suites"
+                if model_name in ["testexecution", "testcaseresult", "scriptexecution"]:
+                    return "Execution History"
+                return "Test Cases"
+            return None
+
+        if menu_category == "Task Center":
+            if app_label in ["task_center", "django_celery_beat"]:
+                return "Task Scheduling"
+            return None
+
+        if menu_category != "System Settings":
+            return None
+
+        if app_label == "langgraph_integration" and model_name == "llmconfig":
+            return "LLM Config"
+
+        subcategories = {
+            "auth": self._get_auth_subcategory_en(obj),
+            "accounts": "Permissions",
+            "api_keys": "API Keys",
+            "apikey": "API Keys",
+            "mcp_tools": "MCP Config",
+            "mcpserverconfig": "MCP Config",
+            "skills": "Skills",
+            "llms": "LLM Config",
+            "llm_config": "LLM Config",
+            "message": "Messages",
+            "task_center": "Task Scheduling",
+            "django_celery_beat": "Task Scheduling",
+        }
+        return subcategories.get(app_label, None)
+
+    def _get_auth_subcategory_en(self, obj):
+        model_name = obj.model.lower()
+        if model_name == "user":
+            return "Users"
+        elif model_name == "group":
+            return "Organizations"
+        elif model_name == "permission":
+            return "Permissions"
+        else:
+            return None
+
     def _get_auth_subcategory(self, obj):
         """
         auth应用下的具体分类 - 只对特定模型进行分类
@@ -488,20 +663,27 @@ class ContentTypeSerializer(serializers.ModelSerializer):
             return 1
 
         subcategory_sort = {
+            # 接口自动化
+            "接口管理": 1,
+            "测试用例": 2,
+            "测试任务": 3,
+            "环境管理": 4,
+            "自定义函数": 5,
+            "同步配置": 6,
             # 测试管理
-            "用例管理": 1,
-            "测试套件": 2,
-            "执行历史": 3,
+            "用例管理": 11,
+            "测试套件": 12,
+            "执行历史": 13,
             # 系统管理
-            "用户管理": 1,
-            "组织管理": 2,
-            "权限管理": 3,
-            "LLM配置": 4,
-            "KEY管理": 5,
-            "MCP配置": 6,
-            "消息管理": 7,
-            "Skills管理": 8,
-            "任务调度": 9,
+            "用户管理": 21,
+            "组织管理": 22,
+            "权限管理": 23,
+            "LLM配置": 24,
+            "KEY管理": 25,
+            "MCP配置": 26,
+            "消息管理": 27,
+            "Skills管理": 28,
+            "任务调度": 29,
         }
         return subcategory_sort.get(subcategory, 99)
 
@@ -514,7 +696,7 @@ class ContentTypeSerializer(serializers.ModelSerializer):
         sort_order = {
             "项目管理": 1,
             "需求管理": 2,
-            "智能图表": 3,
+            "接口自动化": 3,
             "UI自动化": 4,
             "任务中心": 5,
             "测试管理": 6,
@@ -560,7 +742,7 @@ class ContentTypeSerializer(serializers.ModelSerializer):
                 "orchestrator_integration.agenttask": "Agent任务",
                 "orchestrator_integration.agentstep": "Agent步骤",
                 "orchestrator_integration.agentblackboard": "Agent黑板",
-                "skills.skill": "Skills",
+                "skills.skill": "技能",
                 "langgraph_integration.usertoolapproval": "用户工具审批偏好",
                 "task_center.scheduledtask": "调度任务",
                 "task_center.taskexecution": "任务执行记录",
@@ -628,7 +810,7 @@ class ContentTypeSerializer(serializers.ModelSerializer):
                 "agenttask": "Agent任务",
                 "agentstep": "Agent步骤",
                 "agentblackboard": "Agent黑板",
-                "skill": "Skills",
+                "skill": "技能",
                 "usertoolapproval": "用户工具审批偏好",
                 "mcptool": "MCP工具",
                 "scheduledtask": "调度任务",
@@ -671,7 +853,7 @@ class ContentTypeSerializer(serializers.ModelSerializer):
                 "orchestrator_integration.agenttask": "Agent任务",
                 "orchestrator_integration.agentstep": "Agent步骤",
                 "orchestrator_integration.agentblackboard": "Agent黑板",
-                "skills.skill": "Skills",
+                "skills.skill": "技能",
                 "langgraph_integration.usertoolapproval": "用户工具审批偏好",
                 "task_center.scheduledtask": "调度任务",
                 "task_center.taskexecution": "任务执行记录",
@@ -723,7 +905,7 @@ class ContentTypeSerializer(serializers.ModelSerializer):
                 "agenttask": "Agent任务",
                 "agentstep": "Agent步骤",
                 "agentblackboard": "Agent黑板",
-                "skill": "Skills",
+                "skill": "技能",
                 "usertoolapproval": "用户工具审批偏好",
                 "mcptool": "MCP工具",
                 "scheduledtask": "调度任务",
@@ -757,6 +939,92 @@ class ContentTypeSerializer(serializers.ModelSerializer):
         except:
             return obj.model
 
+    def get_model_en(self, obj):
+        """
+        Return the English model name.
+        """
+        app_label = obj.app_label
+        model_name = obj.model
+
+        model_translations = {
+            "llm_config.llmprovider": "LLM Provider Config",
+            "llm_config.llmmodel": "LLM Model Config",
+            "llm_config.llmconfiguration": "LLM Configuration",
+            "llms.llmprovider": "LLM Provider",
+            "llms.llmmodel": "LLM Model",
+            "llms.llmservice": "LLM Service",
+            "message.message": "Message",
+            "conversation.conversation": "Conversation",
+            "api_keys.apikey": "API Key",
+            "mcp_tools.mcpserverconfig": "MCP Server Config",
+            "mcp_tools.mcptool": "MCP Tool",
+            "knowledge.document": "Document",
+            "knowledge.knowledgebase": "Knowledge Base",
+            "knowledge.knowledgedocument": "Knowledge Document",
+            "knowledge.documentchunk": "Document Chunk",
+            "knowledge.vectordatabaseindex": "Vector DB Index",
+            "knowledge.vectorstoreindex": "Vector Store Index",
+            "knowledge.knowledgeglobalconfig": "Knowledge Global Config",
+            "testcase_templates.importexporttemplate": "Import/Export Template",
+            "skills.skill": "Skill",
+            "langgraph_integration.llmconfig": "LLM Config",
+            "langgraph_integration.chatsession": "Chat Session",
+            "langgraph_integration.chatmessage": "Chat Message",
+            "langgraph_integration.usertoolapproval": "Tool Approval Preference",
+            "task_center.scheduledtask": "Scheduled Task",
+            "task_center.taskexecution": "Task Execution Record",
+            "django_celery_beat.clockedschedule": "Clocked Schedule",
+            "django_celery_beat.crontabschedule": "Crontab Schedule",
+            "django_celery_beat.intervalschedule": "Interval Schedule",
+            "django_celery_beat.periodictask": "Periodic Task",
+            "django_celery_beat.periodictasks": "Periodic Task Track",
+            "django_celery_beat.solarschedule": "Solar Event Schedule",
+            "projects.project": "Project",
+            "projects.projectmember": "Project Member",
+            "auth.user": "User",
+            "auth.group": "Group",
+            "auth.permission": "Permission",
+            "authtoken.token": "Token",
+            "authtoken.tokenproxy": "Token",
+            "accounts.userprofile": "User Profile",
+            "prompts.userprompt": "User Prompt",
+            "requirements.requirementdocument": "Requirement Document",
+            "requirements.requirementmodule": "Requirement Module",
+            "requirements.reviewreport": "Review Report",
+            "requirements.reviewissue": "Review Issue",
+            "requirements.modulereviewresult": "Module Review Result",
+            "requirements.documentimage": "Document Image",
+            "testcases.testcase": "Test Case",
+            "testcases.testcasestep": "Test Case Step",
+            "testcases.testcasemodule": "Test Case Module",
+            "testcases.testcasescreenshot": "Test Case Screenshot",
+            "testcases.testsuite": "Test Suite",
+            "testcases.testexecution": "Test Execution",
+            "testcases.testcaseresult": "Test Case Result",
+            "testcases.automationscript": "Automation Script",
+            "testcases.scriptexecution": "Script Execution",
+            "ui_automation.uibatchexecutionrecord": "UI Batch Execution Record",
+            "ui_automation.uicasestepsdetailed": "UI Case Steps Detail",
+            "ui_automation.uielement": "UI Element",
+            "ui_automation.uienvironmentconfig": "UI Environment Config",
+            "ui_automation.uiexecutionrecord": "UI Execution Record",
+            "ui_automation.uimodule": "UI Module",
+            "ui_automation.uipage": "UI Page",
+            "ui_automation.uipagesteps": "UI Page Steps",
+            "ui_automation.uipagestepsdetailed": "UI Page Steps Detail",
+            "ui_automation.uipublicdata": "UI Public Data",
+            "ui_automation.uitestcase": "UI Test Case",
+            "weixin_integration.weixinbotconfig": "WeChat Bot Config",
+            "weixin_integration.weixinloginsession": "WeChat Login Session",
+        }
+
+        app_model_key = f"{app_label}.{model_name}"
+        if app_model_key in model_translations:
+            return model_translations[app_model_key]
+
+        # Fallback: capitalize the model name
+        return model_name.replace("_", " ").title()
+
 
 
 class PermissionSerializer(serializers.ModelSerializer):
@@ -764,10 +1032,11 @@ class PermissionSerializer(serializers.ModelSerializer):
         read_only=True
     )  # 使用嵌套的ContentTypeSerializer
     name_cn = serializers.SerializerMethodField()
+    name_en = serializers.SerializerMethodField()
 
     class Meta:
         model = Permission
-        fields = ("id", "name", "name_cn", "codename", "content_type")
+        fields = ("id", "name", "name_cn", "name_en", "codename", "content_type")
 
     def get_name_cn(self, obj):
         """
@@ -801,6 +1070,29 @@ class PermissionSerializer(serializers.ModelSerializer):
                     # 翻译失败时回退原始名称，保证接口稳定返回。
                     pass
 
+        return obj.name
+
+    def get_name_en(self, obj):
+        """
+        Return the English permission name.
+        """
+        action_map = {
+            "add": "Add",
+            "change": "Edit",
+            "delete": "Delete",
+            "view": "View",
+        }
+        codename = getattr(obj, "codename", "") or ""
+        if "_" in codename:
+            action, _model = codename.split("_", 1)
+            if action in action_map:
+                try:
+                    model_en = ContentTypeSerializer(context=self.context).get_model_en(
+                        obj.content_type
+                    )
+                    return f"{action_map[action]} {model_en}"
+                except Exception:
+                    pass
         return obj.name
 
 

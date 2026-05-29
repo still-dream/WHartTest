@@ -8,9 +8,9 @@
             <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm1 15h-2v-2h2v2zm0-4h-2V7h2v6z" fill="#f5222d"/>
           </svg>
         </div>
-        <h3>访问受限</h3>
-        <p>您当前没有项目管理权限，请联系系统管理员申请相应权限。</p>
-        <a-button type="primary" @click="contactAdmin">联系管理员</a-button>
+        <h3>{{ pageText.restrictedTitle }}</h3>
+        <p>{{ pageText.restrictedDescription }}</p>
+        <a-button type="primary" @click="contactAdmin">{{ pageText.contactAdmin }}</a-button>
       </div>
     </div>
 
@@ -19,18 +19,19 @@
       <div class="page-header">
         <div class="search-box">
           <a-input-search
-            placeholder="搜索项目名称/描述"
+            :placeholder="pageText.searchPlaceholder"
             allow-clear
             style="width: 300px"
             @search="onSearch"
           />
         </div>
         <div class="action-buttons">
-          <a-button type="primary" @click="showAddProjectModal">添加项目</a-button>
+          <a-button type="primary" @click="showAddProjectModal">{{ pageText.addProject }}</a-button>
         </div>
       </div>
 
       <a-table
+        :key="`project-table-${locale}`"
         :columns="columns"
         :data="projectData"
         :pagination="pagination"
@@ -46,16 +47,19 @@
           </a-tooltip>
         </template>
         <template #description="{ record }">
-          <a-tooltip :content="record.description || '无描述'" position="top">
-            <div class="ellipsis-text">{{ record.description || '无描述' }}</div>
+          <a-tooltip :content="record.description || pageText.noDescription" position="top">
+            <div class="ellipsis-text">{{ record.description || pageText.noDescription }}</div>
           </a-tooltip>
         </template>
         <template #operations="{ record }">
-          <a-space :size="4">
-            <a-button type="primary" size="mini" @click="viewProjectMembers(record, $event)">成员</a-button>
-            <a-button type="primary" size="mini" @click="editProject(record, $event)">编辑</a-button>
-            <a-button type="primary" status="danger" size="mini" @click="deleteProject(record, $event)">删除</a-button>
+          <a-space class="project-operations" :size="[4, 4]">
+            <a-button type="primary" size="mini" @click="viewProjectMembers(record, $event)">{{ pageText.members }}</a-button>
+            <a-button type="primary" size="mini" @click="editProject(record, $event)">{{ pageText.edit }}</a-button>
+            <a-button type="primary" status="danger" size="mini" @click="deleteProject(record, $event)">{{ pageText.delete }}</a-button>
           </a-space>
+        </template>
+        <template #empty>
+          <a-empty :description="pageText.noProjectsData" />
         </template>
       </a-table>
     </div>
@@ -63,7 +67,7 @@
     <!-- 项目成员管理模态框 -->
     <a-modal
       v-model:visible="membersModalVisible"
-      :title="`项目成员管理: ${selectedProject?.name || ''}`"
+      :title="membersModalTitle"
       :footer="false"
       :mask-closable="true"
       :width="900"
@@ -73,13 +77,14 @@
       </div>
       <div v-else>
         <div class="members-header">
-          <a-button type="primary" @click="showAddMemberModal">添加成员</a-button>
+          <a-button type="primary" @click="showAddMemberModal">{{ pageText.addMember }}</a-button>
         </div>
         <div v-if="projectMembers.length === 0" class="no-data">
-          暂无成员数据
+          {{ pageText.noMembersData }}
         </div>
         <a-table
           v-else
+          :key="`project-members-table-${locale}`"
           :columns="memberColumns"
           :data="projectMembers"
           :pagination="false"
@@ -88,21 +93,21 @@
         >
           <template #role="{ record }">
             <a-tag :color="record.role === 'owner' ? 'red' : record.role === 'admin' ? 'orange' : 'blue'">
-              {{ record.role === 'owner' ? '拥有者' : record.role === 'admin' ? '管理员' : '成员' }}
+              {{ getRoleLabel(record.role) }}
             </a-tag>
           </template>
           <template #joined_at="{ record }">
-            {{ record.joined_at ? new Date(record.joined_at).toLocaleString() : '-' }}
+            {{ record.joined_at ? formatDateTime(record.joined_at) : '-' }}
           </template>
           <template #operations="{ record }">
-            <a-space :size="4">
+            <a-space class="member-operations" :size="[4, 4]">
               <a-button
                 type="text"
                 size="mini"
                 @click="showUpdateRoleModal(record)"
                 :disabled="record.role === 'owner'"
               >
-                修改角色
+                {{ pageText.updateRole }}
               </a-button>
               <a-button
                 type="text"
@@ -111,7 +116,7 @@
                 @click="removeMember(record)"
                 :disabled="record.role === 'owner'"
               >
-                移除
+                {{ pageText.remove }}
               </a-button>
             </a-space>
           </template>
@@ -123,16 +128,18 @@
     <!-- 添加成员模态框 -->
     <a-modal
       v-model:visible="addMemberModalVisible"
-      title="添加项目成员"
+      :title="pageText.addProjectMemberTitle"
+      :ok-text="pageText.confirm"
+      :cancel-text="pageText.cancel"
       @ok="handleAddMember"
       @cancel="() => addMemberModalVisible = false"
       :mask-closable="false"
     >
       <a-form :model="addMemberForm" layout="vertical">
-        <a-form-item field="userId" label="选择用户" required>
+        <a-form-item field="userId" :label="pageText.selectUser" required>
           <a-select
             v-model="addMemberForm.userId"
-            placeholder="请选择用户"
+            :placeholder="pageText.selectUserPlaceholder"
             :loading="usersLoading"
             :filter-option="true"
           >
@@ -144,11 +151,11 @@
             />
           </a-select>
         </a-form-item>
-        <a-form-item field="role" label="角色" required>
-          <a-select v-model="addMemberForm.role" placeholder="请选择角色">
-            <a-option value="member">成员</a-option>
-            <a-option value="admin">管理员</a-option>
-            <a-option value="owner">拥有者</a-option>
+        <a-form-item field="role" :label="pageText.role" required>
+          <a-select v-model="addMemberForm.role" :placeholder="pageText.selectRolePlaceholder">
+            <a-option value="member">{{ pageText.memberRole }}</a-option>
+            <a-option value="admin">{{ pageText.adminRole }}</a-option>
+            <a-option value="owner">{{ pageText.ownerRole }}</a-option>
           </a-select>
         </a-form-item>
       </a-form>
@@ -157,17 +164,19 @@
     <!-- 更新角色模态框 -->
     <a-modal
       v-model:visible="updateRoleModalVisible"
-      title="更新成员角色"
+      :title="pageText.updateMemberRoleTitle"
+      :ok-text="pageText.confirm"
+      :cancel-text="pageText.cancel"
       @ok="handleUpdateRole"
       @cancel="() => updateRoleModalVisible = false"
       :mask-closable="false"
     >
       <a-form :model="updateRoleForm" layout="vertical">
-        <a-form-item field="role" label="角色" required>
-          <a-select v-model="updateRoleForm.role" placeholder="请选择角色">
-            <a-option value="member">成员</a-option>
-            <a-option value="admin">管理员</a-option>
-            <a-option value="owner">拥有者</a-option>
+        <a-form-item field="role" :label="pageText.role" required>
+          <a-select v-model="updateRoleForm.role" :placeholder="pageText.selectRolePlaceholder">
+            <a-option value="member">{{ pageText.memberRole }}</a-option>
+            <a-option value="admin">{{ pageText.adminRole }}</a-option>
+            <a-option value="owner">{{ pageText.ownerRole }}</a-option>
           </a-select>
         </a-form-item>
       </a-form>
@@ -176,7 +185,9 @@
     <!-- 添加项目模态框 -->
     <a-modal
       v-model:visible="addProjectModalVisible"
-      title="添加项目"
+      :title="pageText.addProjectTitle"
+      :ok-text="pageText.confirm"
+      :cancel-text="pageText.cancel"
       @ok="handleAddProject"
       @cancel="cancelAddProject"
       :mask-closable="false"
@@ -188,31 +199,31 @@
         :rules="addProjectRules"
         layout="vertical"
       >
-        <a-form-item field="name" label="项目名称">
-          <a-input v-model="addProjectForm.name" placeholder="请输入项目名称" />
+        <a-form-item field="name" :label="pageText.projectName">
+          <a-input v-model="addProjectForm.name" :placeholder="pageText.enterProjectName" />
         </a-form-item>
-        <a-form-item field="description" label="项目描述">
+        <a-form-item field="description" :label="pageText.projectDescription">
           <a-textarea
             v-model="addProjectForm.description"
-            placeholder="请输入项目描述"
+            :placeholder="pageText.enterProjectDescription"
             :auto-size="{ minRows: 3, maxRows: 5 }"
           />
         </a-form-item>
         
         <!-- 凭据列表 -->
-        <a-divider orientation="left">项目凭据</a-divider>
+        <a-divider orientation="left">{{ pageText.projectCredentials }}</a-divider>
         <div v-for="(credential, index) in addProjectForm.credentials" :key="index" style="margin-bottom: 8px; display: flex; align-items: flex-start; gap: 8px;">
-          <a-input v-model="credential.system_url" placeholder="项目地址" style="flex: 2;" />
-          <a-input v-model="credential.username" placeholder="用户名" style="flex: 1;" />
-          <a-input-password v-model="credential.password" placeholder="密码" style="flex: 1;" />
-          <a-input v-model="credential.user_role" placeholder="角色" style="flex: 1;" />
-          <a-button type="text" status="danger" @click="removeCredential(index)">删除</a-button>
+          <a-input v-model="credential.system_url" :placeholder="pageText.projectUrl" style="flex: 2;" />
+          <a-input v-model="credential.username" :placeholder="pageText.username" style="flex: 1;" />
+          <a-input-password v-model="credential.password" :placeholder="pageText.password" style="flex: 1;" />
+          <a-input v-model="credential.user_role" :placeholder="pageText.role" style="flex: 1;" />
+          <a-button type="text" status="danger" @click="removeCredential(index)">{{ pageText.delete }}</a-button>
         </div>
         <a-button type="dashed" long @click="addCredential">
           <template #icon>
             <icon-plus />
           </template>
-          添加凭据
+          {{ pageText.addCredential }}
         </a-button>
       </a-form>
     </a-modal>
@@ -220,7 +231,9 @@
     <!-- 编辑项目模态框 -->
     <a-modal
       v-model:visible="editProjectModalVisible"
-      title="编辑项目"
+      :title="pageText.editProjectTitle"
+      :ok-text="pageText.confirm"
+      :cancel-text="pageText.cancel"
       @ok="handleEditProject"
       @cancel="cancelEditProject"
       :mask-closable="false"
@@ -232,31 +245,31 @@
         :rules="editProjectRules"
         layout="vertical"
       >
-        <a-form-item field="name" label="项目名称">
-          <a-input v-model="editProjectForm.name" placeholder="请输入项目名称" />
+        <a-form-item field="name" :label="pageText.projectName">
+          <a-input v-model="editProjectForm.name" :placeholder="pageText.enterProjectName" />
         </a-form-item>
-        <a-form-item field="description" label="项目描述">
+        <a-form-item field="description" :label="pageText.projectDescription">
           <a-textarea
             v-model="editProjectForm.description"
-            placeholder="请输入项目描述"
+            :placeholder="pageText.enterProjectDescription"
             :auto-size="{ minRows: 3, maxRows: 5 }"
           />
         </a-form-item>
         
         <!-- 凭据列表 -->
-        <a-divider orientation="left">项目凭据</a-divider>
+        <a-divider orientation="left">{{ pageText.projectCredentials }}</a-divider>
         <div v-for="(credential, index) in editProjectForm.credentials" :key="index" style="margin-bottom: 8px; display: flex; align-items: flex-start; gap: 8px;">
-          <a-input v-model="credential.system_url" placeholder="项目地址" style="flex: 2;" />
-          <a-input v-model="credential.username" placeholder="用户名" style="flex: 1;" />
-          <a-input-password v-model="credential.password" placeholder="留空不改" style="flex: 1;" />
-          <a-input v-model="credential.user_role" placeholder="角色" style="flex: 1;" />
-          <a-button type="text" status="danger" @click="removeEditCredential(index)">删除</a-button>
+          <a-input v-model="credential.system_url" :placeholder="pageText.projectUrl" style="flex: 2;" />
+          <a-input v-model="credential.username" :placeholder="pageText.username" style="flex: 1;" />
+          <a-input-password v-model="credential.password" :placeholder="pageText.keepEmptyPassword" style="flex: 1;" />
+          <a-input v-model="credential.user_role" :placeholder="pageText.role" style="flex: 1;" />
+          <a-button type="text" status="danger" @click="removeEditCredential(index)">{{ pageText.delete }}</a-button>
         </div>
         <a-button type="dashed" long @click="addEditCredential">
           <template #icon>
             <icon-plus />
           </template>
-          添加凭据
+          {{ pageText.addCredential }}
         </a-button>
       </a-form>
     </a-modal>
@@ -264,7 +277,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, reactive, onMounted, watch } from 'vue';
+import { ref, reactive, onMounted, watch, computed } from 'vue';
 import { Message, Modal } from '@arco-design/web-vue';
 import {
   getProjectList,
@@ -283,6 +296,7 @@ import {
 } from '@/services/projectService';
 import { getUserList } from '@/services/userService';
 import { useAuthStore } from '@/store/authStore';
+import { useAppI18n } from '@/composables/useAppI18n';
 
 // 加载状态
 const loading = ref(false);
@@ -291,7 +305,194 @@ const searchKeyword = ref('');
 
 // 权限检查
 const authStore = useAuthStore();
+const { locale, isEnglish } = useAppI18n();
 const hasProjectPermission = ref(false); // 默认无权限，等待权限检查结果
+
+const pageText = computed(() => (
+  isEnglish.value
+    ? {
+        restrictedTitle: 'Access restricted',
+        restrictedDescription: 'You do not currently have project management permission. Contact an administrator to request access.',
+        contactAdmin: 'Contact admin',
+        contactAdminInfo: 'Contact the system administrator to get project management permission',
+        searchPlaceholder: 'Search project name / description',
+        addProject: 'Add project',
+        noDescription: 'No description',
+        noProjectsData: 'No project data',
+        members: 'Members',
+        edit: 'Edit',
+        delete: 'Delete',
+        projectMembersManagement: 'Project members',
+        addMember: 'Add member',
+        noMembersData: 'No member data',
+        ownerRole: 'Owner',
+        adminRole: 'Admin',
+        memberRole: 'Member',
+        updateRole: 'Update role',
+        remove: 'Remove',
+        addProjectMemberTitle: 'Add project member',
+        selectUser: 'User',
+        selectUserPlaceholder: 'Select a user',
+        role: 'Role',
+        selectRolePlaceholder: 'Select a role',
+        updateMemberRoleTitle: 'Update member role',
+        addProjectTitle: 'Add project',
+        editProjectTitle: 'Edit project',
+        projectName: 'Project name',
+        enterProjectName: 'Enter project name',
+        projectDescription: 'Project description',
+        enterProjectDescription: 'Enter project description',
+        projectCredentials: 'Project credentials',
+        projectUrl: 'Project URL',
+        username: 'Username',
+        password: 'Password',
+        keepEmptyPassword: 'Leave blank to keep unchanged',
+        addCredential: 'Add credential',
+        projectId: 'Project ID',
+        creator: 'Created by',
+        createdAt: 'Created at',
+        operations: 'Actions',
+        userId: 'User ID',
+        email: 'Email',
+        joinedAt: 'Joined at',
+        fetchProjectListFailed: 'Failed to fetch project list',
+        fetchProjectListError: 'An error occurred while fetching the project list',
+        fetchProjectDetailFailed: 'Failed to fetch project details',
+        fetchProjectDetailError: 'An error occurred while fetching project details',
+        fetchProjectMembersFailed: 'Failed to fetch project members',
+        fetchProjectMembersError: 'An error occurred while fetching project members',
+        fetchUsersFailed: 'Failed to fetch users',
+        fetchUsersError: 'An error occurred while fetching users',
+        noProjectSelected: 'No project selected',
+        noProjectOrMemberSelected: 'No project or member selected',
+        noUserSelected: 'Select a user',
+        memberAddedSuccess: 'Member added successfully',
+        addMemberFailed: 'Failed to add member',
+        addMemberError: 'An error occurred while adding the member',
+        confirmRemoveTitle: 'Confirm removal',
+        confirmRemoveMemberContent: (username: string) => `Remove member "${username}"?`,
+        memberRemovedSuccess: 'Member removed successfully',
+        removeMemberFailed: 'Failed to remove member',
+        removeMemberError: 'An error occurred while removing the member',
+        roleUpdatedSuccess: 'Role updated successfully',
+        updateRoleFailed: 'Failed to update role',
+        updateRoleError: 'An error occurred while updating the role',
+        confirm: 'Confirm',
+        cancel: 'Cancel',
+        projectNameRequired: 'Enter project name',
+        projectNameMax: 'Project name must be at most 100 characters',
+        projectDescriptionMax: 'Project description must be at most 500 characters',
+        projectCreatedSuccess: 'Project created successfully',
+        createProjectFailed: 'Failed to create project',
+        createProjectError: 'An error occurred while creating the project',
+        projectUpdatedSuccess: 'Project updated successfully',
+        updateProjectFailed: 'Failed to update project',
+        updateProjectError: 'An error occurred while updating the project',
+        confirmDeleteTitle: 'Confirm deletion',
+        confirmDeleteProjectContent: (name: string) => `Delete project "${name}"? This action cannot be undone.`,
+        projectDeletedSuccess: 'Project deleted successfully',
+        deleteProjectFailed: 'Failed to delete project',
+        deleteProjectError: 'An error occurred while deleting the project',
+      }
+    : {
+        restrictedTitle: '访问受限',
+        restrictedDescription: '您当前没有项目管理权限，请联系系统管理员申请相应权限。',
+        contactAdmin: '联系管理员',
+        contactAdminInfo: '请联系系统管理员获取项目管理权限',
+        searchPlaceholder: '搜索项目名称/描述',
+        addProject: '添加项目',
+        noDescription: '无描述',
+        noProjectsData: '暂无项目数据',
+        members: '成员',
+        edit: '编辑',
+        delete: '删除',
+        projectMembersManagement: '项目成员管理',
+        addMember: '添加成员',
+        noMembersData: '暂无成员数据',
+        ownerRole: '拥有者',
+        adminRole: '管理员',
+        memberRole: '成员',
+        updateRole: '修改角色',
+        remove: '移除',
+        addProjectMemberTitle: '添加项目成员',
+        selectUser: '选择用户',
+        selectUserPlaceholder: '请选择用户',
+        role: '角色',
+        selectRolePlaceholder: '请选择角色',
+        updateMemberRoleTitle: '更新成员角色',
+        addProjectTitle: '添加项目',
+        editProjectTitle: '编辑项目',
+        projectName: '项目名称',
+        enterProjectName: '请输入项目名称',
+        projectDescription: '项目描述',
+        enterProjectDescription: '请输入项目描述',
+        projectCredentials: '项目凭据',
+        projectUrl: '项目地址',
+        username: '用户名',
+        password: '密码',
+        keepEmptyPassword: '留空不改',
+        addCredential: '添加凭据',
+        projectId: '项目ID',
+        creator: '创建者',
+        createdAt: '创建时间',
+        operations: '操作',
+        userId: '用户ID',
+        email: '邮箱',
+        joinedAt: '加入时间',
+        fetchProjectListFailed: '获取项目列表失败',
+        fetchProjectListError: '获取项目列表时发生错误',
+        fetchProjectDetailFailed: '获取项目详情失败',
+        fetchProjectDetailError: '获取项目详情时发生错误',
+        fetchProjectMembersFailed: '获取项目成员列表失败',
+        fetchProjectMembersError: '获取项目成员列表时发生错误',
+        fetchUsersFailed: '获取用户列表失败',
+        fetchUsersError: '获取用户列表时发生错误',
+        noProjectSelected: '未选择项目',
+        noProjectOrMemberSelected: '未选择项目或成员',
+        noUserSelected: '请选择用户',
+        memberAddedSuccess: '成员添加成功',
+        addMemberFailed: '添加成员失败',
+        addMemberError: '添加成员时发生错误',
+        confirmRemoveTitle: '确认移除',
+        confirmRemoveMemberContent: (username: string) => `确定要移除成员 "${username}" 吗？`,
+        memberRemovedSuccess: '成员移除成功',
+        removeMemberFailed: '移除成员失败',
+        removeMemberError: '移除成员时发生错误',
+        roleUpdatedSuccess: '角色更新成功',
+        updateRoleFailed: '更新角色失败',
+        updateRoleError: '更新角色时发生错误',
+        confirm: '确定',
+        cancel: '取消',
+        projectNameRequired: '请输入项目名称',
+        projectNameMax: '项目名称长度不能超过100个字符',
+        projectDescriptionMax: '项目描述长度不能超过500个字符',
+        projectCreatedSuccess: '项目创建成功',
+        createProjectFailed: '创建项目失败',
+        createProjectError: '创建项目时发生错误',
+        projectUpdatedSuccess: '项目更新成功',
+        updateProjectFailed: '更新项目失败',
+        updateProjectError: '更新项目时发生错误',
+        confirmDeleteTitle: '确认删除',
+        confirmDeleteProjectContent: (name: string) => `确定要删除项目 "${name}" 吗？此操作不可恢复。`,
+        projectDeletedSuccess: '项目删除成功',
+        deleteProjectFailed: '删除项目失败',
+        deleteProjectError: '删除项目时发生错误',
+      }
+));
+
+const formatDateTime = (dateValue: string) => (
+  new Date(dateValue).toLocaleString(isEnglish.value ? 'en-US' : 'zh-CN')
+);
+
+const projectIdColumnWidth = computed(() => (isEnglish.value ? 110 : 80));
+const projectOperationsColumnWidth = computed(() => (isEnglish.value ? 230 : 180));
+const memberOperationsColumnWidth = computed(() => (isEnglish.value ? 190 : 150));
+
+const getRoleLabel = (role: string) => {
+  if (role === 'owner') return pageText.value.ownerRole;
+  if (role === 'admin') return pageText.value.adminRole;
+  return pageText.value.memberRole;
+};
 
 // 简单的权限检查逻辑
 const checkProjectPermission = () => {
@@ -323,50 +524,47 @@ const checkProjectPermission = () => {
 
 // 联系管理员
 const contactAdmin = () => {
-  Message.info('请联系系统管理员获取项目管理权限');
+  Message.info(pageText.value.contactAdminInfo);
 };
 
 // 表格列定义
-const columns = [
+const columns = computed(() => [
   {
-    title: '项目ID',
+    title: pageText.value.projectId,
     dataIndex: 'id',
-    width: 80,
+    width: projectIdColumnWidth.value,
   },
   {
-    title: '项目名称',
+    title: pageText.value.projectName,
     dataIndex: 'name',
     slotName: 'name',
     width: 200,
   },
   {
-    title: '项目描述',
+    title: pageText.value.projectDescription,
     dataIndex: 'description',
     slotName: 'description',
     width: 300,
   },
   {
-    title: '创建者',
+    title: pageText.value.creator,
     dataIndex: 'creator_detail',
     render: ({ record }: { record: Project }) => {
       return record.creator_detail?.username || '-';
     }
   },
   {
-    title: '创建时间',
+    title: pageText.value.createdAt,
     dataIndex: 'created_at',
-    render: ({ record }: { record: Project }) => {
-      const date = new Date(record.created_at);
-      return date.toLocaleString();
-    }
+    render: ({ record }: { record: Project }) => formatDateTime(record.created_at),
   },
   {
-    title: '操作',
+    title: pageText.value.operations,
     slotName: 'operations',
-    width: 180,
+    width: projectOperationsColumnWidth.value,
     fixed: 'right',
   },
-];
+]);
 
 // 项目数据
 const projectData = ref<Project[]>([]);
@@ -396,13 +594,13 @@ const fetchProjectList = async () => {
       projectData.value = response.data;
       pagination.total = response.total || response.data.length;
     } else {
-      Message.error(response.error || '获取项目列表失败');
+      Message.error(response.error || pageText.value.fetchProjectListFailed);
       projectData.value = [];
       pagination.total = 0;
     }
   } catch (error) {
     console.error('获取项目列表出错:', error);
-    Message.error('获取项目列表时发生错误');
+    Message.error(pageText.value.fetchProjectListError);
     projectData.value = [];
     pagination.total = 0;
   } finally {
@@ -458,43 +656,46 @@ const membersModalVisible = ref(false);
 const membersLoading = ref(false);
 const selectedProject = ref<Project | null>(null);
 const projectMembers = ref<ProjectMember[]>([]);
+const membersModalTitle = computed(() => (
+  `${pageText.value.projectMembersManagement}: ${selectedProject.value?.name || ''}`
+));
 
 // 项目成员表格列定义
-const memberColumns = [
+const memberColumns = computed(() => [
   {
-    title: '用户ID',
+    title: pageText.value.userId,
     dataIndex: 'user',
     width: 80,
   },
   {
-    title: '用户名',
+    title: pageText.value.username,
     dataIndex: 'user_detail.username',
     width: 120,
   },
   {
-    title: '邮箱',
+    title: pageText.value.email,
     dataIndex: 'user_detail.email',
     width: 180,
   },
   {
-    title: '角色',
+    title: pageText.value.role,
     dataIndex: 'role',
     slotName: 'role',
     width: 80,
   },
   {
-    title: '加入时间',
+    title: pageText.value.joinedAt,
     dataIndex: 'joined_at',
     slotName: 'joined_at',
     width: 180,
   },
   {
-    title: '操作',
+    title: pageText.value.operations,
     slotName: 'operations',
-    width: 150,
+    width: memberOperationsColumnWidth.value,
     fixed: 'right',
   }
-];
+]);
 
 // 监听项目成员数据变化
 watch(projectMembers, () => {
@@ -509,11 +710,11 @@ const viewProjectDetail = async (project: Project) => {
       console.log('项目详情:', response.data);
       // 可以在这里添加更多处理逻辑
     } else {
-      Message.error(response.error || '获取项目详情失败');
+      Message.error(response.error || pageText.value.fetchProjectDetailFailed);
     }
   } catch (error) {
     console.error('获取项目详情出错:', error);
-    Message.error('获取项目详情时发生错误');
+    Message.error(pageText.value.fetchProjectDetailError);
   }
 };
 
@@ -538,12 +739,12 @@ const fetchProjectMembers = async (projectId: number) => {
 
       projectMembers.value = response.data;
     } else {
-      Message.error(response.error || '获取项目成员列表失败');
+      Message.error(response.error || pageText.value.fetchProjectMembersFailed);
       projectMembers.value = [];
     }
   } catch (error) {
     console.error('获取项目成员列表出错:', error);
-    Message.error('获取项目成员列表时发生错误');
+    Message.error(pageText.value.fetchProjectMembersError);
     projectMembers.value = [];
   } finally {
     membersLoading.value = false;
@@ -587,12 +788,12 @@ const fetchAvailableUsers = async () => {
         value: user.id
       }));
     } else {
-      Message.error(response.error || '获取用户列表失败');
+      Message.error(response.error || pageText.value.fetchUsersFailed);
       availableUsers.value = [];
     }
   } catch (error) {
     console.error('获取用户列表出错:', error);
-    Message.error('获取用户列表时发生错误');
+    Message.error(pageText.value.fetchUsersError);
     availableUsers.value = [];
   } finally {
     usersLoading.value = false;
@@ -602,12 +803,12 @@ const fetchAvailableUsers = async () => {
 // 处理添加成员
 const handleAddMember = async () => {
   if (!selectedProject.value) {
-    Message.error('未选择项目');
+    Message.error(pageText.value.noProjectSelected);
     return;
   }
 
   if (!addMemberForm.userId) {
-    Message.error('请选择用户');
+    Message.error(pageText.value.noUserSelected);
     return;
   }
 
@@ -619,47 +820,47 @@ const handleAddMember = async () => {
     );
 
     if (response.success) {
-      Message.success('成员添加成功');
+      Message.success(pageText.value.memberAddedSuccess);
       addMemberModalVisible.value = false;
       // 刷新成员列表
       await fetchProjectMembers(selectedProject.value.id);
     } else {
-      Message.error(response.error || '添加成员失败');
+      Message.error(response.error || pageText.value.addMemberFailed);
     }
   } catch (error) {
     console.error('添加成员出错:', error);
-    Message.error('添加成员时发生错误');
+    Message.error(pageText.value.addMemberError);
   }
 };
 
 // 移除成员
 const removeMember = (member: ProjectMember) => {
   if (!selectedProject.value) {
-    Message.error('未选择项目');
+    Message.error(pageText.value.noProjectSelected);
     return;
   }
 
 
 
   Modal.warning({
-    title: '确认移除',
-    content: `确定要移除成员 "${member.user_detail?.username || ''}" 吗？`,
-    okText: '确认',
-    cancelText: '取消',
+    title: pageText.value.confirmRemoveTitle,
+    content: pageText.value.confirmRemoveMemberContent(member.user_detail?.username || ''),
+    okText: pageText.value.remove,
+    cancelText: pageText.value.cancel,
     onOk: async () => {
       try {
         const response = await removeProjectMember(selectedProject.value!.id, member.user);
 
         if (response.success) {
-          Message.success('成员移除成功');
+          Message.success(pageText.value.memberRemovedSuccess);
           // 刷新成员列表
           await fetchProjectMembers(selectedProject.value!.id);
         } else {
-          Message.error(response.error || '移除成员失败');
+          Message.error(response.error || pageText.value.removeMemberFailed);
         }
       } catch (error) {
         console.error('移除成员出错:', error);
-        Message.error('移除成员时发生错误');
+        Message.error(pageText.value.removeMemberError);
       }
     }
   });
@@ -682,7 +883,7 @@ const showUpdateRoleModal = (member: ProjectMember) => {
 // 处理更新角色
 const handleUpdateRole = async () => {
   if (!selectedProject.value || !selectedMember.value) {
-    Message.error('未选择项目或成员');
+    Message.error(pageText.value.noProjectOrMemberSelected);
     return;
   }
 
@@ -694,16 +895,16 @@ const handleUpdateRole = async () => {
     );
 
     if (response.success) {
-      Message.success('角色更新成功');
+      Message.success(pageText.value.roleUpdatedSuccess);
       updateRoleModalVisible.value = false;
       // 刷新成员列表
       await fetchProjectMembers(selectedProject.value.id);
     } else {
-      Message.error(response.error || '更新角色失败');
+      Message.error(response.error || pageText.value.updateRoleFailed);
     }
   } catch (error) {
     console.error('更新角色出错:', error);
-    Message.error('更新角色时发生错误');
+    Message.error(pageText.value.updateRoleError);
   }
 };
 
@@ -717,15 +918,15 @@ const addProjectForm = reactive<CreateProjectRequest>({
 });
 
 // 添加项目表单验证规则
-const addProjectRules = {
+const addProjectRules = computed(() => ({
   name: [
-    { required: true, message: '请输入项目名称' },
-    { maxLength: 100, message: '项目名称长度不能超过100个字符' }
+    { required: true, message: pageText.value.projectNameRequired },
+    { maxLength: 100, message: pageText.value.projectNameMax }
   ],
   description: [
-    { maxLength: 500, message: '项目描述长度不能超过500个字符' }
+    { maxLength: 500, message: pageText.value.projectDescriptionMax }
   ]
-};
+}));
 
 // 添加凭据
 const addCredential = () => {
@@ -785,16 +986,16 @@ const handleAddProject = async () => {
     const response = await createProject(projectData);
 
     if (response.success) {
-      Message.success('项目创建成功');
+      Message.success(pageText.value.projectCreatedSuccess);
       fetchProjectList();
       // 关闭模态框
       addProjectModalVisible.value = false;
     } else {
-      Message.error(response.error || '创建项目失败');
+      Message.error(response.error || pageText.value.createProjectFailed);
     }
   } catch (error) {
     console.error('创建项目出错:', error);
-    Message.error('创建项目时发生错误');
+    Message.error(pageText.value.createProjectError);
   }
 };
 
@@ -809,15 +1010,15 @@ const editProjectForm = reactive<UpdateProjectRequest & { id: number }>({
 });
 
 // 编辑项目表单验证规则
-const editProjectRules = {
+const editProjectRules = computed(() => ({
   name: [
-    { required: true, message: '请输入项目名称' },
-    { maxLength: 100, message: '项目名称长度不能超过100个字符' }
+    { required: true, message: pageText.value.projectNameRequired },
+    { maxLength: 100, message: pageText.value.projectNameMax }
   ],
   description: [
-    { maxLength: 500, message: '项目描述长度不能超过500个字符' }
+    { maxLength: 500, message: pageText.value.projectDescriptionMax }
   ]
-};
+}));
 
 // 编辑凭据
 const addEditCredential = () => {
@@ -886,15 +1087,15 @@ const handleEditProject = async () => {
     const response = await updateProject(editProjectForm.id, projectData);
 
     if (response.success) {
-      Message.success('项目更新成功');
+      Message.success(pageText.value.projectUpdatedSuccess);
       fetchProjectList();
       editProjectModalVisible.value = false;
     } else {
-      Message.error(response.error || '更新项目失败');
+      Message.error(response.error || pageText.value.updateProjectFailed);
     }
   } catch (error) {
     console.error('更新项目出错:', error);
-    Message.error('更新项目时发生错误');
+    Message.error(pageText.value.updateProjectError);
   }
 };
 
@@ -906,23 +1107,23 @@ const deleteProject = (project: Project, event?: Event) => {
   }
 
   Modal.warning({
-    title: '确认删除',
-    content: `确定要删除项目 "${project.name}" 吗？此操作不可恢复。`,
-    okText: '确认',
-    cancelText: '取消',
+    title: pageText.value.confirmDeleteTitle,
+    content: pageText.value.confirmDeleteProjectContent(project.name),
+    okText: pageText.value.delete,
+    cancelText: pageText.value.cancel,
     onOk: async () => {
       try {
         const response = await deleteProjectService(project.id);
         if (response.success) {
-          Message.success('项目删除成功');
+          Message.success(pageText.value.projectDeletedSuccess);
           // 刷新项目列表
           fetchProjectList();
         } else {
-          Message.error(response.error || '删除项目失败');
+          Message.error(response.error || pageText.value.deleteProjectFailed);
         }
       } catch (error) {
         console.error('删除项目出错:', error);
-        Message.error('删除项目时发生错误');
+        Message.error(pageText.value.deleteProjectError);
       }
     }
   });
@@ -1052,6 +1253,25 @@ const deleteProject = (project: Project, event?: Event) => {
 
 :deep(.arco-table-td.operations-cell) {
   padding: 8px 4px;
+}
+
+:deep(.project-operations.arco-space),
+:deep(.member-operations.arco-space) {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: flex-start;
+  gap: 4px;
+}
+
+:deep(.project-operations.arco-space .arco-space-item),
+:deep(.member-operations.arco-space .arco-space-item) {
+  margin-right: 0 !important;
+}
+
+:deep(.project-operations .arco-btn),
+:deep(.member-operations .arco-btn) {
+  white-space: nowrap;
 }
 
 :deep(.arco-btn-size-mini) {

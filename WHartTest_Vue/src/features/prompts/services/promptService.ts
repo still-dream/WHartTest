@@ -452,13 +452,18 @@ export async function getPromptByType(type: string): Promise<ApiResponse<UserPro
 /**
  * 初始化用户提示词
  * @param forceUpdate 是否强制更新已存在的提示词
+ * @param language 提示词语言 'zh' | 'en'，默认 'zh'
  */
-export async function initializeUserPrompts(forceUpdate: boolean = false): Promise<ApiResponse<any>> {
+export async function initializeUserPrompts(
+  forceUpdate: boolean = false,
+  language: 'zh' | 'en' = 'zh'
+): Promise<ApiResponse<any>> {
   const response = await request<any>({
     url: `${API_BASE_URL}/initialize/`,
     method: 'POST',
     data: {
-      force_update: forceUpdate
+      force_update: forceUpdate,
+      language
     }
   });
 

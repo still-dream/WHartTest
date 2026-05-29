@@ -83,6 +83,7 @@
 import { h, ref, computed, watch, onMounted } from 'vue';
 import { useRouter } from 'vue-router';
 import { useProjectStore } from '@/store/projectStore';
+import { useAppI18n } from '@/composables/useAppI18n';
 import type { TestCase } from '@/services/testcaseService';
 import type { TestCaseModule } from '@/services/testcaseModuleService';
 import type { TreeNodeData } from '@arco-design/web-vue';
@@ -148,6 +149,55 @@ const getTestTypePrompt = (testTypes: string[]): string => {
 const router = useRouter();
 const projectStore = useProjectStore();
 const currentProjectId = computed(() => projectStore.currentProjectId || null);
+const { isEnglish } = useAppI18n();
+
+const taskText = computed(() => (
+  isEnglish.value
+    ? {
+        loadModulesFailed: 'Failed to load module data',
+        loadModulesError: 'An error occurred while loading module data',
+        invalidProjectId: 'No valid project ID',
+        missingProjectId: 'Missing valid project ID',
+        generationStarted: 'Generation started',
+        generationStartedContent: 'Case generation task has started processing in the background.',
+        titleGenerationStarted: 'Title generation started',
+        titleGenerationStartedContent: 'Case title generation task has started processing in the background.',
+        completionStarted: 'Completion started',
+        completionStartedContent: 'Case completion task has started processing in the background.',
+        knowledgeGenerationStarted: 'Knowledge generation started',
+        knowledgeGenerationStartedContent: 'Knowledge-based case generation task has started processing in the background.',
+        viewGenerationProgress: 'Click to view generation progress',
+        executionStarted: 'Execution started',
+        executionStartedContent: 'Case execution task has started processing in the background.',
+        executionStartedWithGenerationContent: 'Case execution task has started processing in the background. UI automation case generation will continue after execution is completed.',
+        viewExecutionProgress: 'Click to view execution progress',
+        optimizationStarted: 'Optimization started',
+        optimizationStartedContent: 'Case optimization task has started processing in the background.',
+        viewOptimizationProgress: 'Click to view optimization progress',
+      }
+    : {
+        loadModulesFailed: '加载模块数据失败',
+        loadModulesError: '加载模块数据时发生错误',
+        invalidProjectId: '没有有效的项目ID',
+        missingProjectId: '缺少有效的项目ID',
+        generationStarted: '生成已开始',
+        generationStartedContent: '用例生成任务已在后台开始处理。',
+        titleGenerationStarted: '标题生成已开始',
+        titleGenerationStartedContent: '用例标题生成任务已在后台开始处理。',
+        completionStarted: '补全已开始',
+        completionStartedContent: '用例补全任务已在后台开始处理。',
+        knowledgeGenerationStarted: '知识生成已开始',
+        knowledgeGenerationStartedContent: '用例知识生成任务已在后台开始处理。',
+        viewGenerationProgress: '点此查看生成过程',
+        executionStarted: '执行已开始',
+        executionStartedContent: '测试用例执行任务已在后台开始处理。',
+        executionStartedWithGenerationContent: '测试用例执行任务已在后台开始处理，执行完成后将继续生成 UI 自动化用例。',
+        viewExecutionProgress: '点此查看执行进度',
+        optimizationStarted: '优化已开始',
+        optimizationStartedContent: '用例优化任务已在后台开始处理。',
+        viewOptimizationProgress: '点此查看优化过程',
+      }
+));
 
 const viewMode = ref<'list' | 'add' | 'edit' | 'view'>('list');
 const selectedModuleId = ref<number | null>(null);
@@ -238,10 +288,10 @@ const fetchAllModulesForForm = async () => {
     } else {
       allModules.value = [];
       moduleTreeForForm.value = [];
-      Message.error(response.error || '加载模块数据失败');
+      Message.error(response.error || taskText.value.loadModulesFailed);
     }
   } catch (error) {
-    Message.error('加载模块数据时发生错误');
+    Message.error(taskText.value.loadModulesError);
     allModules.value = [];
     moduleTreeForForm.value = [];
   }
@@ -391,7 +441,7 @@ const handleGenerateCasesSubmit = async (formData: {
   testTypes: string[],
 }) => {
   if (!currentProjectId.value) {
-    Message.error('没有有效的项目ID');
+    Message.error(taskText.value.invalidProjectId);
     return;
   }
 
@@ -425,8 +475,8 @@ ${mod.content}
 请注意：生成的测试用例最终需要被保存在 **项目ID "${currentProjectId.value}"** 下的 **测试用例模块ID "${formData.testCaseModuleId}"** 中。
 (此需求模块来源于需求文档ID: ${formData.requirementDocumentId})
       `.trim();
-      notificationTitle = '生成已开始';
-      notificationContent = '用例生成任务已在后台开始处理。';
+      notificationTitle = taskText.value.generationStarted;
+      notificationContent = taskText.value.generationStartedContent;
       notificationIdPrefix = 'gen-case';
       break;
 
@@ -451,8 +501,8 @@ ${mod.content}
 - 生成的测试用例最终需要被保存在 **项目ID "${currentProjectId.value}"** 下的 **测试用例模块ID "${formData.testCaseModuleId}"** 中
 (此需求模块来源于需求文档ID: ${formData.requirementDocumentId})
       `.trim();
-      notificationTitle = '标题生成已开始';
-      notificationContent = '用例标题生成任务已在后台开始处理。';
+      notificationTitle = taskText.value.titleGenerationStarted;
+      notificationContent = taskText.value.titleGenerationStartedContent;
       notificationIdPrefix = 'gen-title';
       break;
 
@@ -472,8 +522,8 @@ ${formData.selectedTestCases.map(tc => `- 用例ID: ${tc.id}, 名称: ${tc.name}
 
 项目ID: ${currentProjectId.value}
       `.trim();
-      notificationTitle = '补全已开始';
-      notificationContent = '用例补全任务已在后台开始处理。';
+      notificationTitle = taskText.value.completionStarted;
+      notificationContent = taskText.value.completionStartedContent;
       notificationIdPrefix = 'kb-complete';
       break;
 
@@ -498,8 +548,8 @@ ${formData.selectedModules.length > 0 ? formData.selectedModules.map((mod, idx) 
 
 项目ID: ${currentProjectId.value}
       `.trim();
-      notificationTitle = '知识生成已开始';
-      notificationContent = '用例知识生成任务已在后台开始处理。';
+      notificationTitle = taskText.value.knowledgeGenerationStarted;
+      notificationContent = taskText.value.knowledgeGenerationStartedContent;
       notificationIdPrefix = 'kb-generate';
       break;
   }
@@ -524,13 +574,13 @@ ${formData.selectedModules.length > 0 ? formData.selectedModules.map((mod, idx) 
     notificationTitle,
     notificationContent,
     notificationIdPrefix,
-    '点此查看生成过程'
+    taskText.value.viewGenerationProgress
   );
 };
 
 const handleExecuteTestCase = (testCase: TestCase) => {
   if (!currentProjectId.value) {
-    Message.error('缺少有效的项目ID');
+    Message.error(taskText.value.missingProjectId);
     return;
   }
   
@@ -576,15 +626,15 @@ const handleExecuteConfirm = (options: { generatePlaywrightScript: boolean }) =>
   };
 
   const notificationContent = options.generatePlaywrightScript
-    ? '测试用例执行任务已在后台开始处理，完成后将自动生成 UI 自动化用例。'
-    : '测试用例执行任务已在后台开始处理。';
+    ? taskText.value.executionStartedWithGenerationContent
+    : taskText.value.executionStartedContent;
 
   startAutomationTask(
     requestData,
-    '执行已开始',
+    taskText.value.executionStarted,
     notificationContent,
     'exec-case',
-    '点此查看执行进度'
+    taskText.value.viewExecutionProgress
   );
   
   pendingExecuteTestCase.value = null;
@@ -597,7 +647,7 @@ const handleRequestOptimization = (testCase: TestCase) => {
 
 const handleOptimizationSubmit = async (data: { testCase: TestCase; suggestion: string }) => {
   if (!currentProjectId.value) {
-    Message.error('没有有效的项目ID');
+    Message.error(taskText.value.invalidProjectId);
     return;
   }
 
@@ -651,10 +701,10 @@ ${data.suggestion || '请根据测试最佳实践进行全面优化'}
 
   startAutomationTask(
     requestData,
-    '优化已开始',
-    '用例优化任务已在后台开始处理。',
+    taskText.value.optimizationStarted,
+    taskText.value.optimizationStartedContent,
     'optimize-case',
-    '点此查看优化过程'
+    taskText.value.viewOptimizationProgress
   );
 
   // 刷新列表以显示状态变化
@@ -710,9 +760,11 @@ onMounted(() => {
   overflow: hidden;
   display: flex;
   flex-direction: column;
-  background-color: #fff;
+  background-color: var(--theme-card-bg);
+  color: var(--theme-page-text);
+  border: 1px solid var(--theme-card-border);
   border-radius: 8px;
-  box-shadow: 4px 0 10px rgba(0, 0, 0, 0.2), 0 4px 10px rgba(0, 0, 0, 0.2), 0 0 10px rgba(0, 0, 0, 0.15);
+  box-shadow: var(--theme-card-shadow);
   padding: 20px; /* 添加内边距，与其他卡片保持一致 */
 }
 

@@ -5,9 +5,9 @@
       <div class="header-left">
         <a-button type="text" @click="goBack" class="back-button">
           <template #icon><icon-arrow-left /></template>
-          返回列表
+          {{ pageText.backToList }}
         </a-button>
-        <h1 class="page-title">{{ document?.title || '文档详情' }}</h1>
+        <h1 class="page-title">{{ document?.title || pageText.documentDetails }}</h1>
         <a-tag :color="getStatusColor(document?.status)" class="status-tag">
           {{ getStatusText(document?.status) }}
         </a-tag>
@@ -29,7 +29,7 @@
           :loading="docxEditorLoading"
         >
           <template #icon><icon-edit /></template>
-          进入在线编辑
+          {{ pageText.openOnlineEditor }}
         </a-button>
 
         <!-- 上传状态优先拆分 -->
@@ -40,7 +40,7 @@
           :loading="splitLoading"
         >
           <template #icon><icon-robot /></template>
-          模块拆分
+          {{ pageText.splitModules }}
         </a-button>
 
         <!-- 用户调整状态：显示确认按钮 -->
@@ -51,7 +51,7 @@
           :loading="splitLoading"
         >
           <template #icon><icon-check-circle /></template>
-          确认模块拆分
+          {{ pageText.confirmModuleSplit }}
         </a-button>
 
         <!-- 待评审状态：显示开始评审按钮 -->
@@ -62,7 +62,7 @@
           :loading="reviewLoading"
         >
           <template #icon><icon-check-circle /></template>
-          开始评审
+          {{ pageText.startReview }}
         </a-button>
 
         <!-- 评审完成状态：显示查看报告和重新评审按钮 -->
@@ -72,7 +72,7 @@
             @click="viewReport"
           >
             <template #icon><icon-file /></template>
-            查看报告
+            {{ pageText.viewReport }}
           </a-button>
           <a-button
             type="outline"
@@ -80,7 +80,7 @@
             :loading="reviewLoading"
           >
             <template #icon><icon-refresh /></template>
-            重新评审
+            {{ pageText.restartReview }}
           </a-button>
         </a-space>
 
@@ -92,50 +92,51 @@
           :loading="reviewLoading"
         >
           <template #icon><icon-refresh /></template>
-          重新评审
+          {{ pageText.restartReview }}
         </a-button>
+
       </div>
     </div>
 
     <!-- 文档信息卡片 -->
     <div class="info-section">
-      <a-card title="文档信息" class="info-card">
+      <a-card :title="pageText.documentInfo" class="info-card">
         <div class="info-grid">
           <div class="info-item">
-            <span class="label">文档类型：</span>
+            <span class="label">{{ pageText.documentType }}:</span>
             <a-tag color="blue">{{ getTypeText(document?.document_type) }}</a-tag>
           </div>
           <div class="info-item">
-            <span class="label">字数：</span>
-            <span>{{ document?.word_count || 0 }} 字</span>
+            <span class="label">{{ pageText.wordCount }}:</span>
+            <span>{{ formatWordCount(document?.word_count || 0) }}</span>
           </div>
           <div class="info-item">
-            <span class="label">页数：</span>
-            <span>{{ document?.page_count || 0 }} 页</span>
+            <span class="label">{{ pageText.pageCount }}:</span>
+            <span>{{ formatPageCount(document?.page_count || 0) }}</span>
           </div>
           <div class="info-item">
-            <span class="label">模块数：</span>
-            <span>{{ document?.modules_count || 0 }} 个</span>
+            <span class="label">{{ pageText.moduleCount }}:</span>
+            <span>{{ formatModuleCount(document?.modules_count || 0) }}</span>
           </div>
           <div v-if="document?.has_images" class="info-item">
-            <span class="label">图片：</span>
-            <a-tag color="arcoblue">{{ document?.image_count || 0 }} 张</a-tag>
+            <span class="label">{{ pageText.images }}:</span>
+            <a-tag color="arcoblue">{{ formatImageCount(document?.image_count || 0) }}</a-tag>
           </div>
           <div class="info-item">
-            <span class="label">上传者：</span>
+            <span class="label">{{ pageText.uploadedBy }}:</span>
             <span>{{ document?.uploader_name }}</span>
           </div>
           <div class="info-item">
-            <span class="label">上传时间：</span>
+            <span class="label">{{ pageText.uploadedAt }}:</span>
             <span>{{ formatDateTime(document?.uploaded_at) }}</span>
           </div>
           <div class="info-item">
-            <span class="label">更新时间：</span>
+            <span class="label">{{ pageText.updatedAt }}:</span>
             <span>{{ formatDateTime(document?.updated_at) }}</span>
           </div>
         </div>
         <div v-if="document?.description" class="description">
-          <span class="label">描述：</span>
+          <span class="label">{{ pageText.description }}:</span>
           <a-tooltip :content="document.description" position="top">
             <p class="description-text">{{ document.description }}</p>
           </a-tooltip>
@@ -148,8 +149,8 @@
             :show-icon="true"
             :closable="false"
           >
-            <template #title>请先进行拆分</template>
-            <template #content>上传完成后请使用 AI 拆分生成模块，用例生成和后续评审依赖这些模块。</template>
+            <template #title>{{ pageText.splitFirstTitle }}</template>
+            <template #content>{{ pageText.splitFirstContent }}</template>
           </a-alert>
         </div>
       </a-card>
@@ -157,29 +158,29 @@
 
     <!-- 工作流程指示器 -->
     <div v-if="document" class="workflow-indicator">
-      <a-card title="📋 评审工作流程" class="workflow-card">
+      <a-card :title="pageText.reviewWorkflowTitle" class="workflow-card">
         <a-steps :current="getCurrentStep(document.status)" size="small">
-          <a-step title="文档上传" description="上传需求文档">
+          <a-step :title="pageText.workflowDocumentUpload" :description="pageText.workflowDocumentUploadDesc">
             <template #icon>
               <icon-file />
             </template>
           </a-step>
-          <a-step title="模块拆分" description="拆分文档生成模块">
+          <a-step :title="pageText.workflowModuleSplit" :description="pageText.workflowModuleSplitDesc">
             <template #icon>
               <icon-scissor />
             </template>
           </a-step>
-          <a-step title="用户调整" description="确认模块拆分结果（如需要）">
+          <a-step :title="pageText.workflowUserReview" :description="pageText.workflowUserReviewDesc">
             <template #icon>
               <icon-edit />
             </template>
           </a-step>
-          <a-step title="需求评审" description="AI分析需求质量">
+          <a-step :title="pageText.workflowRequirementReview" :description="pageText.workflowRequirementReviewDesc">
             <template #icon>
               <icon-check-circle />
             </template>
           </a-step>
-          <a-step title="评审完成" description="查看评审报告">
+          <a-step :title="pageText.workflowCompleted" :description="pageText.workflowCompletedDesc">
             <template #icon>
               <icon-file />
             </template>
@@ -190,10 +191,11 @@
 
 
     <div v-if="showLatestDocumentContent" class="modules-section">
+
       <a-card class="modules-card">
         <template #title>
           <div class="modules-header">
-            <span>最新文档内容</span>
+            <span>{{ pageText.latestDocumentContent }}</span>
           </div>
         </template>
         <div
@@ -208,7 +210,7 @@
       <a-card class="modules-card">
         <template #title>
           <div class="modules-header">
-            <span>{{ document.status === 'review_completed' ? '模块详情' : '模块管理' }} ({{ document.modules.length }}个)</span>
+            <span>{{ getModulesHeaderTitle(document.status, document.modules.length) }}</span>
             <div class="modules-actions">
               <a-button 
                 v-if="document.status === 'user_reviewing'"
@@ -216,7 +218,7 @@
                 size="small"
                 @click="confirmModules"
               >
-                确认模块划分
+                {{ pageText.confirmModuleSegmentation }}
               </a-button>
               <a-button 
                 v-if="document.status === 'user_reviewing'"
@@ -225,7 +227,7 @@
                 @click="addModule"
               >
                 <template #icon><icon-plus /></template>
-                添加模块
+                {{ pageText.addModule }}
               </a-button>
             </div>
           </div>
@@ -236,16 +238,16 @@
           <!-- 模块导航栏 -->
           <div v-if="document.status === 'user_reviewing'" class="modules-toolbar">
             <div class="toolbar-left">
-              <span class="modules-count">共 {{ sortedModules.length }} 个模块</span>
+              <span class="modules-count">{{ pageText.totalModules(sortedModules.length) }}</span>
             </div>
             <div class="toolbar-right">
               <a-button size="small" @click="addModule">
                 <template #icon><icon-plus /></template>
-                添加模块
+                {{ pageText.addModule }}
               </a-button>
               <a-button size="small" @click="mergeSelectedModules" :disabled="selectedModules.length < 2">
                 <template #icon><icon-link /></template>
-                合并选中
+                {{ pageText.mergeSelected }}
               </a-button>
             </div>
           </div>
@@ -300,13 +302,13 @@
                 <a-textarea
                   v-model="editingContent"
                   :auto-size="{ minRows: 3 }"
-                  placeholder="请输入模块内容..."
+                  :placeholder="pageText.enterModuleContent"
                   @blur="saveContent(module)"
                   @keyup.ctrl.enter="saveContent(module)"
                   @keyup.esc="cancelContentEdit"
                   ref="contentTextarea"
                 />
-                <div class="edit-hint">Ctrl+Enter 保存，Esc 取消</div>
+                <div class="edit-hint">{{ pageText.editHint }}</div>
               </div>
 
               <!-- 内容显示区域 -->
@@ -321,7 +323,7 @@
                 v-html="renderMarkdownWithImages(module.content)"
               />
               <div v-else class="segment-collapsed-placeholder">
-                点击模块标题展开内容
+                {{ pageText.expandModuleHint }}
               </div>
             </div>
           </div>
@@ -329,14 +331,14 @@
           <!-- 标题编辑模态框 -->
           <a-modal
             v-model:visible="titleEditVisible"
-            title="编辑模块标题"
+            :title="pageText.editModuleTitle"
             width="400px"
             @ok="saveTitleModal"
             @cancel="cancelTitleEdit"
           >
             <a-input
               v-model="editingTitle"
-              placeholder="请输入模块标题"
+              :placeholder="pageText.enterModuleTitle"
               @keyup.enter="saveTitleModal"
             />
           </a-modal>
@@ -345,7 +347,7 @@
         <!-- 选中模块信息栏 -->
         <div v-if="selectedModules.length > 0 && document.status === 'user_reviewing'" class="selection-info">
           <div class="selection-details">
-            已选择 {{ selectedModules.length }} 个模块
+            {{ pageText.selectedModules(selectedModules.length) }}
             <span class="selected-titles">
               {{ getSelectedModuleTitles() }}
             </span>
@@ -353,13 +355,13 @@
           <div class="selection-actions">
             <a-button size="small" @click="mergeSelectedModules">
               <template #icon><icon-link /></template>
-              合并模块
+              {{ pageText.mergeModules }}
             </a-button>
             <a-button size="small" status="danger" @click="deleteSelectedModules">
               <template #icon><icon-delete /></template>
-              删除选中
+              {{ pageText.deleteSelected }}
             </a-button>
-            <a-button size="small" @click="clearSelection">清除选择</a-button>
+            <a-button size="small" @click="clearSelection">{{ pageText.clearSelection }}</a-button>
           </div>
         </div>
       </a-card>
@@ -367,7 +369,7 @@
 
     <!-- 空状态 -->
     <div v-else-if="!loading" class="empty-state">
-      <a-empty description="暂无模块数据">
+      <a-empty :description="pageText.noModuleData">
         <template #image>
           <icon-file />
         </template>
@@ -379,7 +381,7 @@
           :loading="splitLoading"
         >
           <template #icon><icon-robot /></template>
-          模块拆分
+          {{ pageText.splitModules }}
         </a-button>
 
       </a-empty>
@@ -393,7 +395,7 @@
     <!-- 模块编辑模态框 -->
     <a-modal
       v-model:visible="editModalVisible"
-      title="编辑模块"
+      :title="pageText.editModule"
       width="800px"
       @ok="saveModule"
       @cancel="cancelModalEdit"
@@ -403,17 +405,17 @@
         :model="editForm"
         layout="vertical"
       >
-        <a-form-item label="模块标题" field="title">
-          <a-input v-model="editForm.title" placeholder="请输入模块标题" />
+        <a-form-item :label="pageText.moduleTitle" field="title">
+          <a-input v-model="editForm.title" :placeholder="pageText.enterModuleTitle" />
         </a-form-item>
-        <a-form-item label="模块内容" field="content">
+        <a-form-item :label="pageText.moduleContent" field="content">
           <a-textarea
             v-model="editForm.content"
-            placeholder="请输入模块内容"
+            :placeholder="pageText.enterModuleContentPlain"
             :auto-size="{ minRows: 5 }"
           />
         </a-form-item>
-        <a-form-item label="排序" field="order">
+        <a-form-item :label="pageText.order" field="order">
           <a-input-number v-model="editForm.order" :min="1" />
         </a-form-item>
       </a-form>
@@ -432,24 +434,23 @@
     <!-- 评审配置模态框 -->
     <a-modal
       v-model:visible="reviewConfigVisible"
-      :title="reviewAction === 'restart' ? '重新评审配置' : '评审配置'"
+      :title="reviewAction === 'restart' ? pageText.restartReviewConfig : pageText.reviewConfigTitle"
       @ok="confirmReview"
       @cancel="reviewConfigVisible = false"
     >
       <a-alert v-if="reviewAction === 'restart'" type="warning" style="margin-bottom: 16px">
-        重新评审将创建新的评审报告，原有报告将保留。
+        {{ pageText.restartReviewHint }}
       </a-alert>
       
       <a-form :model="reviewConfig" layout="vertical">
-        <a-form-item label="并发分析数量" field="max_workers">
-          <a-select v-model="reviewConfig.max_workers" placeholder="请选择并发数量">
-            <a-option :value="1">1 (串行分析 - 最慢但最稳定)</a-option>
-            <a-option :value="2">2 (低并发 - 适合低配环境)</a-option>
-            <a-option :value="3">3 (推荐 - 平衡速度与稳定性)</a-option>
-            <a-option :value="5">5 (高并发 - 速度最快)</a-option>
+        <a-form-item :label="pageText.concurrentAnalyses" field="max_workers">
+          <a-select v-model="reviewConfig.max_workers" :placeholder="pageText.selectConcurrency">
+            <a-option v-for="option in reviewWorkerOptions" :key="option.value" :value="option.value">
+              {{ option.label }}
+            </a-option>
           </a-select>
           <template #help>
-            并发数量决定了同时进行的专项分析任务数。如果遇到API限流错误，请尝试降低并发数。
+            {{ pageText.reviewConcurrencyHelp }}
           </template>
         </a-form-item>
       </a-form>
@@ -484,9 +485,10 @@ import type {
   DocumentType,
   SplitModulesRequest
 } from '../types';
-import { DocumentStatusDisplay, DocumentTypeDisplay } from '../types';
 import SplitOptionsModal from '../components/SplitOptionsModal.vue';
+import { useAppI18n } from '@/composables/useAppI18n';
 import { useProjectStore } from '@/store/projectStore';
+import { translateLegacyText, type AppLocale } from '@/i18n';
 
 // 路由
 const route = useRoute();
@@ -494,6 +496,289 @@ const router = useRouter();
 
 // 状态仓库
 const projectStore = useProjectStore();
+const { isEnglish } = useAppI18n();
+const currentLocale = computed<AppLocale>(() => (isEnglish.value ? 'en-US' : 'zh-CN'));
+
+const localizeBackendText = (value?: string, fallback = '') => {
+  if (!value) return fallback;
+  return translateLegacyText(value, currentLocale.value);
+};
+
+const pageText = computed(() => (
+  isEnglish.value
+    ? {
+        backToList: 'Back to list',
+        documentDetails: 'Document details',
+        openOnlineEditor: 'Open online editor',
+        docxEditorNotIntegrated: 'The online editor is not integrated yet. Configure the docx-editor connection first.',
+        docxEditorOpenFailed: 'Failed to open the online editor',
+        splitModules: 'Split modules',
+        confirmModuleSplit: 'Confirm split',
+        startReview: 'Start review',
+        viewReport: 'View report',
+        restartReview: 'Restart review',
+        documentInfo: 'Document info',
+        documentType: 'Document type',
+        wordCount: 'Words',
+        pageCount: 'Pages',
+        moduleCount: 'Modules',
+        images: 'Images',
+        uploadedBy: 'Uploaded by',
+        uploadedAt: 'Uploaded at',
+        updatedAt: 'Updated at',
+        description: 'Description',
+        splitFirstTitle: 'Split the document first',
+        splitFirstContent: 'After upload, use AI splitting to generate modules. Case generation and follow-up review depend on these modules.',
+        reviewWorkflowTitle: 'Review workflow',
+        workflowDocumentUpload: 'Document upload',
+        workflowDocumentUploadDesc: 'Upload requirement documents',
+        workflowModuleSplit: 'Module split',
+        workflowModuleSplitDesc: 'Split the document into modules',
+        workflowUserReview: 'User review',
+        workflowUserReviewDesc: 'Confirm the split result when needed',
+        workflowRequirementReview: 'Requirement review',
+        workflowRequirementReviewDesc: 'AI analyzes requirement quality',
+        workflowCompleted: 'Completed',
+        workflowCompletedDesc: 'View the review report',
+        latestDocumentContent: 'Latest document content',
+        modulesDetails: 'Module details',
+        modulesManagement: 'Module management',
+        confirmModuleSegmentation: 'Confirm segmentation',
+        addModule: 'Add module',
+        totalModules: (count: number) => `${count} ${count === 1 ? 'module' : 'modules'} total`,
+        mergeSelected: 'Merge selected',
+        enterModuleContent: 'Enter module content...',
+        editHint: 'Ctrl+Enter to save, Esc to cancel',
+        expandModuleHint: 'Click the module title to expand the content',
+        editModuleTitle: 'Edit module title',
+        enterModuleTitle: 'Enter module title',
+        selectedModules: (count: number) => `${count} module${count === 1 ? '' : 's'} selected`,
+        mergeModules: 'Merge modules',
+        deleteSelected: 'Delete selected',
+        clearSelection: 'Clear selection',
+        noModuleData: 'No module data',
+        editModule: 'Edit module',
+        moduleTitle: 'Module title',
+        moduleContent: 'Module content',
+        enterModuleContentPlain: 'Enter module content',
+        order: 'Order',
+        restartReviewConfig: 'Restart review configuration',
+        reviewConfigTitle: 'Review configuration',
+        restartReviewHint: 'Restarting the review creates a new report and keeps previous reports.',
+        concurrentAnalyses: 'Concurrent analyses',
+        selectConcurrency: 'Select concurrency',
+        reviewConcurrencyHelp: 'This controls how many analysis tasks run at the same time. Lower it if you hit API rate limits.',
+        missingDocumentId: 'Document ID is missing',
+        loadDocumentFailed: 'Failed to load document details',
+        splitBeforeReview: 'Split the document into modules before starting the review',
+        splitCompleted: (level: string) => `Split completed at ${level.toUpperCase()} level`,
+        splitFailed: 'AI module split failed',
+        modulesConfirmed: 'Module split confirmed. You can start the review now.',
+        confirmModuleSplitFailed: 'Failed to confirm module split',
+        reviewStarted: (workers: number, isRestart: boolean) => `${isRestart ? 'Review restart' : 'Review'} started (concurrency: ${workers}), now running in the background...`,
+        reviewStartFailed: 'Failed to start review',
+        processingText: 'Processing...',
+        reviewCompletedMessage: 'Requirement review completed',
+        reviewFailedMessage: 'Requirement review failed. Please try again.',
+        reviewTimeout: 'The review is taking longer than expected. Refresh the page later to check the result.',
+        fetchReviewStatusFailed: 'Failed to fetch review status',
+        enterModuleTitleWarning: 'Enter a module title',
+        moduleUpdated: 'Module updated',
+        moduleUpdateFailed: 'Failed to update module',
+        moduleCreated: 'Module created',
+        moduleCreateFailed: 'Failed to create module',
+        saveModuleFailed: 'Failed to save module',
+        moveModuleSuccess: (direction: 'up' | 'down') => `Module moved ${direction === 'up' ? 'up' : 'down'}`,
+        moduleDeleted: 'Module deleted',
+        titleRequired: 'Enter a title',
+        titleUpdated: 'Title updated',
+        titleUpdateFailed: 'Failed to update title',
+        contentUpdated: 'Content updated',
+        contentUpdateFailed: 'Failed to update content',
+        splitFeatureInDev: 'Module splitting is under development...',
+        selectAtLeastTwoModules: 'Select at least two modules to merge',
+        mergeModuleDefaultTitle: 'Merged module',
+        mergeModulesTitle: 'Merge modules',
+        mergeModulesPrompt: (count: number) => `You are merging ${count} modules. Enter the merged title:`,
+        enterMergedTitle: 'Enter the merged module title',
+        confirmMerge: 'Confirm merge',
+        mergeSuccess: (count: number) => `Merged ${count} modules`,
+        mergeFailed: 'Failed to merge modules',
+        selectModulesToDelete: 'Select modules to delete',
+        deleteModulesTitle: 'Confirm deletion',
+        deleteModulesContent: (count: number) => `Delete ${count} selected modules? This action cannot be undone.`,
+        deleteModulesConfirm: 'Delete',
+        deleteModuleFailed: 'Failed to delete module',
+        deleteModulesSuccess: (count: number) => `Deleted ${count} modules`,
+        syncingContent: 'Syncing edited content...',
+        contentSynced: 'Content synced',
+      }
+    : {
+        backToList: '返回列表',
+        documentDetails: '文档详情',
+        openOnlineEditor: '进入在线编辑',
+        docxEditorNotIntegrated: '在线编辑功能未接入，请先配置 docx-editor 连接。',
+        docxEditorOpenFailed: '打开在线编辑失败',
+        splitModules: '模块拆分',
+        confirmModuleSplit: '确认模块拆分',
+        startReview: '开始评审',
+        viewReport: '查看报告',
+        restartReview: '重新评审',
+        documentInfo: '文档信息',
+        documentType: '文档类型',
+        wordCount: '字数',
+        pageCount: '页数',
+        moduleCount: '模块数',
+        images: '图片',
+        uploadedBy: '上传者',
+        uploadedAt: '上传时间',
+        updatedAt: '更新时间',
+        description: '描述',
+        splitFirstTitle: '请先进行拆分',
+        splitFirstContent: '上传完成后请使用 AI 拆分生成模块，用例生成和后续评审依赖这些模块。',
+        reviewWorkflowTitle: '📋 评审工作流程',
+        workflowDocumentUpload: '文档上传',
+        workflowDocumentUploadDesc: '上传需求文档',
+        workflowModuleSplit: '模块拆分',
+        workflowModuleSplitDesc: '拆分文档生成模块',
+        workflowUserReview: '用户调整',
+        workflowUserReviewDesc: '确认模块拆分结果（如需要）',
+        workflowRequirementReview: '需求评审',
+        workflowRequirementReviewDesc: 'AI分析需求质量',
+        workflowCompleted: '评审完成',
+        workflowCompletedDesc: '查看评审报告',
+        latestDocumentContent: '最新文档内容',
+        modulesDetails: '模块详情',
+        modulesManagement: '模块管理',
+        confirmModuleSegmentation: '确认模块划分',
+        addModule: '添加模块',
+        totalModules: (count: number) => `共 ${count} 个模块`,
+        mergeSelected: '合并选中',
+        enterModuleContent: '请输入模块内容...',
+        editHint: 'Ctrl+Enter 保存，Esc 取消',
+        expandModuleHint: '点击模块标题展开内容',
+        editModuleTitle: '编辑模块标题',
+        enterModuleTitle: '请输入模块标题',
+        selectedModules: (count: number) => `已选择 ${count} 个模块`,
+        mergeModules: '合并模块',
+        deleteSelected: '删除选中',
+        clearSelection: '清除选择',
+        noModuleData: '暂无模块数据',
+        editModule: '编辑模块',
+        moduleTitle: '模块标题',
+        moduleContent: '模块内容',
+        enterModuleContentPlain: '请输入模块内容',
+        order: '排序',
+        restartReviewConfig: '重新评审配置',
+        reviewConfigTitle: '评审配置',
+        restartReviewHint: '重新评审将创建新的评审报告，原有报告将保留。',
+        concurrentAnalyses: '并发分析数量',
+        selectConcurrency: '请选择并发数量',
+        reviewConcurrencyHelp: '并发数量决定了同时进行的专项分析任务数。如果遇到API限流错误，请尝试降低并发数。',
+        missingDocumentId: '文档ID不存在',
+        loadDocumentFailed: '加载文档详情失败',
+        splitBeforeReview: '请先完成文档拆分生成模块',
+        splitCompleted: (level: string) => `按${level.toUpperCase()}级别拆分完成`,
+        splitFailed: 'AI模块拆分失败',
+        modulesConfirmed: '模块拆分已确认，可以开始评审',
+        confirmModuleSplitFailed: '确认模块拆分失败',
+        reviewStarted: (workers: number, isRestart: boolean) => `${isRestart ? '重新评审' : '需求评审'}已启动 (并发数: ${workers})，正在后台处理...`,
+        reviewStartFailed: '评审启动失败',
+        processingText: '处理中...',
+        reviewCompletedMessage: '需求评审已完成！',
+        reviewFailedMessage: '需求评审失败，请重试',
+        reviewTimeout: '评审时间较长，请稍后刷新页面查看结果',
+        fetchReviewStatusFailed: '获取评审状态失败',
+        enterModuleTitleWarning: '请输入模块标题',
+        moduleUpdated: '模块更新成功',
+        moduleUpdateFailed: '更新模块失败',
+        moduleCreated: '模块创建成功',
+        moduleCreateFailed: '创建模块失败',
+        saveModuleFailed: '保存模块失败',
+        moveModuleSuccess: (direction: 'up' | 'down') => `模块${direction === 'up' ? '上移' : '下移'}成功`,
+        moduleDeleted: '模块删除成功',
+        titleRequired: '请输入标题',
+        titleUpdated: '标题已更新',
+        titleUpdateFailed: '更新标题失败',
+        contentUpdated: '内容已更新',
+        contentUpdateFailed: '更新内容失败',
+        splitFeatureInDev: '模块拆分功能开发中...',
+        selectAtLeastTwoModules: '请至少选择两个模块进行合并',
+        mergeModuleDefaultTitle: '合并模块',
+        mergeModulesTitle: '合并模块',
+        mergeModulesPrompt: (count: number) => `将合并 ${count} 个模块，请输入合并后的标题：`,
+        enterMergedTitle: '请输入合并后的模块标题',
+        confirmMerge: '确认合并',
+        mergeSuccess: (count: number) => `已合并 ${count} 个模块`,
+        mergeFailed: '合并模块失败',
+        selectModulesToDelete: '请选择要删除的模块',
+        deleteModulesTitle: '确认删除',
+        deleteModulesContent: (count: number) => `确定要删除选中的 ${count} 个模块吗？此操作不可恢复。`,
+        deleteModulesConfirm: '确认删除',
+        deleteModuleFailed: '删除模块失败',
+        deleteModulesSuccess: (count: number) => `已删除 ${count} 个模块`,
+        syncingContent: '正在同步编辑内容...',
+        contentSynced: '内容已同步',
+      }
+));
+
+const statusLabelMap = computed<Record<DocumentStatus, string>>(() => (
+  isEnglish.value
+    ? {
+        uploaded: 'Uploaded',
+        processing: 'Processing',
+        module_split: 'Splitting modules',
+        user_reviewing: 'User reviewing',
+        ready_for_review: 'Ready for review',
+        reviewing: 'Reviewing',
+        review_completed: 'Review completed',
+        failed: 'Failed',
+      }
+    : {
+        uploaded: '已上传',
+        processing: '处理中',
+        module_split: '模块拆分中',
+        user_reviewing: '用户调整中',
+        ready_for_review: '待评审',
+        reviewing: '评审中',
+        review_completed: '评审完成',
+        failed: '处理失败',
+      }
+));
+
+const typeLabelMap = computed<Record<DocumentType, string>>(() => (
+  isEnglish.value
+    ? {
+        pdf: 'PDF',
+        doc: 'Word document',
+        docx: 'Word document',
+        txt: 'Text file',
+        md: 'Markdown',
+      }
+    : {
+        pdf: 'PDF',
+        doc: 'Word文档',
+        docx: 'Word文档',
+        txt: '文本文件',
+        md: 'Markdown',
+      }
+));
+
+const reviewWorkerOptions = computed(() => (
+  isEnglish.value
+    ? [
+        { value: 1, label: '1 (Serial - slowest but most stable)' },
+        { value: 2, label: '2 (Low concurrency - suitable for low-resource environments)' },
+        { value: 3, label: '3 (Recommended - balanced speed and stability)' },
+        { value: 5, label: '5 (High concurrency - fastest)' },
+      ]
+    : [
+        { value: 1, label: '1 (串行分析 - 最慢但最稳定)' },
+        { value: 2, label: '2 (低并发 - 适合低配环境)' },
+        { value: 3, label: '3 (推荐 - 平衡速度与稳定性)' },
+        { value: 5, label: '5 (高并发 - 速度最快)' },
+      ]
+));
 
 // 响应式数据
 const loading = ref(false);
@@ -579,12 +864,33 @@ const getStatusColor = (status?: DocumentStatus) => {
 
 const getStatusText = (status?: DocumentStatus) => {
   if (!status) return '';
-  return DocumentStatusDisplay[status] || status;
+  return statusLabelMap.value[status] || status;
 };
 
 const getTypeText = (type?: DocumentType) => {
   if (!type) return '';
-  return DocumentTypeDisplay[type] || type;
+  return typeLabelMap.value[type] || type;
+};
+
+const formatWordCount = (count: number) => (
+  isEnglish.value ? `${count} ${count === 1 ? 'word' : 'words'}` : `${count} 字`
+);
+
+const formatPageCount = (count: number) => (
+  isEnglish.value ? `${count} ${count === 1 ? 'page' : 'pages'}` : `${count} 页`
+);
+
+const formatModuleCount = (count: number) => (
+  isEnglish.value ? `${count} ${count === 1 ? 'module' : 'modules'}` : `${count} 个`
+);
+
+const formatImageCount = (count: number) => (
+  isEnglish.value ? `${count} ${count === 1 ? 'image' : 'images'}` : `${count} 张`
+);
+
+const getModulesHeaderTitle = (status: DocumentStatus, count: number) => {
+  const base = status === 'review_completed' ? pageText.value.modulesDetails : pageText.value.modulesManagement;
+  return isEnglish.value ? `${base} (${count})` : `${base} (${count}个)`;
 };
 
 const formatDateTime = (dateTime?: string) => {
@@ -643,7 +949,7 @@ const getCurrentStep = (status: DocumentStatus) => {
 const loadDocument = async () => {
   const documentId = route.params.id as string;
   if (!documentId) {
-    Message.error('文档ID不存在');
+    Message.error(pageText.value.missingDocumentId);
     return;
   }
 
@@ -660,11 +966,11 @@ const loadDocument = async () => {
         pollDocumentStatus();
       }
     } else {
-      Message.error(response.message || '加载文档详情失败');
+      Message.error(response.message || pageText.value.loadDocumentFailed);
     }
   } catch (error) {
     console.error('加载文档详情失败:', error);
-    Message.error('加载文档详情失败');
+    Message.error(pageText.value.loadDocumentFailed);
   } finally {
     loading.value = false;
   }
@@ -680,14 +986,14 @@ const goToDocxEditor = async () => {
 
   const pendingWindow = window.open('', '_blank');
   if (pendingWindow) {
-    pendingWindow.document.write('<title>进入在线编辑</title><p>处理中...</p>');
+    pendingWindow.document.write(`<title>${pageText.value.openOnlineEditor}</title><p>${pageText.value.processingText}</p>`);
   }
 
   docxEditorLoading.value = true;
   try {
     const response = await RequirementDocumentService.launchOnlineEditor(document.value.id);
     if (response.status !== 'success' || !response.data?.launch_url) {
-      throw new Error(response.message || '打开在线编辑失败');
+      throw new Error(response.message || pageText.value.docxEditorOpenFailed);
     }
 
     const launchUrl = response.data.launch_url;
@@ -702,13 +1008,13 @@ const goToDocxEditor = async () => {
       pendingWindow.close();
     }
 
-    const message = error instanceof Error ? error.message : '打开在线编辑失败';
+    const message = error instanceof Error ? error.message : pageText.value.docxEditorOpenFailed;
     if (message.includes('未接入') || message.includes('未配置') || message.includes('不可用') || message.includes('未部署') || message.toLowerCase().includes('not integrated')) {
-      Message.warning(message || '在线编辑功能未接入，请先配置 docx-editor 连接。');
+      Message.warning(message || pageText.value.docxEditorNotIntegrated);
       return;
     }
 
-    Message.error(message || '打开在线编辑失败');
+    Message.error(message || pageText.value.docxEditorOpenFailed);
   } finally {
     docxEditorLoading.value = false;
   }
@@ -734,7 +1040,7 @@ const retryReview = async () => {
   
   // 文档还没有拆分模块时提示用户先拆分
   if (!document.value.modules || document.value.modules.length === 0) {
-    Message.warning('请先完成文档拆分生成模块');
+    Message.warning(pageText.value.splitBeforeReview);
     handleShowSplitOptionsWithDefault('h2');
     return;
   }
@@ -759,14 +1065,14 @@ const handleSplitConfirm = async (config: SplitModulesRequest) => {
     const response = await RequirementDocumentService.splitModules(document.value.id, config);
 
     if (response.status === 'success') {
-      Message.success(`按${config.split_level.toUpperCase()}级别拆分完成`);
+      Message.success(pageText.value.splitCompleted(config.split_level));
       await loadDocument(); // 重新加载文档
     } else {
-      Message.error(response.message || 'AI模块拆分失败');
+      Message.error(response.message || pageText.value.splitFailed);
     }
   } catch (error) {
     console.error('AI模块拆分失败:', error);
-    Message.error('AI模块拆分失败');
+    Message.error(pageText.value.splitFailed);
   } finally {
     splitLoading.value = false;
   }
@@ -780,14 +1086,14 @@ const confirmModules = async () => {
     const response = await RequirementDocumentService.confirmModules(document.value.id);
 
     if (response.status === 'success') {
-      Message.success('模块拆分已确认，可以开始评审');
+      Message.success(pageText.value.modulesConfirmed);
       await loadDocument(); // 重新加载文档以更新状态
     } else {
-      Message.error(response.message || '确认模块拆分失败');
+      Message.error(response.message || pageText.value.confirmModuleSplitFailed);
     }
   } catch (error) {
     console.error('确认模块拆分失败:', error);
-    Message.error('确认模块拆分失败');
+    Message.error(pageText.value.confirmModuleSplitFailed);
   }
 };
 
@@ -824,17 +1130,16 @@ const confirmReview = async () => {
     }
 
     if (response.status === 'success') {
-      const actionText = reviewAction.value === 'restart' ? '重新评审' : '需求评审';
-      Message.success(`${actionText}已启动 (并发数: ${reviewConfig.value.max_workers})，正在后台处理...`);
+      Message.success(pageText.value.reviewStarted(reviewConfig.value.max_workers, reviewAction.value === 'restart'));
       // 开始轮询文档状态
       pollDocumentStatus();
     } else {
-      Message.error(response.message || '评审启动失败');
+      Message.error(response.message || pageText.value.reviewStartFailed);
       reviewLoading.value = false;
     }
   } catch (error) {
     console.error('评审启动失败:', error);
-    Message.error('评审启动失败');
+    Message.error(pageText.value.reviewStartFailed);
     reviewLoading.value = false;
   }
 };
@@ -861,7 +1166,7 @@ const pollDocumentStatus = async () => {
         const latestReview = document.value.latest_review;
         reviewProgress.value = {
           progress: latestReview.progress ?? 0,
-          current_step: latestReview.current_step || '处理中...',
+          current_step: localizeBackendText(latestReview.current_step, pageText.value.processingText),
           completed_steps: latestReview.completed_steps || []
         };
       }
@@ -871,21 +1176,21 @@ const pollDocumentStatus = async () => {
         isPollingActive = false;
         reviewLoading.value = false;
         reviewProgress.value = null;
-        Message.success('需求评审已完成！');
+        Message.success(pageText.value.reviewCompletedMessage);
         return;
       } else if (document.value?.status === 'failed') {
         // 评审失败
         isPollingActive = false;
         reviewLoading.value = false;
         reviewProgress.value = null;
-        Message.error('需求评审失败，请重试');
+        Message.error(pageText.value.reviewFailedMessage);
         return;
       } else if (attempts >= maxAttempts) {
         // 超时
         isPollingActive = false;
         reviewLoading.value = false;
         reviewProgress.value = null;
-        Message.warning('评审时间较长，请稍后刷新页面查看结果');
+        Message.warning(pageText.value.reviewTimeout);
         return;
       }
 
@@ -902,7 +1207,7 @@ const pollDocumentStatus = async () => {
         isPollingActive = false;
         reviewLoading.value = false;
         reviewProgress.value = null;
-        Message.error('获取评审状态失败');
+        Message.error(pageText.value.fetchReviewStatusFailed);
       }
     }
   };
@@ -935,7 +1240,7 @@ const editModule = (module: DocumentModule) => {
 // 保存模块
 const saveModule = async () => {
   if (!document.value || !editForm.value.title?.trim()) {
-    Message.warning('请输入模块标题');
+    Message.warning(pageText.value.enterModuleTitleWarning);
     return;
   }
 
@@ -950,9 +1255,9 @@ const saveModule = async () => {
         }
       });
       if (response.status === 'success') {
-        Message.success('模块更新成功');
+        Message.success(pageText.value.moduleUpdated);
       } else {
-        Message.error(response.message || '更新模块失败');
+        Message.error(response.message || pageText.value.moduleUpdateFailed);
         return;
       }
     } else {
@@ -967,9 +1272,9 @@ const saveModule = async () => {
         }
       });
       if (response.status === 'success') {
-        Message.success('模块创建成功');
+        Message.success(pageText.value.moduleCreated);
       } else {
-        Message.error(response.message || '创建模块失败');
+        Message.error(response.message || pageText.value.moduleCreateFailed);
         return;
       }
     }
@@ -977,7 +1282,7 @@ const saveModule = async () => {
     await loadDocument();
   } catch (error) {
     console.error('保存模块失败:', error);
-    Message.error('保存模块失败');
+    Message.error(pageText.value.saveModuleFailed);
   }
 };
 
@@ -991,14 +1296,14 @@ const cancelModalEdit = () => {
 // 移动模块
 const moveModule = async (index: number, direction: 'up' | 'down') => {
   // TODO: 实现模块移动逻辑
-  Message.success(`模块${direction === 'up' ? '上移' : '下移'}成功`);
+  Message.success(pageText.value.moveModuleSuccess(direction));
   await loadDocument();
 };
 
 // 删除模块
 const deleteModule = async (module: DocumentModule) => {
   // TODO: 实现模块删除逻辑
-  Message.success('模块删除成功');
+  Message.success(pageText.value.moduleDeleted);
   await loadDocument();
 };
 
@@ -1077,7 +1382,7 @@ const saveTitleModal = async () => {
 
   const newTitle = editingTitle.value.trim();
   if (!newTitle) {
-    Message.warning('请输入标题');
+    Message.warning(pageText.value.titleRequired);
     return;
   }
 
@@ -1097,13 +1402,13 @@ const saveTitleModal = async () => {
     });
     if (response.status === 'success') {
       currentEditingTitleModule.value.title = newTitle;
-      Message.success('标题已更新');
+      Message.success(pageText.value.titleUpdated);
     } else {
-      Message.error(response.message || '更新标题失败');
+      Message.error(response.message || pageText.value.titleUpdateFailed);
     }
   } catch (error) {
     console.error('更新标题失败:', error);
-    Message.error('更新标题失败');
+    Message.error(pageText.value.titleUpdateFailed);
   }
   cancelTitleEdit();
 };
@@ -1150,13 +1455,13 @@ const saveContent = async (module: DocumentModule) => {
     });
     if (response.status === 'success') {
       module.content = newContent;
-      Message.success('内容已更新');
+      Message.success(pageText.value.contentUpdated);
     } else {
-      Message.error(response.message || '更新内容失败');
+      Message.error(response.message || pageText.value.contentUpdateFailed);
     }
   } catch (error) {
     console.error('更新内容失败:', error);
-    Message.error('更新内容失败');
+    Message.error(pageText.value.contentUpdateFailed);
   }
   cancelContentEdit();
 };
@@ -1168,42 +1473,41 @@ const cancelContentEdit = () => {
 
 const splitAtCursor = (module: DocumentModule) => {
   // TODO: 实现在光标位置拆分模块
-  Message.info('模块拆分功能开发中...');
+  Message.info(pageText.value.splitFeatureInDev);
 };
 
 const splitModule = (module: DocumentModule) => {
   // TODO: 实现模块拆分逻辑
-  Message.info('模块拆分功能开发中...');
+  Message.info(pageText.value.splitFeatureInDev);
 };
 
 const mergeSelectedModules = async () => {
   if (selectedModules.value.length < 2) {
-    Message.warning('请至少选择两个模块进行合并');
+    Message.warning(pageText.value.selectAtLeastTwoModules);
     return;
   }
   if (!document.value) return;
 
   // 获取选中模块的标题，用于生成默认合并标题
   const selectedModulesList = document.value.modules.filter(m => selectedModules.value.includes(m.id));
-  const defaultTitle = selectedModulesList[0]?.title || '合并模块';
+  const defaultTitle = selectedModulesList[0]?.title || pageText.value.mergeModuleDefaultTitle;
 
   // 弹出输入框让用户输入合并后的标题
   const inputValue = ref(defaultTitle);
   Modal.confirm({
-    title: '合并模块',
+    title: pageText.value.mergeModulesTitle,
     content: () => h('div', [
-      h('p', { style: 'margin-bottom: 8px' }, `将合并 ${selectedModules.value.length} 个模块，请输入合并后的标题：`),
+      h('p', { style: 'margin-bottom: 8px' }, pageText.value.mergeModulesPrompt(selectedModules.value.length)),
       h(AInput, {
         modelValue: inputValue.value,
         'onUpdate:modelValue': (val: string) => { inputValue.value = val; },
-        placeholder: '请输入合并后的模块标题'
+        placeholder: pageText.value.enterMergedTitle
       })
     ]),
-    okText: '确认合并',
-    cancelText: '取消',
+    okText: pageText.value.confirmMerge,
     onOk: async () => {
       if (!inputValue.value.trim()) {
-        Message.warning('请输入合并后的标题');
+        Message.warning(pageText.value.enterMergedTitle);
         return Promise.reject();
       }
       try {
@@ -1213,15 +1517,15 @@ const mergeSelectedModules = async () => {
           merge_title: inputValue.value.trim()
         });
         if (response.status === 'success') {
-          Message.success(`已合并 ${selectedModules.value.length} 个模块`);
+          Message.success(pageText.value.mergeSuccess(selectedModules.value.length));
           clearSelection();
           await loadDocument();
         } else {
-          Message.error(response.message || '合并模块失败');
+          Message.error(response.message || pageText.value.mergeFailed);
         }
       } catch (error) {
         console.error('合并模块失败:', error);
-        Message.error('合并模块失败');
+        Message.error(pageText.value.mergeFailed);
       }
     }
   });
@@ -1229,16 +1533,15 @@ const mergeSelectedModules = async () => {
 
 const deleteSelectedModules = async () => {
   if (selectedModules.value.length === 0) {
-    Message.warning('请选择要删除的模块');
+    Message.warning(pageText.value.selectModulesToDelete);
     return;
   }
   if (!document.value) return;
 
   Modal.warning({
-    title: '确认删除',
-    content: `确定要删除选中的 ${selectedModules.value.length} 个模块吗？此操作不可恢复。`,
-    okText: '确认删除',
-    cancelText: '取消',
+    title: pageText.value.deleteModulesTitle,
+    content: pageText.value.deleteModulesContent(selectedModules.value.length),
+    okText: pageText.value.deleteModulesConfirm,
     onOk: async () => {
       try {
         // 逐个删除选中的模块
@@ -1248,16 +1551,16 @@ const deleteSelectedModules = async () => {
             target_modules: [moduleId]
           });
           if (response.status !== 'success') {
-            Message.error(response.message || '删除模块失败');
+            Message.error(response.message || pageText.value.deleteModuleFailed);
             return;
           }
         }
-        Message.success(`已删除 ${selectedModules.value.length} 个模块`);
+        Message.success(pageText.value.deleteModulesSuccess(selectedModules.value.length));
         clearSelection();
         await loadDocument();
       } catch (error) {
         console.error('删除模块失败:', error);
-        Message.error('删除模块失败');
+        Message.error(pageText.value.deleteModuleFailed);
       }
     }
   });
@@ -1268,8 +1571,27 @@ const clearSelection = () => {
 };
 
 // 生命周期
-onMounted(() => {
-  loadDocument();
+onMounted(async () => {
+  await loadDocument();
+
+  if (route.query.syncing === '1') {
+    const syncMsg = Message.loading({ content: pageText.value.syncingContent, duration: 0 });
+    const prevUpdatedAt = document.value?.updated_at;
+    let tries = 0;
+    const maxTries = 20;
+    const poll = setInterval(async () => {
+      tries += 1;
+      await loadDocument();
+      const newUpdatedAt = document.value?.updated_at;
+      if ((newUpdatedAt && newUpdatedAt !== prevUpdatedAt) || tries >= maxTries) {
+        clearInterval(poll);
+        syncMsg.close();
+        if (tries < maxTries) {
+          Message.success(pageText.value.contentSynced);
+        }
+      }
+    }, 2000);
+  }
 });
 
 // 监听项目变化 - 当在详情页切换项目时，返回到列表页
@@ -1295,6 +1617,7 @@ onBeforeUnmount(() => {
   background: transparent; /* 使用主布局的背景 */
   height: 100%;
   overflow-y: auto;
+  overflow-x: hidden;
   box-sizing: border-box;
 }
 
@@ -1868,6 +2191,17 @@ onBeforeUnmount(() => {
   min-height: 40px;
   border: 1px solid rgba(0, 0, 0, 0.05);
   text-align: left;
+}
+
+.segment-collapsed-placeholder {
+  margin-top: 18px;
+  padding: 16px 12px 8px;
+  color: #86909c;
+  font-size: 13px;
+}
+
+.latest-document-content {
+  margin-top: 0;
 }
 
 .segment-collapsed-placeholder {

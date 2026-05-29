@@ -1,142 +1,148 @@
 <template>
   <a-modal
     v-model:visible="visible"
-    :title="isEditing ? '编辑定时任务' : '新建定时任务'"
+    :title="modalTitle"
     :width="720"
     :mask-closable="false"
     @cancel="handleClose"
   >
     <template #footer>
       <a-space>
-        <a-button @click="handleClose">取消</a-button>
+        <a-button @click="handleClose">{{ modalText.cancel }}</a-button>
         <a-button type="primary" :loading="submitting" @click="handleSubmit">
-          {{ isEditing ? '保存' : '保存，默认未启用' }}
+          {{ modalText.save }}
         </a-button>
       </a-space>
     </template>
 
     <div class="form-scroll-area">
       <a-form :model="form" layout="vertical" ref="formRef" size="small">
-        <a-form-item label="任务名称" field="name" :rules="[{ required: true, message: '请输入任务名称' }]">
-          <a-input v-model="form.name" placeholder="如 UI-登录页-每日" :max-length="50" show-word-limit />
+        <a-form-item :label="modalText.taskName" field="name" :rules="[{ required: true, message: modalText.enterTaskName }]">
+          <a-input v-model="form.name" :placeholder="modalText.taskNamePlaceholder" :max-length="50" show-word-limit />
         </a-form-item>
 
-        <a-form-item label="任务描述" field="description">
-          <a-textarea v-model="form.description" placeholder="用于说明任务目的" :max-length="200" :auto-size="{ minRows: 2, maxRows: 3 }" />
+        <a-form-item :label="modalText.taskDescription" field="description">
+          <a-textarea v-model="form.description" :placeholder="modalText.taskDescriptionPlaceholder" :max-length="200" :auto-size="{ minRows: 2, maxRows: 3 }" />
         </a-form-item>
 
-        <!-- 所属模块 + UI用例选择 同行 -->
         <div class="form-row">
-          <a-form-item label="所属模块" field="module" :rules="[{ required: true, message: '请选择' }]">
-            <a-select v-model="form.module" placeholder="请选择模块" @change="onModuleChange">
-              <a-option value="ui_automation">UI 自动化</a-option>
-              <a-option value="test_suite">测试套件</a-option>
+          <a-form-item :label="modalText.module" field="module" :rules="[{ required: true, message: modalText.selectValue }]">
+            <a-select v-model="form.module" :placeholder="modalText.selectModule" @change="onModuleChange">
+              <a-option value="ui_automation">{{ modalText.uiAutomation }}</a-option>
+              <a-option value="test_suite">{{ modalText.testSuite }}</a-option>
             </a-select>
           </a-form-item>
 
           <a-form-item
             v-if="form.module === 'ui_automation'"
-            label="选择UI用例"
+            :label="modalText.selectUiCase"
             field="ui_testcase_ids"
-            :rules="[{ required: true, message: '请选择至少一个UI用例' }]"
+            :rules="[{ required: true, message: modalText.selectAtLeastOneUiCase }]"
           >
             <a-button type="outline" size="small" @click="openCaseSelectModal">
               <template #icon><icon-select-all /></template>
-              {{ form.ui_testcase_ids.length ? `已选 ${form.ui_testcase_ids.length} 个用例` : '选择用例' }}
+              {{ selectedUiCasesText }}
             </a-button>
           </a-form-item>
 
           <a-form-item
             v-if="form.module === 'test_suite'"
-            label="选择测试套件"
+            :label="modalText.selectTestSuite"
             field="test_suite"
-            :rules="[{ required: true, message: '请选择测试套件' }]"
+            :rules="[{ required: true, message: modalText.selectTestSuiteRequired }]"
           >
-            <a-select v-model="form.test_suite" placeholder="请选择" :loading="loadingSuites" allow-search @popup-visible-change="(v: boolean) => v && loadTestSuites()">
-              <a-option v-for="s in testSuites" :key="s.id" :value="s.id">{{ s.name }}</a-option>
+            <a-select
+              v-model="form.test_suite"
+              :placeholder="modalText.selectValue"
+              :loading="loadingSuites"
+              allow-search
+              @popup-visible-change="(v: boolean) => v && loadTestSuites()"
+            >
+              <a-option v-for="suite in testSuites" :key="suite.id" :value="suite.id">{{ suite.name }}</a-option>
             </a-select>
           </a-form-item>
         </div>
 
-        <!-- 执行器 + 调度策略 + 执行时间 同行 -->
         <div v-if="form.module === 'ui_automation'" class="form-row-3">
           <a-form-item
-            label="执行器"
+            :label="modalText.actuator"
             field="actuator_id"
-            :rules="[{ required: true, message: '请选择执行器' }]"
+            :rules="[{ required: true, message: modalText.selectActuatorRequired }]"
           >
-            <a-select v-model="form.actuator_id" placeholder="请选择执行器" :loading="loadingActuators" allow-search @popup-visible-change="(v: boolean) => v && loadActuators()">
-              <a-option v-for="a in actuators" :key="a.id" :value="a.id">
-                {{ a.name || a.id }} ({{ a.ip }})
+            <a-select
+              v-model="form.actuator_id"
+              :placeholder="modalText.selectActuator"
+              :loading="loadingActuators"
+              allow-search
+              @popup-visible-change="(v: boolean) => v && loadActuators()"
+            >
+              <a-option v-for="actuator in actuators" :key="actuator.id" :value="actuator.id">
+                {{ actuator.name || actuator.id }} ({{ actuator.ip }})
               </a-option>
             </a-select>
           </a-form-item>
-          <a-form-item label="调度策略" field="schedule_type" :rules="[{ required: true, message: '请选择' }]">
-            <a-select v-model="form.schedule_type" placeholder="请选择">
-              <a-option value="once">仅一次</a-option>
-              <a-option value="daily">每天</a-option>
-              <a-option value="weekly">每周</a-option>
-              <a-option value="hourly">每小时</a-option>
+          <a-form-item :label="modalText.scheduleType" field="schedule_type" :rules="[{ required: true, message: modalText.selectValue }]">
+            <a-select v-model="form.schedule_type" :placeholder="modalText.selectValue">
+              <a-option v-for="option in scheduleOptions" :key="option.value" :value="option.value">
+                {{ option.label }}
+              </a-option>
             </a-select>
           </a-form-item>
-          <a-form-item v-if="form.schedule_type === 'once'" label="执行时间" field="once_datetime" :rules="[{ required: true, message: '请选择' }]">
-            <a-date-picker v-model="form.once_datetime" show-time format="YYYY-MM-DD HH:mm" placeholder="选择时间" style="width: 100%" />
+          <a-form-item v-if="form.schedule_type === 'once'" :label="modalText.executionTime" field="once_datetime" :rules="[{ required: true, message: modalText.selectValue }]">
+            <a-date-picker v-model="form.once_datetime" show-time format="YYYY-MM-DD HH:mm" :placeholder="modalText.selectTime" style="width: 100%" />
           </a-form-item>
-          <a-form-item v-if="form.schedule_type === 'daily'" label="执行时间" field="daily_time" :rules="[{ required: true, message: '请选择' }]">
-            <a-time-picker v-model="form.daily_time" format="HH:mm" placeholder="选择时间" style="width: 100%" />
+          <a-form-item v-if="form.schedule_type === 'daily'" :label="modalText.executionTime" field="daily_time" :rules="[{ required: true, message: modalText.selectValue }]">
+            <a-time-picker v-model="form.daily_time" format="HH:mm" :placeholder="modalText.selectTime" style="width: 100%" />
           </a-form-item>
-          <a-form-item v-if="form.schedule_type === 'hourly'" label="第几分钟执行" field="hourly_minute" :rules="[{ required: true, message: '请输入' }]">
+          <a-form-item v-if="form.schedule_type === 'hourly'" :label="modalText.hourlyMinute" field="hourly_minute" :rules="[{ required: true, message: modalText.enterValue }]">
             <a-input-number v-model="form.hourly_minute" :min="0" :max="59" placeholder="0-59" style="width: 100%">
-              <template #suffix>分</template>
+              <template #suffix>{{ modalText.minuteSuffix }}</template>
             </a-input-number>
           </a-form-item>
         </div>
 
-        <!-- 非UI自动化模块：调度策略 + 执行时间 同行 -->
         <div v-if="form.module !== 'ui_automation'" class="form-row">
-          <a-form-item label="调度策略" field="schedule_type" :rules="[{ required: true, message: '请选择' }]">
-            <a-select v-model="form.schedule_type" placeholder="请选择">
-              <a-option value="once">仅一次</a-option>
-              <a-option value="daily">每天</a-option>
-              <a-option value="weekly">每周</a-option>
-              <a-option value="hourly">每小时</a-option>
+          <a-form-item :label="modalText.scheduleType" field="schedule_type" :rules="[{ required: true, message: modalText.selectValue }]">
+            <a-select v-model="form.schedule_type" :placeholder="modalText.selectValue">
+              <a-option v-for="option in scheduleOptions" :key="option.value" :value="option.value">
+                {{ option.label }}
+              </a-option>
             </a-select>
           </a-form-item>
-          <a-form-item v-if="form.schedule_type === 'once'" label="执行时间" field="once_datetime" :rules="[{ required: true, message: '请选择' }]">
-            <a-date-picker v-model="form.once_datetime" show-time format="YYYY-MM-DD HH:mm" placeholder="选择时间" style="width: 100%" />
+          <a-form-item v-if="form.schedule_type === 'once'" :label="modalText.executionTime" field="once_datetime" :rules="[{ required: true, message: modalText.selectValue }]">
+            <a-date-picker v-model="form.once_datetime" show-time format="YYYY-MM-DD HH:mm" :placeholder="modalText.selectTime" style="width: 100%" />
           </a-form-item>
-          <a-form-item v-if="form.schedule_type === 'daily'" label="执行时间" field="daily_time" :rules="[{ required: true, message: '请选择' }]">
-            <a-time-picker v-model="form.daily_time" format="HH:mm" placeholder="选择时间" style="width: 100%" />
+          <a-form-item v-if="form.schedule_type === 'daily'" :label="modalText.executionTime" field="daily_time" :rules="[{ required: true, message: modalText.selectValue }]">
+            <a-time-picker v-model="form.daily_time" format="HH:mm" :placeholder="modalText.selectTime" style="width: 100%" />
           </a-form-item>
-          <a-form-item v-if="form.schedule_type === 'hourly'" label="第几分钟执行" field="hourly_minute" :rules="[{ required: true, message: '请输入' }]">
+          <a-form-item v-if="form.schedule_type === 'hourly'" :label="modalText.hourlyMinute" field="hourly_minute" :rules="[{ required: true, message: modalText.enterValue }]">
             <a-input-number v-model="form.hourly_minute" :min="0" :max="59" placeholder="0-59" style="width: 100%">
-              <template #suffix>分</template>
+              <template #suffix>{{ modalText.minuteSuffix }}</template>
             </a-input-number>
           </a-form-item>
         </div>
-        <!-- 每周额外显示星期选择和时间 -->
+
         <template v-if="form.schedule_type === 'weekly'">
-          <a-form-item label="选择星期" field="weekly_days" :rules="[{ required: true, message: '请至少选一天' }]">
+          <a-form-item :label="modalText.selectWeekdays" field="weekly_days" :rules="[{ required: true, message: modalText.selectAtLeastOneDay }]">
             <a-checkbox-group v-model="form.weekly_days">
               <a-checkbox v-for="day in weekDayOptions" :key="day.value" :value="day.value">{{ day.label }}</a-checkbox>
             </a-checkbox-group>
           </a-form-item>
-          <a-form-item label="执行时间" field="weekly_time" :rules="[{ required: true, message: '请选择' }]">
-            <a-time-picker v-model="form.weekly_time" format="HH:mm" placeholder="选择时间" style="width: 100%" />
+          <a-form-item :label="modalText.executionTime" field="weekly_time" :rules="[{ required: true, message: modalText.selectValue }]">
+            <a-time-picker v-model="form.weekly_time" format="HH:mm" :placeholder="modalText.selectTime" style="width: 100%" />
           </a-form-item>
         </template>
 
-        <!-- 重试策略 -->
-        <a-form-item label="失败重试">
+        <a-form-item :label="modalText.retryOnFailure">
           <a-switch v-model="form.retry_enabled" />
         </a-form-item>
         <div v-if="form.retry_enabled" class="retry-config">
-          <a-form-item label="重试次数">
+          <a-form-item :label="modalText.retryCount">
             <a-input-number v-model="form.retry_count" :min="1" :max="5" style="width: 100%" />
           </a-form-item>
-          <a-form-item label="重试间隔">
+          <a-form-item :label="modalText.retryInterval">
             <a-input-number v-model="form.retry_interval" :min="1" :max="30" style="width: 100%">
-              <template #suffix>分</template>
+              <template #suffix>{{ modalText.minuteSuffix }}</template>
             </a-input-number>
           </a-form-item>
         </div>
@@ -147,11 +153,14 @@
 </template>
 
 <script setup lang="ts">
-import { ref, reactive } from 'vue';
+import { ref, reactive, computed } from 'vue';
 import { Message } from '@arco-design/web-vue';
+import { IconSelectAll } from '@arco-design/web-vue/es/icon';
 import axios from 'axios';
 import { API_BASE_URL } from '@/config/api';
 import { useAuthStore } from '@/store/authStore';
+import { useAppI18n } from '@/composables/useAppI18n';
+import { getCurrentServerLanguage } from '@/utils/installLocaleAdapters';
 import { createTask, updateTask, type TaskFormData, type ScheduledTask } from '../services/taskService';
 import { actuatorApi, type ActuatorInfo } from '@/features/ui-automation/api';
 import UiTestCaseSelectModal from './UiTestCaseSelectModal.vue';
@@ -164,28 +173,140 @@ const emit = defineEmits<{
   (e: 'success'): void;
 }>();
 
+const { isEnglish } = useAppI18n();
+
+const modalText = computed(() => (
+  isEnglish.value
+    ? {
+        editTask: 'Edit Scheduled Task',
+        createTask: 'Create Scheduled Task',
+        cancel: 'Cancel',
+        save: 'Save',
+        taskName: 'Task Name',
+        enterTaskName: 'Enter task name',
+        taskNamePlaceholder: 'Example: UI-Login-Daily',
+        taskDescription: 'Task Description',
+        taskDescriptionPlaceholder: 'Describe what this task is for',
+        module: 'Module',
+        selectModule: 'Select module',
+        selectValue: 'Select',
+        enterValue: 'Enter a value',
+        uiAutomation: 'UI Automation',
+        testSuite: 'Test Suite',
+        selectUiCase: 'Select UI Cases',
+        selectAtLeastOneUiCase: 'Select at least one UI case',
+        selectedUiCases: (count: number) => `${count} case(s) selected`,
+        chooseCases: 'Choose cases',
+        selectTestSuite: 'Select Test Suite',
+        selectTestSuiteRequired: 'Select a test suite',
+        actuator: 'Actuator',
+        selectActuator: 'Select actuator',
+        selectActuatorRequired: 'Select an actuator',
+        scheduleType: 'Schedule',
+        once: 'Once',
+        daily: 'Daily',
+        weekly: 'Weekly',
+        hourly: 'Hourly',
+        executionTime: 'Execution Time',
+        selectTime: 'Select time',
+        hourlyMinute: 'Minute of the Hour',
+        minuteSuffix: 'min',
+        selectWeekdays: 'Weekdays',
+        selectAtLeastOneDay: 'Select at least one day',
+        retryOnFailure: 'Retry on Failure',
+        retryCount: 'Retry Count',
+        retryInterval: 'Retry Interval',
+        monday: 'Mon',
+        tuesday: 'Tue',
+        wednesday: 'Wed',
+        thursday: 'Thu',
+        friday: 'Fri',
+        saturday: 'Sat',
+        sunday: 'Sun',
+        taskUpdated: 'Task updated',
+        taskCreated: 'Task created',
+        operationFailed: 'Operation failed',
+      }
+    : {
+        editTask: '编辑定时任务',
+        createTask: '新建定时任务',
+        cancel: '取消',
+        save: '保存',
+        taskName: '任务名称',
+        enterTaskName: '请输入任务名称',
+        taskNamePlaceholder: '如 UI-登录页-每日',
+        taskDescription: '任务描述',
+        taskDescriptionPlaceholder: '用于说明任务目的',
+        module: '所属模块',
+        selectModule: '请选择模块',
+        selectValue: '请选择',
+        enterValue: '请输入',
+        uiAutomation: 'UI 自动化',
+        testSuite: '测试套件',
+        selectUiCase: '选择UI用例',
+        selectAtLeastOneUiCase: '请选择至少一个UI用例',
+        selectedUiCases: (count: number) => `已选 ${count} 个用例`,
+        chooseCases: '选择用例',
+        selectTestSuite: '选择测试套件',
+        selectTestSuiteRequired: '请选择测试套件',
+        actuator: '执行器',
+        selectActuator: '请选择执行器',
+        selectActuatorRequired: '请选择执行器',
+        scheduleType: '调度策略',
+        once: '仅一次',
+        daily: '每天',
+        weekly: '每周',
+        hourly: '每小时',
+        executionTime: '执行时间',
+        selectTime: '选择时间',
+        hourlyMinute: '第几分钟执行',
+        minuteSuffix: '分',
+        selectWeekdays: '选择星期',
+        selectAtLeastOneDay: '请至少选一天',
+        retryOnFailure: '失败重试',
+        retryCount: '重试次数',
+        retryInterval: '重试间隔',
+        monday: '周一',
+        tuesday: '周二',
+        wednesday: '周三',
+        thursday: '周四',
+        friday: '周五',
+        saturday: '周六',
+        sunday: '周日',
+        taskUpdated: '任务已更新',
+        taskCreated: '任务已创建',
+        operationFailed: '操作失败',
+      }
+));
+
 const visible = ref(false);
 const submitting = ref(false);
 const isEditing = ref(false);
 const editingId = ref<number | null>(null);
 const formRef = ref();
 
-// 下拉数据
 const loadingSuites = ref(false);
 const loadingActuators = ref(false);
 const testSuites = ref<{ id: number; name: string }[]>([]);
 const actuators = ref<ActuatorInfo[]>([]);
 const caseSelectModal = ref<InstanceType<typeof UiTestCaseSelectModal>>();
 
-const weekDayOptions = [
-  { value: 0, label: '周一' },
-  { value: 1, label: '周二' },
-  { value: 2, label: '周三' },
-  { value: 3, label: '周四' },
-  { value: 4, label: '周五' },
-  { value: 5, label: '周六' },
-  { value: 6, label: '周日' },
-];
+const scheduleOptions = computed(() => [
+  { value: 'once', label: modalText.value.once },
+  { value: 'daily', label: modalText.value.daily },
+  { value: 'weekly', label: modalText.value.weekly },
+  { value: 'hourly', label: modalText.value.hourly },
+]);
+
+const weekDayOptions = computed(() => [
+  { value: 0, label: modalText.value.monday },
+  { value: 1, label: modalText.value.tuesday },
+  { value: 2, label: modalText.value.wednesday },
+  { value: 3, label: modalText.value.thursday },
+  { value: 4, label: modalText.value.friday },
+  { value: 5, label: modalText.value.saturday },
+  { value: 6, label: modalText.value.sunday },
+]);
 
 const defaultForm = (): TaskFormData => ({
   name: '',
@@ -208,9 +329,22 @@ const defaultForm = (): TaskFormData => ({
 
 const form = reactive<TaskFormData>(defaultForm());
 
+const modalTitle = computed(() => (
+  isEditing.value ? modalText.value.editTask : modalText.value.createTask
+));
+
+const selectedUiCasesText = computed(() => (
+  form.ui_testcase_ids.length
+    ? modalText.value.selectedUiCases(form.ui_testcase_ids.length)
+    : modalText.value.chooseCases
+));
+
 const getHeaders = () => {
   const authStore = useAuthStore();
-  return { Authorization: `Bearer ${authStore.getAccessToken}` };
+  return {
+    Authorization: `Bearer ${authStore.getAccessToken}`,
+    'Accept-Language': getCurrentServerLanguage(),
+  };
 };
 
 const loadTestSuites = async () => {
@@ -219,14 +353,14 @@ const loadTestSuites = async () => {
     const response = await axios.get(`${API_BASE_URL}/projects/${props.projectId}/test-suites/`, {
       headers: getHeaders(),
     });
-    const resData = response.data;
+    const responseData = response.data;
     let list: any[] = [];
-    if (resData?.status === 'success') {
-      list = Array.isArray(resData.data) ? resData.data : resData.data?.results || [];
+    if (responseData?.status === 'success') {
+      list = Array.isArray(responseData.data) ? responseData.data : responseData.data?.results || [];
     } else {
-      list = resData?.results || resData?.data || [];
+      list = responseData?.results || responseData?.data || [];
     }
-    testSuites.value = list.map((s: any) => ({ id: s.id, name: s.name }));
+    testSuites.value = list.map((suite: any) => ({ id: suite.id, name: suite.name }));
   } catch {
     testSuites.value = [];
   } finally {
@@ -239,7 +373,7 @@ const loadActuators = async () => {
   try {
     const res = await actuatorApi.list();
     const innerData = (res as any).data?.data?.data;
-    actuators.value = (innerData?.items || []).filter((a: ActuatorInfo) => a.is_open);
+    actuators.value = (innerData?.items || []).filter((actuator: ActuatorInfo) => actuator.is_open);
   } catch {
     actuators.value = [];
   } finally {
@@ -304,16 +438,16 @@ const handleSubmit = async () => {
   try {
     if (isEditing.value && editingId.value) {
       await updateTask(props.projectId, editingId.value, { ...form });
-      Message.success('任务已更新');
+      Message.success(modalText.value.taskUpdated);
     } else {
       await createTask(props.projectId, { ...form });
-      Message.success('任务已创建');
+      Message.success(modalText.value.taskCreated);
     }
     visible.value = false;
     emit('success');
   } catch (error: any) {
-    const msg = error.response?.data?.detail || error.response?.data?.error || '操作失败';
-    Message.error(typeof msg === 'string' ? msg : JSON.stringify(msg));
+    const message = error.response?.data?.detail || error.response?.data?.error || modalText.value.operationFailed;
+    Message.error(typeof message === 'string' ? message : JSON.stringify(message));
   } finally {
     submitting.value = false;
   }
@@ -344,10 +478,6 @@ defineExpose({ open });
   display: grid;
   grid-template-columns: 1fr 1fr 1fr;
   gap: 12px;
-}
-
-.flex-1 {
-  flex: 1;
 }
 
 .retry-config {

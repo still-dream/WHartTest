@@ -1,7 +1,7 @@
 <template>
   <div class="test-execution-history-view">
     <div v-if="!currentProjectId" class="no-project-selected">
-      <a-empty description="请在顶部选择一个项目">
+      <a-empty :description="pageText.noProjectSelected">
         <template #image>
           <icon-folder style="font-size: 48px; color: #c2c7d0;" />
         </template>
@@ -14,7 +14,7 @@
         <div class="filter-row">
           <a-input
             v-model="searchKeyword"
-            placeholder="搜索套件名称"
+            :placeholder="pageText.searchPlaceholder"
             allow-clear
             style="width: 300px;"
             @change="handleSearch"
@@ -26,24 +26,25 @@
           
           <a-select
             v-model="statusFilter"
-            placeholder="筛选状态"
+            :placeholder="pageText.filterStatusPlaceholder"
             style="width: 150px;"
             allow-clear
             @change="handleSearch"
           >
-            <a-option value="">全部状态</a-option>
-            <a-option value="pending">等待中</a-option>
-            <a-option value="running">执行中</a-option>
-            <a-option value="completed">已完成</a-option>
-            <a-option value="failed">失败</a-option>
-            <a-option value="cancelled">已取消</a-option>
+            <a-option
+              v-for="option in statusOptions"
+              :key="option.value || 'all'"
+              :value="option.value"
+            >
+              {{ option.label }}
+            </a-option>
           </a-select>
 
           <a-button @click="handleRefresh" style="margin-left: 12px">
             <template #icon>
               <icon-refresh />
             </template>
-            刷新
+            {{ pageText.refresh }}
           </a-button>
         </div>
       </div>
@@ -63,7 +64,7 @@
         >
         <!-- 套件名称 -->
         <template #suite="{ record }">
-          <a-tooltip :content="record.suite_detail?.description || '无描述'">
+          <a-tooltip :content="record.suite_detail?.description || pageText.noDescription">
             <span class="suite-name">{{ record.suite_detail?.name || '-' }}</span>
           </a-tooltip>
         </template>
@@ -78,10 +79,10 @@
         <!-- 统计 -->
         <template #statistics="{ record }">
           <div class="statistics">
-            <a-tag color="blue">总数: {{ record.total_count }}</a-tag>
-            <a-tag color="green">通过: {{ record.passed_count }}</a-tag>
-            <a-tag v-if="record.failed_count > 0" color="red">失败: {{ record.failed_count }}</a-tag>
-            <a-tag v-if="record.error_count > 0" color="orange">错误: {{ record.error_count }}</a-tag>
+            <a-tag color="blue">{{ pageText.total }}: {{ record.total_count }}</a-tag>
+            <a-tag color="green">{{ pageText.passed }}: {{ record.passed_count }}</a-tag>
+            <a-tag v-if="record.failed_count > 0" color="red">{{ pageText.failed }}: {{ record.failed_count }}</a-tag>
+            <a-tag v-if="record.error_count > 0" color="orange">{{ pageText.error }}: {{ record.error_count }}</a-tag>
           </div>
         </template>
 
@@ -115,7 +116,7 @@
               <template #icon>
                 <icon-file />
               </template>
-              查看报告
+              {{ pageText.viewReport }}
             </a-button>
             
             <a-button
@@ -128,7 +129,7 @@
               <template #icon>
                 <icon-close />
               </template>
-              取消
+              {{ pageText.cancel }}
             </a-button>
 
             <a-button
@@ -137,7 +138,7 @@
               @click="handleDelete(record)"
               status="danger"
             >
-              删除
+              {{ pageText.delete }}
             </a-button>
           </a-space>
         </template>
@@ -165,6 +166,7 @@ import {
   IconFolder,
 } from '@arco-design/web-vue/es/icon';
 import { useProjectStore } from '@/store/projectStore';
+import { useAppI18n } from '@/composables/useAppI18n';
 import {
   getTestExecutionList,
   cancelTestExecution,
@@ -175,7 +177,109 @@ import { formatDate } from '@/utils/formatters';
 import TestExecutionReportModal from '@/components/testcase/TestExecutionReportModal.vue';
 
 const projectStore = useProjectStore();
+const { isEnglish } = useAppI18n();
 const currentProjectId = computed(() => projectStore.currentProjectId);
+
+const pageText = computed(() => (
+  isEnglish.value
+    ? {
+        noProjectSelected: 'Select a project from the top bar',
+        searchPlaceholder: 'Search suite name',
+        filterStatusPlaceholder: 'Filter status',
+        refresh: 'Refresh',
+        noDescription: 'No description',
+        total: 'Total',
+        passed: 'Passed',
+        failed: 'Failed',
+        error: 'Error',
+        viewReport: 'View report',
+        cancel: 'Cancel',
+        delete: 'Delete',
+        suiteName: 'Suite name',
+        status: 'Status',
+        statistics: 'Statistics',
+        passRate: 'Pass rate',
+        duration: 'Duration',
+        executor: 'Executed by',
+        createdAt: 'Created at',
+        actions: 'Actions',
+        fetchExecutionsFailed: 'Failed to fetch execution history',
+        fetchExecutionsError: 'An error occurred while fetching execution history',
+        confirmCancelTitle: 'Confirm cancellation',
+        confirmCancelContent: (name: string) => `Cancel execution for "${name}"?`,
+        cancelSubmitted: 'Cancellation request sent',
+        cancelExecutionFailed: 'Failed to cancel execution',
+        cancelExecutionError: 'An error occurred while cancelling execution',
+        deleteBlocked: (status: string) => `Cannot delete executions in "${status}" status. Cancel the execution first.`,
+        confirmDeleteTitle: 'Confirm deletion',
+        confirmDeleteContent: (name: string) => `Delete the execution record for "${name}"? This action cannot be undone.`,
+        confirmDeleteOk: 'Delete',
+        deleteExecutionSuccess: 'Execution record deleted',
+        deleteExecutionFailed: 'Failed to delete execution record',
+        deleteExecutionError: 'An error occurred while deleting the execution record',
+        allStatuses: 'All statuses',
+        statusPending: 'Pending',
+        statusRunning: 'Running',
+        statusCompleted: 'Completed',
+        statusFailed: 'Failed',
+        statusCancelled: 'Cancelled',
+        secondsUnit: 's',
+        minutesUnit: 'm',
+      }
+    : {
+        noProjectSelected: '请在顶部选择一个项目',
+        searchPlaceholder: '搜索套件名称',
+        filterStatusPlaceholder: '筛选状态',
+        refresh: '刷新',
+        noDescription: '无描述',
+        total: '总数',
+        passed: '通过',
+        failed: '失败',
+        error: '错误',
+        viewReport: '查看报告',
+        cancel: '取消',
+        delete: '删除',
+        suiteName: '测试套件',
+        status: '状态',
+        statistics: '统计',
+        passRate: '通过率',
+        duration: '执行时长',
+        executor: '执行人',
+        createdAt: '创建时间',
+        actions: '操作',
+        fetchExecutionsFailed: '获取执行历史失败',
+        fetchExecutionsError: '获取执行历史时发生错误',
+        confirmCancelTitle: '确认取消',
+        confirmCancelContent: (name: string) => `确定要取消 "${name}" 的执行吗?`,
+        cancelSubmitted: '取消请求已发送',
+        cancelExecutionFailed: '取消执行失败',
+        cancelExecutionError: '取消执行时发生错误',
+        deleteBlocked: (status: string) => `无法删除状态为"${status}"的执行记录，请先取消执行`,
+        confirmDeleteTitle: '确认删除',
+        confirmDeleteContent: (name: string) => `确定要删除测试套件"${name}"的执行记录吗？此操作不可恢复。`,
+        confirmDeleteOk: '确认删除',
+        deleteExecutionSuccess: '执行记录已删除',
+        deleteExecutionFailed: '删除执行记录失败',
+        deleteExecutionError: '删除执行记录时发生错误',
+        allStatuses: '全部状态',
+        statusPending: '等待中',
+        statusRunning: '执行中',
+        statusCompleted: '已完成',
+        statusFailed: '失败',
+        statusCancelled: '已取消',
+        secondsUnit: '秒',
+        minutesUnit: '分',
+      }
+));
+
+const statusOptions = computed(() => [
+  { value: '', label: pageText.value.allStatuses },
+  { value: 'pending', label: pageText.value.statusPending },
+  { value: 'running', label: pageText.value.statusRunning },
+  { value: 'completed', label: pageText.value.statusCompleted },
+  { value: 'failed', label: pageText.value.statusFailed },
+  { value: 'cancelled', label: pageText.value.statusCancelled },
+]);
 
 // 响应式数据
 const loading = ref(false);
@@ -196,29 +300,29 @@ const paginationConfig = reactive({
 });
 
 // 表格列定义
-const columns = [
+const columns = computed(() => [
   { title: 'ID', dataIndex: 'id', width: 50, align: 'center' as const },
-  { title: '测试套件', slotName: 'suite', width: 200, align: 'center' as const },
-  { title: '状态', slotName: 'status', width: 50, align: 'center' as const },
-  { title: '统计', slotName: 'statistics', width: 210, align: 'center' as const },
-  { title: '通过率', slotName: 'pass-rate', width: 80, align: 'center' as const },
-  { title: '执行时长', slotName: 'duration', width: 100, align: 'center' as const },
+  { title: pageText.value.suiteName, slotName: 'suite', width: 200, align: 'center' as const },
+  { title: pageText.value.status, slotName: 'status', width: 80, align: 'center' as const },
+  { title: pageText.value.statistics, slotName: 'statistics', width: 210, align: 'center' as const },
+  { title: pageText.value.passRate, slotName: 'pass-rate', width: 90, align: 'center' as const },
+  { title: pageText.value.duration, slotName: 'duration', width: 110, align: 'center' as const },
   {
-    title: '执行人',
+    title: pageText.value.executor,
     dataIndex: 'executor_detail',
     render: ({ record }: { record: TestExecution }) => record.executor_detail?.username || '-',
-    width: 80,
+    width: 100,
     align: 'center' as const,
   },
   {
-    title: '创建时间',
+    title: pageText.value.createdAt,
     dataIndex: 'created_at',
     render: ({ record }: { record: TestExecution }) => formatDate(record.created_at),
     width: 180,
     align: 'center' as const,
   },
-  { title: '操作', slotName: 'actions', width: 200, fixed: 'right' as const, align: 'center' as const },
-];
+  { title: pageText.value.actions, slotName: 'actions', width: 220, fixed: 'right' as const, align: 'center' as const },
+]);
 
 // 获取执行列表
 const fetchExecutions = async () => {
@@ -240,12 +344,12 @@ const fetchExecutions = async () => {
       executionData.value = filteredData;
       paginationConfig.total = filteredData.length;
     } else {
-      Message.error(response.error || '获取执行历史失败');
+      Message.error(response.error || pageText.value.fetchExecutionsFailed);
       executionData.value = [];
     }
   } catch (error) {
     console.error('获取执行历史出错:', error);
-    Message.error('获取执行历史时发生错误');
+    Message.error(pageText.value.fetchExecutionsError);
     executionData.value = [];
   } finally {
     loading.value = false;
@@ -284,21 +388,19 @@ const handleCancel = (execution: TestExecution) => {
   if (!currentProjectId.value) return;
 
   Modal.confirm({
-    title: '确认取消',
-    content: `确定要取消 "${execution.suite_detail?.name}" 的执行吗?`,
-    okText: '确认',
-    cancelText: '取消',
+    title: pageText.value.confirmCancelTitle,
+    content: pageText.value.confirmCancelContent(execution.suite_detail?.name || '-'),
     onOk: async () => {
       try {
         const response = await cancelTestExecution(currentProjectId.value!, execution.id);
         if (response.success) {
-          Message.success('取消请求已发送');
+          Message.success(pageText.value.cancelSubmitted);
           fetchExecutions();
         } else {
-          Message.error(response.error || '取消执行失败');
+          Message.error(response.error || pageText.value.cancelExecutionFailed);
         }
       } catch (error) {
-        Message.error('取消执行时发生错误');
+        Message.error(pageText.value.cancelExecutionError);
       }
     },
   });
@@ -310,15 +412,14 @@ const handleDelete = (execution: TestExecution) => {
 
   // 检查执行状态
   if (execution.status === 'running' || execution.status === 'pending') {
-    Message.warning(`无法删除状态为"${getStatusText(execution.status)}"的执行记录，请先取消执行`);
+    Message.warning(pageText.value.deleteBlocked(getStatusText(execution.status)));
     return;
   }
 
   Modal.confirm({
-    title: '确认删除',
-    content: `确定要删除测试套件"${execution.suite_detail?.name}"的执行记录吗？此操作不可恢复。`,
-    okText: '确认删除',
-    cancelText: '取消',
+    title: pageText.value.confirmDeleteTitle,
+    content: pageText.value.confirmDeleteContent(execution.suite_detail?.name || '-'),
+    okText: pageText.value.confirmDeleteOk,
     okButtonProps: {
       status: 'danger',
     },
@@ -326,14 +427,14 @@ const handleDelete = (execution: TestExecution) => {
       try {
         const response = await deleteTestExecution(currentProjectId.value!, execution.id);
         if (response.success) {
-          Message.success(response.message || '执行记录已删除');
+          Message.success(response.message || pageText.value.deleteExecutionSuccess);
           fetchExecutions();
         } else {
-          Message.error(response.error || '删除执行记录失败');
+          Message.error(response.error || pageText.value.deleteExecutionFailed);
         }
       } catch (error) {
         console.error('删除执行记录出错:', error);
-        Message.error('删除执行记录时发生错误');
+        Message.error(pageText.value.deleteExecutionError);
       }
     },
   });
@@ -354,11 +455,11 @@ const getStatusColor = (status: string) => {
 // 获取状态文本
 const getStatusText = (status: string) => {
   const texts: Record<string, string> = {
-    pending: '等待中',
-    running: '执行中',
-    completed: '已完成',
-    failed: '失败',
-    cancelled: '已取消',
+    pending: pageText.value.statusPending,
+    running: pageText.value.statusRunning,
+    completed: pageText.value.statusCompleted,
+    failed: pageText.value.statusFailed,
+    cancelled: pageText.value.statusCancelled,
   };
   return texts[status] || status;
 };
@@ -373,11 +474,13 @@ const getPassRateColor = (rate: number) => {
 // 格式化时长
 const formatDuration = (seconds: number) => {
   if (seconds < 60) {
-    return `${seconds.toFixed(1)}秒`;
+    return `${seconds.toFixed(1)}${pageText.value.secondsUnit}`;
   }
   const minutes = Math.floor(seconds / 60);
   const remainingSeconds = seconds % 60;
-  return `${minutes}分${remainingSeconds.toFixed(0)}秒`;
+  return isEnglish.value
+    ? `${minutes}${pageText.value.minutesUnit} ${remainingSeconds.toFixed(0)}${pageText.value.secondsUnit}`
+    : `${minutes}${pageText.value.minutesUnit}${remainingSeconds.toFixed(0)}${pageText.value.secondsUnit}`;
 };
 
 // 启动定时刷新

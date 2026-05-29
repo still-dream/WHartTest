@@ -1,12 +1,20 @@
 <template>
-  <router-view></router-view> <!-- 渲染当前路由匹配到的页面组件，是整站页面切换的承载位。 -->
+  <a-config-provider :locale="arcoLocale">
+    <router-view></router-view>
+  </a-config-provider>
 </template>
 
 <script setup lang="ts">
 import { onMounted } from 'vue'; // 导入 onMounted 生命周期钩子，用于组件初次挂载后执行初始化逻辑。
+import { ConfigProvider as AConfigProvider } from '@arco-design/web-vue';
 import { useAuthStore } from '@/store/authStore'; // 导入认证状态 store 的组合式函数，用于访问登录态能力。
+import { useAppI18n } from '@/composables/useAppI18n';
+import { useLegacyDomTranslation } from '@/composables/useLegacyDomTranslation';
 
 const authStore = useAuthStore(); // 获取 authStore 实例，后续可调用认证状态检查方法。
+const { arcoLocale } = useAppI18n();
+
+useLegacyDomTranslation();
 
 // 在应用启动时检查认证状态
 onMounted(() => { // 在根组件挂载完成后执行一次初始化回调。

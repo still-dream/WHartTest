@@ -4,9 +4,9 @@
       <div class="search-box">
         <a-select
           v-model="filters.module"
-          placeholder="选择模块"
+          :placeholder="pageText.selectModule"
           allow-clear
-          style="width: 160px; margin-right: 12px"
+          style="width: 160px"
           @change="onSearch"
         >
           <a-option v-for="mod in moduleOptions" :key="mod.id" :value="mod.id">
@@ -15,19 +15,18 @@
         </a-select>
         <a-select
           v-model="filters.level"
-          placeholder="用例等级"
+          :placeholder="pageText.caseLevel"
           allow-clear
-          style="width: 100px; margin-right: 12px"
+          style="width: 120px"
           @change="onSearch"
         >
-          <a-option value="P0">P0</a-option>
-          <a-option value="P1">P1</a-option>
-          <a-option value="P2">P2</a-option>
-          <a-option value="P3">P3</a-option>
+          <a-option v-for="option in levelOptions" :key="option.value" :value="option.value">
+            {{ option.value }}
+          </a-option>
         </a-select>
         <a-input-search
           v-model="filters.search"
-          placeholder="搜索用例名称"
+          :placeholder="pageText.searchCaseName"
           allow-clear
           style="width: 200px"
           @search="onSearch"
@@ -37,30 +36,30 @@
       <div class="action-buttons">
         <a-select
           v-model="selectedActuator"
-          placeholder="选择执行器"
+          :placeholder="pageText.selectActuator"
           allow-clear
-          style="width: 150px; margin-right: 12px"
+          style="width: 150px"
           @focus="fetchActuators"
         >
           <template #empty>
             <div style="padding: 8px; text-align: center; color: var(--color-text-3)">
-              暂无在线执行器
+              {{ pageText.noOnlineActuators }}
             </div>
           </template>
           <a-option v-for="act in actuators" :key="act.id" :value="act.id" :disabled="!act.is_open">
             {{ act.name || act.id }}
-            <a-tag v-if="act.is_open" color="green" size="small" style="margin-left: 4px">在线</a-tag>
-            <a-tag v-else color="gray" size="small" style="margin-left: 4px">离线</a-tag>
+            <a-tag v-if="act.is_open" color="green" size="small" style="margin-left: 4px">{{ pageText.online }}</a-tag>
+            <a-tag v-else color="gray" size="small" style="margin-left: 4px">{{ pageText.offline }}</a-tag>
           </a-option>
         </a-select>
         <a-select
           v-model="selectedEnvConfig"
-          placeholder="执行环境"
+          :placeholder="pageText.executionEnvironment"
           allow-clear
-          style="width: 150px; margin-right: 12px"
+          style="width: 150px"
         >
           <a-option v-for="env in envConfigs" :key="env.id" :value="env.id">
-            {{ env.name }}{{ env.is_default ? ' (默认)' : '' }}
+            {{ formatEnvLabel(env) }}
           </a-option>
         </a-select>
         <a-button
@@ -68,34 +67,33 @@
           status="success"
           :disabled="selectedRowKeys.length === 0 || executingIds.length > 0"
           :loading="executingIds.length > 0"
-          style="margin-right: 12px"
           @click="runBatchTestCases"
         >
           <template #icon><icon-thunderbolt /></template>
-          批量执行{{ selectedRowKeys.length > 0 ? ` (${selectedRowKeys.length})` : '' }}
+          {{ batchExecuteLabel }}
         </a-button>
         <a-popconfirm
-          content="确定要删除选中的用例吗？此操作不可恢复。"
+          :content="pageText.batchDeleteConfirm"
           @ok="batchDeleteTestCases"
         >
           <a-button
             type="primary"
             status="danger"
             :disabled="selectedRowKeys.length === 0"
-            style="margin-right: 12px"
           >
             <template #icon><icon-delete /></template>
-            批量删除{{ selectedRowKeys.length > 0 ? ` (${selectedRowKeys.length})` : '' }}
+            {{ batchDeleteLabel }}
           </a-button>
         </a-popconfirm>
         <a-button type="primary" @click="showAddModal">
           <template #icon><icon-plus /></template>
-          新增用例
+          {{ pageText.addCase }}
         </a-button>
       </div>
     </div>
 
     <a-table
+      :key="`testcase-table-${locale}`"
       :columns="columns"
       :data="testcaseData"
       :pagination="pagination"
@@ -112,11 +110,11 @@
       </template>
       <template #status="{ record }">
         <a-tag :color="statusColors[record.status as ExecutionStatus]">
-          {{ STATUS_LABELS[record.status as ExecutionStatus] }}
+          {{ formatStatusLabel(record.status as ExecutionStatus) }}
         </a-tag>
       </template>
       <template #step_count="{ record }">
-        <a-tag color="cyan">{{ record.step_count || 0 }} 步</a-tag>
+        <a-tag color="cyan">{{ formatStepCount(record.step_count) }}</a-tag>
       </template>
       <template #created_at="{ record }">
         {{ formatDate(record.created_at) }}
@@ -125,7 +123,7 @@
         <a-space :size="4">
           <a-button type="text" size="mini" @click="viewSteps(record)">
             <template #icon><icon-ordered-list /></template>
-            步骤
+            {{ pageText.steps }}
           </a-button>
           <a-button
             type="text"
@@ -135,16 +133,16 @@
             @click="runTestCase(record)"
           >
             <template #icon><icon-play-arrow /></template>
-            {{ isExecuting(record.id) ? '执行中' : '执行' }}
+            {{ isExecuting(record.id) ? pageText.running : pageText.run }}
           </a-button>
           <a-button type="text" size="mini" @click="editTestCase(record)">
             <template #icon><icon-edit /></template>
-            编辑
+            {{ pageText.edit }}
           </a-button>
-          <a-popconfirm content="确定删除该用例？" @ok="deleteTestCase(record)">
+          <a-popconfirm :content="pageText.deleteCaseConfirm" @ok="deleteTestCase(record)">
             <a-button type="text" status="danger" size="mini">
               <template #icon><icon-delete /></template>
-              删除
+              {{ pageText.delete }}
             </a-button>
           </a-popconfirm>
         </a-space>
@@ -154,7 +152,7 @@
     <!-- 新增/编辑弹窗 -->
     <a-modal
       v-model:visible="modalVisible"
-      :title="isEdit ? '编辑用例' : '新增用例'"
+      :title="testCaseModalTitle"
       :ok-loading="submitting"
       width="600px"
       @before-ok="handleSubmit"
@@ -163,8 +161,8 @@
       <a-form ref="formRef" :model="formData" :rules="rules" layout="vertical">
         <a-row :gutter="16">
           <a-col :span="12">
-            <a-form-item field="module" label="所属模块" required>
-              <a-select v-model="formData.module" placeholder="请选择模块">
+            <a-form-item field="module" :label="pageText.module" required>
+              <a-select v-model="formData.module" :placeholder="pageText.selectModule">
                 <a-option v-for="mod in moduleOptions" :key="mod.id" :value="mod.id">
                   {{ mod.name }}
                 </a-option>
@@ -172,21 +170,20 @@
             </a-form-item>
           </a-col>
           <a-col :span="12">
-            <a-form-item field="level" label="用例等级" required>
+            <a-form-item field="level" :label="pageText.caseLevel" required>
               <a-select v-model="formData.level">
-                <a-option value="P0">P0 - 冒烟</a-option>
-                <a-option value="P1">P1 - 核心</a-option>
-                <a-option value="P2">P2 - 重要</a-option>
-                <a-option value="P3">P3 - 一般</a-option>
+                <a-option v-for="option in levelOptions" :key="option.value" :value="option.value">
+                  {{ option.label }}
+                </a-option>
               </a-select>
             </a-form-item>
           </a-col>
         </a-row>
-        <a-form-item field="name" label="用例名称" required>
-          <a-input v-model="formData.name" placeholder="请输入用例名称" :max-length="255" />
+        <a-form-item field="name" :label="pageText.caseName" required>
+          <a-input v-model="formData.name" :placeholder="pageText.enterCaseName" :max-length="255" />
         </a-form-item>
-        <a-form-item field="description" label="用例描述">
-          <a-textarea v-model="formData.description" placeholder="请输入用例描述" :auto-size="{ minRows: 2, maxRows: 4 }" />
+        <a-form-item field="description" :label="pageText.caseDescription">
+          <a-textarea v-model="formData.description" :placeholder="pageText.enterCaseDescription" :auto-size="{ minRows: 2, maxRows: 4 }" />
         </a-form-item>
       </a-form>
     </a-modal>
@@ -194,7 +191,7 @@
     <!-- 步骤管理抽屉 -->
     <a-drawer
       v-model:visible="stepsDrawerVisible"
-      :title="`用例步骤 - ${currentTestCase?.name || ''}`"
+      :title="stepsDrawerTitle"
       :width="900"
       :footer="false"
     >
@@ -208,6 +205,7 @@ import { ref, reactive, computed, onMounted, watch, onUnmounted } from 'vue'
 import { Message } from '@arco-design/web-vue'
 import { IconPlus, IconEdit, IconDelete, IconOrderedList, IconPlayArrow, IconThunderbolt } from '@arco-design/web-vue/es/icon'
 import { useProjectStore } from '@/store/projectStore'
+import { useAppI18n } from '@/composables/useAppI18n'
 import { testCaseApi, moduleApi, actuatorApi, envConfigApi, type ActuatorInfo } from '../api'
 import type { UiTestCase, UiTestCaseForm, UiModule, CaseLevel, ExecutionStatus, UiEnvironmentConfig } from '../types'
 import { STATUS_LABELS, extractListData, extractPaginationData, extractResponseData } from '../types'
@@ -220,6 +218,141 @@ const props = defineProps<{
 
 const projectStore = useProjectStore()
 const projectId = computed(() => projectStore.currentProject?.id)
+const { locale, isEnglish, tl } = useAppI18n()
+
+const pageText = computed(() => (
+  isEnglish.value
+    ? {
+        selectModule: 'Select module',
+        caseLevel: 'Case level',
+        searchCaseName: 'Search case name',
+        selectActuator: 'Select actuator',
+        noOnlineActuators: 'No online actuators',
+        online: 'Online',
+        offline: 'Offline',
+        executionEnvironment: 'Execution environment',
+        defaultSuffix: ' (Default)',
+        batchExecute: 'Batch run',
+        batchDelete: 'Batch delete',
+        batchDeleteConfirm: 'Delete the selected cases? This action cannot be undone.',
+        addCase: 'Create case',
+        steps: 'Steps',
+        run: 'Run',
+        running: 'Running',
+        edit: 'Edit',
+        delete: 'Delete',
+        deleteCaseConfirm: 'Delete this case?',
+        editCase: 'Edit case',
+        module: 'Module',
+        caseName: 'Case name',
+        enterCaseName: 'Enter case name',
+        caseDescription: 'Case description',
+        enterCaseDescription: 'Enter case description',
+        caseSteps: 'Case steps',
+        selectModuleRequired: 'Select module',
+        enterCaseNameRequired: 'Enter case name',
+        selectCaseLevelRequired: 'Select a case level',
+        tableModule: 'Module',
+        tableCaseName: 'Case name',
+        tableLevel: 'Level',
+        tableStatus: 'Status',
+        tableStepCount: 'Step count',
+        tableCreatedBy: 'Created by',
+        tableCreatedAt: 'Created at',
+        tableActions: 'Actions',
+        fetchModuleListFailed: 'Failed to fetch module list',
+        fetchCaseListFailed: 'Failed to fetch case list',
+        fillRequired: 'Fill in the required fields',
+        updateSuccess: 'Updated successfully',
+        createSuccess: 'Created successfully',
+        updateFailed: 'Update failed',
+        createFailed: 'Creation failed',
+        deleteSuccess: 'Deleted successfully',
+        deleteFailed: 'Delete failed',
+        noActuatorAvailable: 'No actuator is available. Start the actuator service first.',
+        selectOnlineActuator: 'Select an online actuator',
+        websocketConnectFailed: 'WebSocket connection failed',
+        runCommandFailed: 'Failed to send execution command',
+        batchRunCommandFailed: 'Failed to send batch execution command',
+        selectCasesToRun: 'Select the cases to execute first',
+        selectCasesToDelete: 'Select the cases to delete first',
+        batchDeleteFailed: 'Batch delete failed',
+        batchDeleteError: 'An error occurred while batch deleting cases',
+        batchExecuteLabel: (count: number) => `Batch run${count > 0 ? ` (${count})` : ''}`,
+        batchDeleteLabel: (count: number) => `Batch delete${count > 0 ? ` (${count})` : ''}`,
+        stepCount: (count: number) => `${count} steps`,
+        startedCase: (name: string) => `Started case: ${name}`,
+        startedBatchRun: (count: number) => `Started batch run for ${count} cases`,
+        batchDeleteSuccess: (count: number) => `Deleted ${count} cases successfully`,
+        caseRunSuccess: (passed: number, total: number) => `Case execution succeeded: ${passed}/${total} steps passed`,
+        caseRunFailed: (message: string) => `Case execution failed: ${message}`,
+      }
+    : {
+        selectModule: '选择模块',
+        caseLevel: '用例等级',
+        searchCaseName: '搜索用例名称',
+        selectActuator: '选择执行器',
+        noOnlineActuators: '暂无在线执行器',
+        online: '在线',
+        offline: '离线',
+        executionEnvironment: '执行环境',
+        defaultSuffix: ' (默认)',
+        batchExecute: '批量执行',
+        batchDelete: '批量删除',
+        batchDeleteConfirm: '确定要删除选中的用例吗？此操作不可恢复。',
+        addCase: '新增用例',
+        steps: '步骤',
+        run: '执行',
+        running: '执行中',
+        edit: '编辑',
+        delete: '删除',
+        deleteCaseConfirm: '确定删除该用例？',
+        editCase: '编辑用例',
+        module: '所属模块',
+        caseName: '用例名称',
+        enterCaseName: '请输入用例名称',
+        caseDescription: '用例描述',
+        enterCaseDescription: '请输入用例描述',
+        caseSteps: '用例步骤',
+        selectModuleRequired: '请选择模块',
+        enterCaseNameRequired: '请输入用例名称',
+        selectCaseLevelRequired: '请选择用例等级',
+        tableModule: '模块',
+        tableCaseName: '用例名称',
+        tableLevel: '等级',
+        tableStatus: '状态',
+        tableStepCount: '步骤数',
+        tableCreatedBy: '创建者',
+        tableCreatedAt: '创建时间',
+        tableActions: '操作',
+        fetchModuleListFailed: '获取模块列表失败',
+        fetchCaseListFailed: '获取用例列表失败',
+        fillRequired: '请填写必填项',
+        updateSuccess: '更新成功',
+        createSuccess: '创建成功',
+        updateFailed: '更新失败',
+        createFailed: '创建失败',
+        deleteSuccess: '删除成功',
+        deleteFailed: '删除失败',
+        noActuatorAvailable: '没有可用的执行器，请先启动执行器服务',
+        selectOnlineActuator: '请选择一个在线的执行器',
+        websocketConnectFailed: 'WebSocket 连接失败',
+        runCommandFailed: '发送执行命令失败',
+        batchRunCommandFailed: '发送批量执行命令失败',
+        selectCasesToRun: '请先选择要执行的用例',
+        selectCasesToDelete: '请先选择要删除的用例',
+        batchDeleteFailed: '批量删除失败',
+        batchDeleteError: '批量删除用例时发生错误',
+        batchExecuteLabel: (count: number) => `批量执行${count > 0 ? ` (${count})` : ''}`,
+        batchDeleteLabel: (count: number) => `批量删除${count > 0 ? ` (${count})` : ''}`,
+        stepCount: (count: number) => `${count} 步`,
+        startedCase: (name: string) => `开始执行用例: ${name}`,
+        startedBatchRun: (count: number) => `开始批量执行 ${count} 个用例`,
+        batchDeleteSuccess: (count: number) => `成功删除 ${count} 个用例`,
+        caseRunSuccess: (passed: number, total: number) => `用例执行成功: ${passed}/${total} 步骤通过`,
+        caseRunFailed: (message: string) => `用例执行失败: ${message}`,
+      }
+))
 
 const loading = ref(false)
 const submitting = ref(false)
@@ -261,28 +394,65 @@ const formData = reactive<UiTestCaseForm>({
   case_flow: '',
 })
 
-const rules = {
-  module: [{ required: true, message: '请选择模块' }],
-  name: [{ required: true, message: '请输入用例名称' }],
-  level: [{ required: true, message: '请选择用例等级' }],
-}
+const rules = computed(() => ({
+  module: [{ required: true, message: pageText.value.selectModuleRequired }],
+  name: [{ required: true, message: pageText.value.enterCaseNameRequired }],
+  level: [{ required: true, message: pageText.value.selectCaseLevelRequired }],
+}))
 
 const levelColors: Record<CaseLevel, string> = { P0: 'red', P1: 'orange', P2: 'blue', P3: 'gray' }
 const statusColors: Record<ExecutionStatus, string> = { 0: 'gray', 1: 'blue', 2: 'green', 3: 'red' }
 
-const columns = [
-  { title: 'ID', dataIndex: 'id', width: 70, align: 'center' as const },
-  { title: '模块', dataIndex: 'module_name', width: 120, align: 'center' as const },
-  { title: '用例名称', dataIndex: 'name', ellipsis: true, tooltip: true, width: 200, align: 'center' as const },
-  { title: '等级', slotName: 'level', width: 80, align: 'center' as const },
-  { title: '状态', slotName: 'status', width: 90, align: 'center' as const },
-  { title: '步骤数', slotName: 'step_count', width: 90, align: 'center' as const },
-  { title: '创建者', dataIndex: 'creator_name', width: 100, align: 'center' as const },
-  { title: '创建时间', slotName: 'created_at', width: 160, align: 'center' as const },
-  { title: '操作', slotName: 'operations', width: 290, fixed: 'right' as const, align: 'center' as const },
-]
+const columns = computed(() => [
+  { title: 'ID', dataIndex: 'id', width: isEnglish.value ? 90 : 70, align: 'center' as const },
+  { title: pageText.value.tableModule, dataIndex: 'module_name', width: 120, align: 'center' as const },
+  { title: pageText.value.tableCaseName, dataIndex: 'name', ellipsis: true, tooltip: true, width: 220, align: 'center' as const },
+  { title: pageText.value.tableLevel, slotName: 'level', width: 90, align: 'center' as const },
+  { title: pageText.value.tableStatus, slotName: 'status', width: 100, align: 'center' as const },
+  { title: pageText.value.tableStepCount, slotName: 'step_count', width: 110, align: 'center' as const },
+  { title: pageText.value.tableCreatedBy, dataIndex: 'creator_name', width: 110, align: 'center' as const },
+  { title: pageText.value.tableCreatedAt, slotName: 'created_at', width: 180, align: 'center' as const },
+  { title: pageText.value.tableActions, slotName: 'operations', width: isEnglish.value ? 340 : 290, fixed: 'right' as const, align: 'center' as const },
+])
 
-const formatDate = (dateStr: string) => dateStr ? new Date(dateStr).toLocaleString('zh-CN') : '-'
+const levelOptions = computed(() => (
+  isEnglish.value
+    ? [
+        { value: 'P0', label: 'P0 - Smoke' },
+        { value: 'P1', label: 'P1 - Core' },
+        { value: 'P2', label: 'P2 - Important' },
+        { value: 'P3', label: 'P3 - General' },
+      ]
+    : [
+        { value: 'P0', label: 'P0 - 冒烟' },
+        { value: 'P1', label: 'P1 - 核心' },
+        { value: 'P2', label: 'P2 - 重要' },
+        { value: 'P3', label: 'P3 - 一般' },
+      ]
+))
+
+const batchExecuteLabel = computed(() => pageText.value.batchExecuteLabel(selectedRowKeys.value.length))
+const batchDeleteLabel = computed(() => pageText.value.batchDeleteLabel(selectedRowKeys.value.length))
+
+const testCaseModalTitle = computed(() => (
+  isEdit.value ? pageText.value.editCase : pageText.value.addCase
+))
+
+const stepsDrawerTitle = computed(() => (
+  currentTestCase.value?.name
+    ? `${pageText.value.caseSteps} - ${currentTestCase.value.name}`
+    : pageText.value.caseSteps
+))
+
+const formatStatusLabel = (status: ExecutionStatus) => tl(STATUS_LABELS[status])
+
+const formatDate = (dateStr: string) => dateStr ? new Date(dateStr).toLocaleString(isEnglish.value ? 'en-US' : 'zh-CN') : '-'
+
+const formatStepCount = (count?: number) => pageText.value.stepCount(count || 0)
+
+const formatEnvLabel = (env: UiEnvironmentConfig) => (
+  `${env.name}${env.is_default ? pageText.value.defaultSuffix : ''}`
+)
 
 const flattenModules = (modules: UiModule[], level = 0, visited = new Set<number>()): UiModule[] => {
   const result: UiModule[] = []
@@ -304,7 +474,7 @@ const fetchModules = async () => {
     const modules = extractResponseData<UiModule[]>(res) || []
     moduleOptions.value = flattenModules(modules)
   } catch {
-    Message.error('获取模块列表失败')
+    Message.error(pageText.value.fetchModuleListFailed)
   }
 }
 
@@ -322,7 +492,7 @@ const fetchTestCases = async () => {
     testcaseData.value = items
     pagination.total = count
   } catch {
-    Message.error('获取用例列表失败')
+    Message.error(pageText.value.fetchCaseListFailed)
   } finally {
     loading.value = false
   }
@@ -414,7 +584,7 @@ const handleSubmit = async (done: (closed: boolean) => void) => {
   try {
     await formRef.value?.validate()
   } catch {
-    Message.warning('请填写必填项')
+    Message.warning(pageText.value.fillRequired)
     done(false)
     return
   }
@@ -422,10 +592,10 @@ const handleSubmit = async (done: (closed: boolean) => void) => {
   try {
     if (isEdit.value && currentTestCase.value) {
       await testCaseApi.update(currentTestCase.value.id, formData)
-      Message.success('更新成功')
+      Message.success(pageText.value.updateSuccess)
     } else {
       await testCaseApi.create(formData)
-      Message.success('创建成功')
+      Message.success(pageText.value.createSuccess)
     }
     done(true)
     fetchTestCases()
@@ -438,7 +608,7 @@ const handleSubmit = async (done: (closed: boolean) => void) => {
         .join('\n')
       Message.error({ content: messages, duration: 5000 })
     } else {
-      Message.error(err?.error || (isEdit.value ? '更新失败' : '创建失败'))
+      Message.error(err?.error || (isEdit.value ? pageText.value.updateFailed : pageText.value.createFailed))
     }
     done(false)
   } finally {
@@ -453,10 +623,10 @@ const handleCancel = () => {
 const deleteTestCase = async (record: UiTestCase) => {
   try {
     await testCaseApi.delete(record.id)
-    Message.success('删除成功')
+    Message.success(pageText.value.deleteSuccess)
     fetchTestCases()
   } catch {
-    Message.error('删除失败')
+    Message.error(pageText.value.deleteFailed)
   }
 }
 
@@ -471,7 +641,7 @@ const runTestCase = async (record: UiTestCase) => {
 
   // 检查是否有可用执行器
   if (actuators.value.length === 0 || !actuators.value.some(a => a.is_open)) {
-    Message.warning('没有可用的执行器，请先启动执行器')
+    Message.warning(pageText.value.noActuatorAvailable)
     return
   }
 
@@ -481,7 +651,7 @@ const runTestCase = async (record: UiTestCase) => {
     if (available) {
       selectedActuator.value = available.id
     } else {
-      Message.warning('请选择一个在线的执行器')
+      Message.warning(pageText.value.selectOnlineActuator)
       return
     }
   }
@@ -498,7 +668,7 @@ const runTestCase = async (record: UiTestCase) => {
   try {
     await uiWebSocket.connect()
   } catch {
-    Message.error('WebSocket 连接失败')
+    Message.error(pageText.value.websocketConnectFailed)
     return
   }
 
@@ -506,14 +676,14 @@ const runTestCase = async (record: UiTestCase) => {
   executingIds.value.push(record.id)
   const success = uiWebSocket.runTestCase(record.id, selectedEnvConfig.value, selectedActuator.value)
   if (success) {
-    Message.info(`开始执行用例: ${record.name}`)
+    Message.info(pageText.value.startedCase(record.name))
     // 立即更新本地状态为"执行中"
     const idx = testcaseData.value.findIndex(tc => tc.id === record.id)
     if (idx !== -1) {
       testcaseData.value[idx].status = 1  // 执行中
     }
   } else {
-    Message.error('发送执行命令失败')
+    Message.error(pageText.value.runCommandFailed)
     executingIds.value = executingIds.value.filter(id => id !== record.id)
   }
 }
@@ -521,7 +691,7 @@ const runTestCase = async (record: UiTestCase) => {
 /** 批量执行选中的用例 */
 const runBatchTestCases = async () => {
   if (selectedRowKeys.value.length === 0) {
-    Message.warning('请先选择要执行的用例')
+    Message.warning(pageText.value.selectCasesToRun)
     return
   }
 
@@ -530,7 +700,7 @@ const runBatchTestCases = async () => {
 
   // 检查是否有可用执行器
   if (actuators.value.length === 0 || !actuators.value.some(a => a.is_open)) {
-    Message.warning('没有可用的执行器，请先启动执行器')
+    Message.warning(pageText.value.noActuatorAvailable)
     return
   }
 
@@ -540,7 +710,7 @@ const runBatchTestCases = async () => {
     if (available) {
       selectedActuator.value = available.id
     } else {
-      Message.warning('请选择一个在线的执行器')
+      Message.warning(pageText.value.selectOnlineActuator)
       return
     }
   }
@@ -557,7 +727,7 @@ const runBatchTestCases = async () => {
   try {
     await uiWebSocket.connect()
   } catch {
-    Message.error('WebSocket 连接失败')
+    Message.error(pageText.value.websocketConnectFailed)
     return
   }
 
@@ -565,7 +735,7 @@ const runBatchTestCases = async () => {
   executingIds.value.push(...selectedRowKeys.value)
   const success = uiWebSocket.runTestCases(selectedRowKeys.value, selectedEnvConfig.value, selectedActuator.value)
   if (success) {
-    Message.info(`开始批量执行 ${selectedRowKeys.value.length} 个用例`)
+    Message.info(pageText.value.startedBatchRun(selectedRowKeys.value.length))
     // 更新选中用例状态为"执行中"
     for (const caseId of selectedRowKeys.value) {
       const idx = testcaseData.value.findIndex(tc => tc.id === caseId)
@@ -576,7 +746,7 @@ const runBatchTestCases = async () => {
     // 清空选择
     selectedRowKeys.value = []
   } else {
-    Message.error('发送批量执行命令失败')
+    Message.error(pageText.value.batchRunCommandFailed)
     executingIds.value = executingIds.value.filter(id => !selectedRowKeys.value.includes(id))
   }
 }
@@ -584,7 +754,7 @@ const runBatchTestCases = async () => {
 /** 批量删除选中的用例 */
 const batchDeleteTestCases = async () => {
   if (selectedRowKeys.value.length === 0) {
-    Message.warning('请先选择要删除的用例')
+    Message.warning(pageText.value.selectCasesToDelete)
     return
   }
 
@@ -593,17 +763,17 @@ const batchDeleteTestCases = async () => {
     const result = extractResponseData<{ message?: string }>(res)
     
     if (result) {
-      Message.success(result.message || `成功删除 ${selectedRowKeys.value.length} 个用例`)
+      Message.success(result.message || pageText.value.batchDeleteSuccess(selectedRowKeys.value.length))
       // 清空选择
       selectedRowKeys.value = []
       // 刷新列表
       fetchTestCases()
     } else {
-      Message.error('批量删除失败')
+      Message.error(pageText.value.batchDeleteFailed)
     }
   } catch (error) {
     console.error('批量删除用例出错:', error)
-    Message.error('批量删除用例时发生错误')
+    Message.error(pageText.value.batchDeleteError)
   }
 }
 
@@ -618,9 +788,9 @@ const handleCaseResult = (data: any) => {
   }
 
   if (result.status === 'success') {
-    Message.success(`用例执行成功: ${result.passed_steps}/${result.total_steps} 步骤通过`)
+    Message.success(pageText.value.caseRunSuccess(result.passed_steps, result.total_steps))
   } else {
-    Message.error(`用例执行失败: ${result.message}`)
+    Message.error(pageText.value.caseRunFailed(result.message))
   }
   fetchTestCases()
 }
@@ -713,9 +883,21 @@ onUnmounted(() => {
   justify-content: space-between;
   align-items: center;
   margin-bottom: 16px;
+  flex-wrap: wrap;
+  gap: 12px;
 }
 .search-box {
   display: flex;
   align-items: center;
+  flex-wrap: wrap;
+  gap: 12px;
+}
+
+.action-buttons {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  flex-wrap: wrap;
+  gap: 12px;
 }
 </style>

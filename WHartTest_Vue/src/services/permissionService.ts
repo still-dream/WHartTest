@@ -8,16 +8,20 @@ export interface Permission {
   id: number;
   name: string;
   name_cn: string; // 中文权限名称字段
+  name_en: string; // 英文权限名称字段
   codename: string;
   content_type: {
     id: number;
     app_label: string;
     app_label_cn: string; // 应用中文名称
+    app_label_en: string; // 应用英文名称
     app_label_sort: number; // 应用排序字段（1-6）
     app_label_subcategory: string; // 第二层分类名称
+    app_label_subcategory_en: string; // 第二层分类英文名称
     app_label_subcategory_sort: number; // 第二层分类排序权重
     model: string;
     model_cn: string; // 模型中文名称
+    model_en: string; // 模型英文名称
     model_verbose: string; // 模型详细名称
   };
 }

@@ -1,15 +1,15 @@
 <template>
   <div class="knowledge-management">
     <div v-if="!selectedKB" class="page-header">
-      <h1 class="page-title">知识库管理</h1>
+      <h1 class="page-title">{{ pageText.pageTitle }}</h1>
       <div class="header-actions">
         <a-button @click="showConfigModal" style="margin-right: 8px">
           <template #icon><icon-settings /></template>
-          知识库配置
+          {{ pageText.knowledgeBaseConfig }}
         </a-button>
         <a-button type="primary" @click="showCreateModal">
           <template #icon><icon-plus /></template>
-          新建知识库
+          {{ pageText.createKnowledgeBase }}
         </a-button>
       </div>
     </div>
@@ -21,7 +21,7 @@
           <div class="search-bar">
             <a-input-search
               v-model="searchKeyword"
-              placeholder="搜索知识库..."
+              :placeholder="pageText.searchPlaceholder"
               style="width: 300px"
               @search="handleSearch"
               @clear="handleSearch"
@@ -30,13 +30,17 @@
           <div class="filter-bar">
             <a-select
               v-model="statusFilter"
-              placeholder="状态筛选"
+              :placeholder="pageText.statusFilterPlaceholder"
               style="width: 120px"
               @change="handleSearch"
             >
-              <a-option value="">全部</a-option>
-              <a-option value="true">启用</a-option>
-              <a-option value="false">禁用</a-option>
+              <a-option
+                v-for="option in statusOptions"
+                :key="option.value || 'all'"
+                :value="option.value"
+              >
+                {{ option.label }}
+              </a-option>
             </a-select>
           </div>
         </div>
@@ -59,31 +63,34 @@
 
           <template #status="{ record }">
             <a-tag :color="record.is_active ? 'green' : 'red'">
-              {{ record.is_active ? '启用' : '禁用' }}
+              {{ record.is_active ? pageText.enabled : pageText.disabled }}
             </a-tag>
           </template>
 
           <template #stats="{ record }">
             <div class="stats-cell">
-              <div>文档: {{ record.document_count }}</div>
-              <div>分块: {{ record.chunk_count }}</div>
+              <div>{{ pageText.documents }}: {{ record.document_count }}</div>
+              <div>{{ pageText.chunks }}: {{ record.chunk_count }}</div>
             </div>
           </template>
 
           <template #actions="{ record }">
             <a-space>
+              <a-button type="text" size="small" @click="selectKnowledgeBase(record)">
+                {{ pageText.upload }}
+              </a-button>
               <a-button type="text" size="small" @click="editKnowledgeBase(record)">
-                编辑
+                {{ pageText.edit }}
               </a-button>
               <a-button type="text" size="small" @click="viewStatistics(record)">
-                统计
+                {{ pageText.statistics }}
               </a-button>
               <a-popconfirm
-                content="确定要删除这个知识库吗？"
+                :content="pageText.deleteConfirmContent"
                 @ok="deleteKnowledgeBase(record.id)"
               >
                 <a-button type="text" size="small" status="danger">
-                  删除
+                  {{ pageText.delete }}
                 </a-button>
               </a-popconfirm>
             </a-space>
@@ -127,9 +134,10 @@
 </template>
 
 <script setup lang="ts">
-import { ref, onMounted, watch } from 'vue';
+import { computed, ref, onMounted, watch } from 'vue';
 import { Message } from '@arco-design/web-vue';
 import { IconPlus, IconSettings } from '@arco-design/web-vue/es/icon';
+import { useAppI18n } from '@/composables/useAppI18n';
 import { useProjectStore } from '@/store/projectStore';
 import { KnowledgeService } from '../services/knowledgeService';
 import type { KnowledgeBase } from '../types/knowledge';
@@ -139,6 +147,81 @@ import KnowledgeBaseStatsModal from '../components/KnowledgeBaseStatsModal.vue';
 import KnowledgeGlobalConfigModal from '../components/KnowledgeGlobalConfigModal.vue';
 
 const projectStore = useProjectStore();
+const { isEnglish } = useAppI18n();
+
+const pageText = computed(() => (
+  isEnglish.value
+    ? {
+        pageTitle: 'Knowledge Base',
+        knowledgeBaseConfig: 'Knowledge base config',
+        createKnowledgeBase: 'New knowledge base',
+        searchPlaceholder: 'Search knowledge bases...',
+        statusFilterPlaceholder: 'Status',
+        all: 'All',
+        enabled: 'Enabled',
+        disabled: 'Disabled',
+        documents: 'Documents',
+        chunks: 'Chunks',
+        upload: 'Upload',
+        edit: 'Edit',
+        statistics: 'Statistics',
+        delete: 'Delete',
+        knowledgeBaseName: 'Knowledge base name',
+        description: 'Description',
+        noDescription: 'No description',
+        project: 'Project',
+        status: 'Status',
+        stats: 'Stats',
+        creator: 'Created by',
+        createdAt: 'Created at',
+        actions: 'Actions',
+        fetchKnowledgeBasesFailed: 'Failed to fetch knowledge bases',
+        knowledgeBaseUpdated: 'Knowledge base updated successfully',
+        knowledgeBaseCreated: 'Knowledge base created successfully',
+        knowledgeBaseDeleted: 'Knowledge base deleted successfully',
+        deleteKnowledgeBaseFailed: 'Failed to delete knowledge base',
+        globalConfigUpdated: 'Global configuration updated',
+        deleteConfirmContent: 'Delete this knowledge base?',
+      }
+    : {
+        pageTitle: '知识库管理',
+        knowledgeBaseConfig: '知识库配置',
+        createKnowledgeBase: '新建知识库',
+        searchPlaceholder: '搜索知识库...',
+        statusFilterPlaceholder: '状态筛选',
+        all: '全部',
+        enabled: '启用',
+        disabled: '禁用',
+        documents: '文档',
+        chunks: '分块',
+        upload: '上传',
+        edit: '编辑',
+        statistics: '统计',
+        delete: '删除',
+        knowledgeBaseName: '知识库名称',
+        description: '描述',
+        noDescription: '暂无描述',
+        project: '所属项目',
+        status: '状态',
+        stats: '统计',
+        creator: '创建者',
+        createdAt: '创建时间',
+        actions: '操作',
+        fetchKnowledgeBasesFailed: '获取知识库列表失败',
+        knowledgeBaseUpdated: '知识库更新成功',
+        knowledgeBaseCreated: '知识库创建成功',
+        knowledgeBaseDeleted: '知识库删除成功',
+        deleteKnowledgeBaseFailed: '删除知识库失败',
+        globalConfigUpdated: '全局配置已更新',
+        deleteConfirmContent: '确定要删除这个知识库吗？',
+      }
+));
+
+const statusOptions = computed(() => [
+  { value: '', label: pageText.value.all },
+  { value: 'true', label: pageText.value.enabled },
+  { value: 'false', label: pageText.value.disabled },
+]);
 
 // 响应式数据
 const knowledgeBases = ref<KnowledgeBase[]>([]);
@@ -162,50 +245,50 @@ const pagination = ref({
 });
 
 // 表格列配置
-const columns = [
+const columns = computed(() => [
   {
-    title: '知识库名称',
+    title: pageText.value.knowledgeBaseName,
     dataIndex: 'name',
     slotName: 'name',
     width: 200,
     align: 'center',
   },
   {
-    title: '描述',
+    title: pageText.value.description,
     dataIndex: 'description',
     width: 200,
     align: 'center',
     render: ({ record }: { record: KnowledgeBase }) => {
-      return record.description || '暂无描述';
+      return record.description || pageText.value.noDescription;
     },
   },
   {
-    title: '所属项目',
+    title: pageText.value.project,
     slotName: 'project',
     width: 150,
     align: 'center',
   },
   {
-    title: '状态',
+    title: pageText.value.status,
     dataIndex: 'is_active',
     slotName: 'status',
     width: 80,
     align: 'center',
   },
   {
-    title: '统计',
+    title: pageText.value.stats,
     slotName: 'stats',
     width: 100,
     align: 'center',
   },
   {
-    title: '创建者',
+    title: pageText.value.creator,
     dataIndex: 'creator_name',
     width: 100,
     align: 'center',
   },
   {
-    title: '创建时间',
+    title: pageText.value.createdAt,
     dataIndex: 'created_at',
     width: 150,
     align: 'center',
@@ -214,13 +297,13 @@ const columns = [
     },
   },
   {
-    title: '操作',
+    title: pageText.value.actions,
     slotName: 'actions',
-    width: 150,
+    width: 210,
     align: 'center',
     fixed: 'right',
   },
-];
+]);
 
 // 方法
 const fetchKnowledgeBases = async () => {
@@ -263,7 +346,7 @@ const fetchKnowledgeBases = async () => {
   } catch (error: any) {
     console.error('获取知识库列表失败:', error);
     // 显示具体的错误消息
-    const errorMessage = error?.message || '获取知识库列表失败';
+    const errorMessage = error?.message || pageText.value.fetchKnowledgeBasesFailed;
     Message.error(errorMessage);
     knowledgeBases.value = [];
     pagination.value.total = 0;
@@ -311,13 +394,13 @@ const handleSubmitKnowledgeBase = async () => {
   const isEdit = !!editingKB.value;
   closeFormModal();
   await refreshKnowledgeBases();
-  Message.success(isEdit ? '知识库更新成功' : '知识库创建成功');
+  Message.success(isEdit ? pageText.value.knowledgeBaseUpdated : pageText.value.knowledgeBaseCreated);
 };
 
 const deleteKnowledgeBase = async (id: string) => {
   try {
     await KnowledgeService.deleteKnowledgeBase(id);
-    Message.success('知识库删除成功');
+    Message.success(pageText.value.knowledgeBaseDeleted);
     await refreshKnowledgeBases();
 
     // 如果删除的是当前选中的知识库，清除选中状态
@@ -327,7 +410,7 @@ const deleteKnowledgeBase = async (id: string) => {
   } catch (error: any) {
     console.error('删除知识库失败:', error);
     // 显示具体的错误消息
-    const errorMessage = error?.message || '删除知识库失败';
+    const errorMessage = error?.message || pageText.value.deleteKnowledgeBaseFailed;
     Message.error(errorMessage);
   }
 };
@@ -352,7 +435,7 @@ const closeConfigModal = () => {
 
 const onConfigSaved = () => {
   // 配置保存后可以刷新列表或执行其他操作
-  Message.success('全局配置已更新');
+  Message.success(pageText.value.globalConfigUpdated);
 };
 
 const refreshKnowledgeBases = () => {

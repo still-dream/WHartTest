@@ -1,7 +1,7 @@
 <template>
   <a-modal
     :visible="props.visible"
-    title="工具审批偏好设置"
+    :title="text.title"
     @ok="handleSave"
     @cancel="handleCancel"
     :confirm-loading="saving"
@@ -11,14 +11,14 @@
     <div class="approval-settings">
       <a-alert type="info" class="info-alert">
         <template #icon><icon-info-circle /></template>
-        设置后，系统将自动应用您的审批选择，无需每次手动确认。
+        {{ text.info }}
       </a-alert>
 
-      <a-spin :loading="loading" tip="加载中...">
+      <a-spin :loading="loading" :tip="text.loading">
         <div v-if="toolGroups.length === 0 && !loading" class="empty-state">
           <icon-empty />
-          <p>暂无需要审批的工具</p>
-          <p class="empty-hint">请先添加 MCP 配置并同步工具</p>
+          <p>{{ text.emptyTitle }}</p>
+          <p class="empty-hint">{{ text.emptyHint }}</p>
         </div>
 
         <div v-else class="tool-groups">
@@ -35,7 +35,7 @@
               <icon-apps v-if="group.group_id.startsWith('builtin')" class="group-icon builtin" />
               <icon-cloud-download v-else class="group-icon mcp" />
               <span class="group-name">{{ group.group_name }}</span>
-              <span class="group-count">{{ group.tools.length }} 个工具</span>
+              <span class="group-count">{{ text.toolCount(group.tools.length) }}</span>
               <icon-down v-if="!collapsedGroups.has(group.group_id)" class="expand-icon" />
               <icon-right v-else class="expand-icon" />
             </div>
@@ -76,12 +76,12 @@
     <template #footer>
       <div class="modal-footer">
         <a-button @click="handleReset" :loading="resetting" status="danger" type="text">
-          重置全部
+          {{ text.resetAll }}
         </a-button>
         <div class="footer-right">
-          <a-button @click="handleCancel">取消</a-button>
+          <a-button @click="handleCancel">{{ text.cancel }}</a-button>
           <a-button type="primary" @click="handleSave" :loading="saving">
-            保存
+            {{ text.save }}
           </a-button>
         </div>
       </div>
@@ -99,6 +99,7 @@ import {
   resetToolApprovals,
 } from '@/features/langgraph/services/toolApprovalService';
 import type { ToolGroup, PolicyChoice, ScopeChoice } from '@/features/langgraph/types/toolApproval';
+import { useAppI18n } from '@/composables/useAppI18n';
 
 const props = defineProps<{
   visible: boolean;
@@ -118,6 +119,47 @@ const localToolGroups = ref<ToolGroup[]>([]);
 const policyChoices = ref<PolicyChoice[]>([]);
 const scopeChoices = ref<ScopeChoice[]>([]);
 const collapsedGroups = ref<Set<string>>(new Set());
+const { isEnglish } = useAppI18n();
+
+const text = computed(() => (
+  isEnglish.value
+    ? {
+        title: 'Tool approval preferences',
+        info: 'Once saved, the system will apply your approval choices automatically.',
+        loading: 'Loading...',
+        emptyTitle: 'No tools require approval',
+        emptyHint: 'Add MCP config and sync tools first',
+        toolCount: (count: number) => `${count} tool(s)`,
+        resetAll: 'Reset all',
+        cancel: 'Cancel',
+        save: 'Save',
+        fallbackGroupName: 'All tools',
+        loadFailed: (reason?: string) => `Load failed${reason ? `: ${reason}` : ''}`,
+        saveSuccess: 'Saved successfully',
+        saveFailed: (reason?: string) => `Save failed${reason ? `: ${reason}` : ''}`,
+        resetSuccess: 'Reset completed',
+        resetFailed: (reason?: string) => `Reset failed${reason ? `: ${reason}` : ''}`,
+        unknownError: 'Unknown error',
+      }
+    : {
+        title: '工具审批偏好设置',
+        info: '设置后，系统将自动应用您的审批选择，无需每次手动确认。',
+        loading: '加载中...',
+        emptyTitle: '暂无需要审批的工具',
+        emptyHint: '请先添加 MCP 配置并同步工具',
+        toolCount: (count: number) => `${count} 个工具`,
+        resetAll: '重置全部',
+        cancel: '取消',
+        save: '保存',
+        fallbackGroupName: '所有工具',
+        loadFailed: (reason?: string) => `加载失败${reason ? `: ${reason}` : ''}`,
+        saveSuccess: '保存成功',
+        saveFailed: (reason?: string) => `保存失败${reason ? `: ${reason}` : ''}`,
+        resetSuccess: '已重置',
+        resetFailed: (reason?: string) => `重置失败${reason ? `: ${reason}` : ''}`,
+        unknownError: '未知错误',
+      }
+));
 
 // 切换分组的折叠状态
 const toggleGroup = (groupId: string) => {
@@ -151,7 +193,7 @@ const fetchData = async () => {
       } else if (resp.data.tools && resp.data.tools.length > 0) {
         // 降级：将扁平列表包装成单个分组
         const fallbackGroup: ToolGroup = {
-          group_name: '所有工具',
+          group_name: text.value.fallbackGroupName,
           group_id: 'all',
           tools: resp.data.tools,
         };
@@ -166,10 +208,10 @@ const fetchData = async () => {
       // 默认收起所有分组
       collapsedGroups.value = new Set(localToolGroups.value.map(g => g.group_id));
     } else {
-      Message.error(resp.message || '加载失败');
+      Message.error(resp.message || text.value.loadFailed());
     }
   } catch (error: any) {
-    Message.error('加载失败: ' + (error.message || '未知错误'));
+    Message.error(text.value.loadFailed(error.message || text.value.unknownError));
   } finally {
     loading.value = false;
   }
@@ -201,14 +243,14 @@ const handleSave = async () => {
 
     const resp = await batchUpdateToolApprovals({ approvals });
     if (resp.status === 'success') {
-      Message.success('保存成功');
+      Message.success(text.value.saveSuccess);
       emit('saved');
       emit('update:visible', false);
     } else {
-      Message.error(resp.message || '保存失败');
+      Message.error(resp.message || text.value.saveFailed());
     }
   } catch (error: any) {
-    Message.error('保存失败: ' + (error.message || '未知错误'));
+    Message.error(text.value.saveFailed(error.message || text.value.unknownError));
   } finally {
     saving.value = false;
   }
@@ -220,13 +262,13 @@ const handleReset = async () => {
   try {
     const resp = await resetToolApprovals();
     if (resp.status === 'success') {
-      Message.success(resp.data?.message || '已重置');
+      Message.success(resp.data?.message || text.value.resetSuccess);
       await fetchData();
     } else {
-      Message.error(resp.message || '重置失败');
+      Message.error(resp.message || text.value.resetFailed());
     }
   } catch (error: any) {
-    Message.error('重置失败: ' + (error.message || '未知错误'));
+    Message.error(text.value.resetFailed(error.message || text.value.unknownError));
   } finally {
     resetting.value = false;
   }

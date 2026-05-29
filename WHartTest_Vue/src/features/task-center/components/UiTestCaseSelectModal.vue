@@ -1,18 +1,23 @@
 <template>
-  <a-modal v-model:visible="visible" title="选择UI用例" :width="700" :mask-closable="false" @cancel="handleCancel">
+  <a-modal
+    v-model:visible="visible"
+    :title="modalText.title"
+    :width="700"
+    :mask-closable="false"
+    @cancel="handleCancel"
+  >
     <template #footer>
       <a-space>
-        <span class="selected-count">已选 {{ selectedKeys.length }} 个用例</span>
-        <a-button @click="handleCancel">取消</a-button>
-        <a-button type="primary" @click="handleConfirm" :disabled="selectedKeys.length === 0">确定</a-button>
+        <span class="selected-count">{{ selectedCountText }}</span>
+        <a-button @click="handleCancel">{{ modalText.cancel }}</a-button>
+        <a-button type="primary" @click="handleConfirm" :disabled="selectedKeys.length === 0">{{ modalText.confirm }}</a-button>
       </a-space>
     </template>
 
-    <!-- 搜索和筛选 -->
     <div class="filter-row">
       <a-input-search
         v-model="searchText"
-        placeholder="搜索用例名称"
+        :placeholder="modalText.searchCaseName"
         allow-clear
         style="width: 220px"
         @search="loadData"
@@ -20,16 +25,17 @@
       />
       <a-select
         v-model="moduleFilter"
-        placeholder="筛选模块"
+        :placeholder="modalText.filterModule"
         allow-clear
         style="width: 160px"
         @change="loadData"
       >
-        <a-option v-for="m in modules" :key="m.id" :value="m.id">{{ m.name }}</a-option>
+        <a-option v-for="module in modules" :key="module.id" :value="module.id">{{ module.name }}</a-option>
       </a-select>
     </div>
 
     <a-table
+      :key="`ui-case-select-table-${locale}`"
       :columns="columns"
       :data="testCases"
       :loading="loading"
@@ -48,8 +54,9 @@
 </template>
 
 <script setup lang="ts">
-import { ref, reactive } from 'vue';
+import { ref, reactive, computed } from 'vue';
 import { testCaseApi, moduleApi } from '@/features/ui-automation/api';
+import { useAppI18n } from '@/composables/useAppI18n';
 
 const props = defineProps<{
   projectId: number;
@@ -58,6 +65,34 @@ const props = defineProps<{
 const emit = defineEmits<{
   (e: 'confirm', ids: number[]): void;
 }>();
+
+const { locale, isEnglish } = useAppI18n();
+
+const modalText = computed(() => (
+  isEnglish.value
+    ? {
+        title: 'Select UI Cases',
+        selectedCount: (count: number) => `${count} case(s) selected`,
+        cancel: 'Cancel',
+        confirm: 'Confirm',
+        searchCaseName: 'Search case name',
+        filterModule: 'Filter module',
+        caseName: 'Case Name',
+        module: 'Module',
+        level: 'Level',
+      }
+    : {
+        title: '选择UI用例',
+        selectedCount: (count: number) => `已选 ${count} 个用例`,
+        cancel: '取消',
+        confirm: '确定',
+        searchCaseName: '搜索用例名称',
+        filterModule: '筛选模块',
+        caseName: '用例名称',
+        module: '模块',
+        level: '级别',
+      }
+));
 
 const visible = ref(false);
 const loading = ref(false);
@@ -69,14 +104,19 @@ const moduleFilter = ref<number | undefined>(undefined);
 const pagination = reactive({ current: 1, pageSize: 10, total: 0, showTotal: true });
 
 const levelColors: Record<string, string> = {
-  P0: 'red', P1: 'orangered', P2: 'orange', P3: 'blue',
+  P0: 'red',
+  P1: 'orangered',
+  P2: 'orange',
+  P3: 'blue',
 };
 
-const columns = [
-  { title: '用例名称', dataIndex: 'name', ellipsis: true },
-  { title: '模块', dataIndex: 'module_name', width: 120 },
-  { title: '级别', slotName: 'level', width: 80 },
-];
+const selectedCountText = computed(() => modalText.value.selectedCount(selectedKeys.value.length));
+
+const columns = computed(() => [
+  { title: modalText.value.caseName, dataIndex: 'name', ellipsis: true },
+  { title: modalText.value.module, dataIndex: 'module_name', width: 120 },
+  { title: modalText.value.level, slotName: 'level', width: 80 },
+]);
 
 const loadData = async () => {
   loading.value = true;
@@ -95,9 +135,13 @@ const loadData = async () => {
     } else if (Array.isArray(data)) {
       testCases.value = data;
       pagination.total = data.length;
+    } else {
+      testCases.value = [];
+      pagination.total = 0;
     }
   } catch {
     testCases.value = [];
+    pagination.total = 0;
   } finally {
     loading.value = false;
   }
@@ -108,7 +152,7 @@ const loadModules = async () => {
     const res = await moduleApi.list({ project: props.projectId });
     const data = (res as any).data?.data;
     const list = data?.results || (Array.isArray(data) ? data : []);
-    modules.value = list.map((m: any) => ({ id: m.id, name: m.name }));
+    modules.value = list.map((module: any) => ({ id: module.id, name: module.name }));
   } catch {
     modules.value = [];
   }
@@ -146,6 +190,7 @@ defineExpose({ open });
   display: flex;
   gap: 12px;
   margin-bottom: 12px;
+  flex-wrap: wrap;
 }
 
 .selected-count {

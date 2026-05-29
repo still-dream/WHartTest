@@ -56,3 +56,48 @@ export interface SkillContentResponse {
     content: string
   }
 }
+
+export interface SkillStoreConfig {
+  default_source: string
+  default_source_name: string
+  allow_custom_source: boolean
+  max_zip_size: number
+}
+
+export interface SkillStoreSource {
+  id: string
+  name: string
+  baseUrl: string
+  isDefault?: boolean
+}
+
+export interface ManifestSkill {
+  id: string
+  name: string
+  name_en?: string
+  description: string
+  description_en?: string
+  version?: string
+  author?: string
+  tags?: string[]
+  zip_path: string
+  readme_path?: string
+  sha256?: string
+}
+
+export interface SkillStoreManifest {
+  version: string
+  updated_at?: string
+  skills: ManifestSkill[]
+}
+
+export type StoreItemStatus = 'idle' | 'installing' | 'uninstalling' | 'ok' | 'error'
+
+export interface StoreItemState {
+  item: ManifestSkill
+  installed: boolean
+  installedId: number | null
+  selected: boolean
+  status: StoreItemStatus
+  error: string
+}

@@ -4,7 +4,7 @@
       <div class="chat-actions">
         <div class="kb-toggle">
           <span class="kb-icon">📚</span>
-          <span class="toggle-label">知识库</span>
+          <span class="toggle-label">{{ text.knowledgeBase }}</span>
           <a-switch
             :model-value="useKnowledgeBase"
             @update:model-value="handleKnowledgeBaseToggle"
@@ -13,13 +13,14 @@
         </div>
 
         <div class="prompt-selector">
-          <span class="prompt-label">提示词：</span>
+          <span class="prompt-label">{{ text.promptLabel }}</span>
           <a-select
             v-model="selectedPromptId"
-            :placeholder="defaultPrompt ? defaultPrompt.name : '选择提示词'"
+            :placeholder="defaultPrompt ? defaultPrompt.name : text.selectPrompt"
             style="width: 160px"
             allow-clear
             @change="handlePromptChange"
+            @popup-visible-change="handleDropdownVisibleChange"
             :loading="promptsLoading"
             :fallback-option="false"
           >
@@ -30,7 +31,7 @@
               :label="prompt.name"
             >
               <span>{{ prompt.name }}</span>
-              <a-tag v-if="prompt.is_default" color="blue" size="small" style="margin-left: 8px;">默认</a-tag>
+              <a-tag v-if="prompt.is_default" color="blue" size="small" style="margin-left: 8px;">{{ text.default }}</a-tag>
             </a-option>
           </a-select>
         </div>
@@ -39,35 +40,35 @@
           <template #icon>
             <icon-file />
           </template>
-          管理提示词
+          {{ text.managePrompts }}
         </a-button>
 
         <a-button type="text" @click="goToLlmConfigs">
           <template #icon>
             <icon-settings />
           </template>
-          LLM配置
+          {{ text.llmConfig }}
         </a-button>
 
         <a-button type="text" @click="$emit('show-tool-approval-settings')">
           <template #icon>
             <icon-thunderbolt />
           </template>
-          工具审批
+          {{ text.toolApproval }}
         </a-button>
 
         <a-button type="text" @click="$emit('show-weixin-connect')">
           <template #icon>
             <icon-message />
           </template>
-          微信接入
+          {{ text.weixinConnect }}
         </a-button>
 
         <a-button v-if="hasMessages" type="text" status="danger" @click="$emit('clear-chat')">
           <template #icon>
             <icon-delete style="color: #f53f3f;" />
           </template>
-          清除对话
+          {{ text.clearChat }}
         </a-button>
       </div>
     </div>
@@ -91,15 +92,43 @@
 </template>
 
 <script setup lang="ts">
-import { ref, onMounted, watch } from 'vue';
+import { ref, onMounted, watch, computed } from 'vue';
 import { useRouter } from 'vue-router';
 import { Button as AButton, Tag as ATag, Switch as ASwitch, Select as ASelect, Option as AOption } from '@arco-design/web-vue';
 import { IconDelete, IconSettings, IconThunderbolt, IconFile, IconMessage } from '@arco-design/web-vue/es/icon';
 import KnowledgeBaseSelector from './KnowledgeBaseSelector.vue';
 import { getUserPrompts, getDefaultPrompt } from '@/features/prompts/services/promptService';
 import type { UserPrompt } from '@/features/prompts/types/prompt';
+import { useAppI18n } from '@/composables/useAppI18n';
 
 const router = useRouter();
+const { isEnglish } = useAppI18n();
+
+const text = computed(() => (
+  isEnglish.value
+    ? {
+        knowledgeBase: 'Knowledge Base',
+        promptLabel: 'Prompt:',
+        selectPrompt: 'Select prompt',
+        default: 'Default',
+        managePrompts: 'Manage Prompts',
+        llmConfig: 'LLM Config',
+        toolApproval: 'Tool Approval',
+        weixinConnect: 'WeChat Connect',
+        clearChat: 'Clear Chat',
+      }
+    : {
+        knowledgeBase: '知识库',
+        promptLabel: '提示词：',
+        selectPrompt: '选择提示词',
+        default: '默认',
+        managePrompts: '管理提示词',
+        llmConfig: 'LLM配置',
+        toolApproval: '工具审批',
+        weixinConnect: '微信接入',
+        clearChat: '清除对话',
+      }
+));
 
 interface Props {
   sessionId: string;
@@ -212,6 +241,13 @@ const loadUserPrompts = async () => {
 const handlePromptChange = (promptId: number | null) => {
   selectedPromptId.value = promptId;
   emit('update:selected-prompt-id', promptId);
+};
+
+// 每次展开下拉时拉取最新数据，避免初始化语言切换/管理操作后看到旧列表
+const handleDropdownVisibleChange = (visible: boolean) => {
+  if (visible) {
+    loadUserPrompts();
+  }
 };
 
 // 处理知识库开关变化

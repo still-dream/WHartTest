@@ -638,6 +638,24 @@ export interface ProjectStatistics {
       cancelled: number;
     };
   };
+  api_testing: {
+    total_cases: number;
+    total_interfaces: number;
+    total_sync_configs: number;
+    total_executions: number;
+    execution_by_status: {
+      completed: number;
+      failed: number;
+      running: number;
+      canceled: number;
+    };
+    report_summary: {
+      total: number;
+      success: number;
+      failure: number;
+      error: number;
+    };
+  };
 }
 
 interface ProjectStatisticsResponse {

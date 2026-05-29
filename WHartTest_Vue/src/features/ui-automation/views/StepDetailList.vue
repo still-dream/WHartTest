@@ -1,34 +1,34 @@
 <template>
   <div class="step-detail-list">
     <div class="step-header">
-      <span class="step-title">操作步骤（拖拽可排序）</span>
+      <span class="step-title">{{ stepText.stepListTitle }}</span>
       <a-space>
-        <a-select v-model="selectedEnvConfig" placeholder="执行环境" size="small" style="width: 120px" allow-clear>
+        <a-select v-model="selectedEnvConfig" :placeholder="stepText.executionEnv" size="small" style="width: 120px" allow-clear>
           <a-option v-for="env in envConfigs" :key="env.id" :value="env.id">
             {{ env.name }}
-            <a-tag v-if="env.is_default" size="small" color="arcoblue" style="margin-left: 4px">默认</a-tag>
+            <a-tag v-if="env.is_default" size="small" color="arcoblue" style="margin-left: 4px">{{ stepText.default }}</a-tag>
           </a-option>
         </a-select>
-        <a-select v-model="selectedActuator" placeholder="选择执行器" size="small" style="width: 150px" allow-clear>
+        <a-select v-model="selectedActuator" :placeholder="stepText.selectActuator" size="small" style="width: 150px" allow-clear>
           <a-option v-for="act in actuators" :key="act.id" :value="act.id" :disabled="!act.is_open">
             {{ act.name || act.id }}
-            <a-tag v-if="!act.is_open" size="small" color="gray" style="margin-left: 4px">离线</a-tag>
+            <a-tag v-if="!act.is_open" size="small" color="gray" style="margin-left: 4px">{{ stepText.offline }}</a-tag>
           </a-option>
         </a-select>
         <a-button type="outline" status="success" size="small" :loading="executing" :disabled="!selectedActuator" @click="executePageStep">
           <template #icon><icon-play-arrow /></template>
-          调试执行
+          {{ stepText.debugRun }}
         </a-button>
         <a-button type="primary" size="small" @click="showAddModal">
           <template #icon><icon-plus /></template>
-          添加操作
+          {{ stepText.addAction }}
         </a-button>
       </a-space>
     </div>
 
     <a-spin :loading="loading">
       <div v-if="stepData.length === 0" class="empty-tips">
-        <a-empty description="暂无操作步骤" />
+        <a-empty :description="stepText.emptyActions" />
       </div>
       <draggable
         v-else
@@ -46,33 +46,33 @@
               <div class="step-index">{{ index + 1 }}</div>
               <div class="step-type">
                 <a-tag :color="stepTypeColors[element.step_type as StepType]" size="small">
-                  {{ STEP_TYPE_LABELS[element.step_type as StepType] }}
+                  {{ getStepTypeLabel(element.step_type as StepType) }}
                 </a-tag>
               </div>
             </div>
             <div class="step-content">
               <span v-if="element.element_name" class="info-item">
-                <span class="info-label">元素:</span>
+                <span class="info-label">{{ stepText.elementLabel }}</span>
                 <span class="element-name">{{ element.element_name }}</span>
               </span>
               <span v-if="element.ope_key" class="info-item">
-                <span class="info-label">操作:</span>
+                <span class="info-label">{{ stepText.actionLabel }}</span>
                 <span class="ope-key">{{ getOpeKeyLabel(element.ope_key) }}</span>
               </span>
               <span v-if="element.ope_value && Object.keys(element.ope_value).length > 0" class="info-item">
-                <span class="info-label">参数:</span>
+                <span class="info-label">{{ stepText.paramsLabel }}</span>
                 <span class="ope-value">{{ formatOpeValue(element.ope_value) }}</span>
               </span>
-              <span v-if="element.sql_execute && Object.keys(element.sql_execute).length > 0" class="sql-info">SQL操作</span>
-              <span v-if="element.custom && Object.keys(element.custom).length > 0" class="custom-info">自定义变量</span>
-              <span v-if="element.condition_value && Object.keys(element.condition_value).length > 0" class="condition-info">条件判断</span>
+              <span v-if="element.sql_execute && Object.keys(element.sql_execute).length > 0" class="sql-info">{{ stepText.sqlAction }}</span>
+              <span v-if="element.custom && Object.keys(element.custom).length > 0" class="custom-info">{{ stepText.customVariable }}</span>
+              <span v-if="element.condition_value && Object.keys(element.condition_value).length > 0" class="condition-info">{{ stepText.conditionJudge }}</span>
               <span v-if="element.description" class="step-desc" :title="element.description">{{ element.description }}</span>
             </div>
             <div class="step-actions">
               <a-button type="text" size="mini" @click="editStep(element)">
                 <template #icon><icon-edit /></template>
               </a-button>
-              <a-popconfirm content="确定删除该操作？" @ok="deleteStep(element)">
+              <a-popconfirm :content="stepText.deleteActionConfirm" @ok="deleteStep(element)">
                 <a-button type="text" status="danger" size="mini">
                   <template #icon><icon-delete /></template>
                 </a-button>
@@ -86,16 +86,16 @@
     <!-- 添加/编辑操作弹窗 -->
     <a-modal
       v-model:visible="modalVisible"
-      :title="isEdit ? '编辑操作' : '添加操作'"
+      :title="isEdit ? stepText.editAction : stepText.addAction"
       :ok-loading="submitting"
       width="700px"
       @before-ok="handleSubmit"
       @cancel="handleCancel"
     >
       <a-form ref="formRef" :model="formData" :rules="rules" layout="vertical">
-        <a-form-item field="step_type" label="操作类型" required>
+        <a-form-item field="step_type" :label="stepText.actionType" required>
           <a-select v-model="formData.step_type" @change="onStepTypeChange">
-            <a-option v-for="(label, value) in STEP_TYPE_LABELS" :key="value" :value="Number(value)">
+            <a-option v-for="(label, value) in stepTypeLabels" :key="value" :value="Number(value)">
               {{ label }}
             </a-option>
           </a-select>
@@ -103,29 +103,29 @@
 
         <!-- 元素操作 -->
         <template v-if="formData.step_type === 0">
-          <a-form-item field="element" label="选择元素">
-            <a-select v-model="formData.element" placeholder="请选择元素" allow-search allow-clear>
+          <a-form-item field="element" :label="stepText.selectElement">
+            <a-select v-model="formData.element" :placeholder="stepText.pleaseSelectElement" allow-search allow-clear>
               <a-option v-for="el in elementOptions" :key="el.id" :value="el.id">
                 {{ el.name }}
               </a-option>
             </a-select>
           </a-form-item>
-          <a-form-item field="ope_key" label="操作方法">
+          <a-form-item field="ope_key" :label="stepText.actionMethod">
             <a-select v-model="formData.ope_key" allow-search @change="onOpeKeyChange">
-              <a-optgroup label="鼠标操作">
-                <a-option value="click">点击 (click)</a-option>
-                <a-option value="dblclick">双击 (dblclick)</a-option>
-                <a-option value="hover">悬停 (hover)</a-option>
+              <a-optgroup :label="stepText.mouseActions">
+                <a-option value="click">{{ stepText.clickOption }}</a-option>
+                <a-option value="dblclick">{{ stepText.dblclickOption }}</a-option>
+                <a-option value="hover">{{ stepText.hoverOption }}</a-option>
               </a-optgroup>
-              <a-optgroup label="输入操作">
-                <a-option value="fill">填充 (fill)</a-option>
-                <a-option value="type">输入 (type)</a-option>
-                <a-option value="clear">清空 (clear)</a-option>
+              <a-optgroup :label="stepText.inputActions">
+                <a-option value="fill">{{ stepText.fillOption }}</a-option>
+                <a-option value="type">{{ stepText.typeOption }}</a-option>
+                <a-option value="clear">{{ stepText.clearOption }}</a-option>
               </a-optgroup>
-              <a-optgroup label="其他">
-                <a-option value="wait">等待 (wait)</a-option>
-                <a-option value="screenshot">截图 (screenshot)</a-option>
-                <a-option value="select_option">选择下拉 (select_option)</a-option>
+              <a-optgroup :label="stepText.otherActions">
+                <a-option value="wait">{{ stepText.waitOption }}</a-option>
+                <a-option value="screenshot">{{ stepText.screenshotOption }}</a-option>
+                <a-option value="select_option">{{ stepText.selectOption }}</a-option>
               </a-optgroup>
             </a-select>
           </a-form-item>
@@ -135,25 +135,25 @@
               v-for="param in currentOpeParams"
               :key="param.field"
               :field="'opeParams.' + param.field"
-              :label="param.label"
+              :label="getParamLabel(param)"
               :required="param.required"
             >
               <a-input
                 v-if="param.type === 'input'"
                 v-model="opeParams[param.field]"
-                :placeholder="param.placeholder"
+                :placeholder="getParamPlaceholder(param)"
               />
               <a-input-number
                 v-else-if="param.type === 'number'"
                 v-model="opeParams[param.field]"
-                :placeholder="param.placeholder"
+                :placeholder="getParamPlaceholder(param)"
                 :min="param.min"
                 :max="param.max"
               />
               <a-textarea
                 v-else-if="param.type === 'textarea'"
                 v-model="opeParams[param.field]"
-                :placeholder="param.placeholder"
+                :placeholder="getParamPlaceholder(param)"
                 :auto-size="{ minRows: 2, maxRows: 5 }"
               />
             </a-form-item>
@@ -162,20 +162,20 @@
 
         <!-- 断言操作 -->
         <template v-else-if="formData.step_type === 1">
-          <a-form-item field="element" label="断言元素">
-            <a-select v-model="formData.element" placeholder="请选择元素" allow-search allow-clear>
+          <a-form-item field="element" :label="stepText.assertElement">
+            <a-select v-model="formData.element" :placeholder="stepText.pleaseSelectElement" allow-search allow-clear>
               <a-option v-for="el in elementOptions" :key="el.id" :value="el.id">
                 {{ el.name }}
               </a-option>
             </a-select>
           </a-form-item>
-          <a-form-item field="ope_key" label="断言方法">
+          <a-form-item field="ope_key" :label="stepText.assertMethod">
             <a-select v-model="formData.ope_key" @change="onOpeKeyChange">
-              <a-option value="assert_visible">元素可见</a-option>
-              <a-option value="assert_hidden">元素隐藏</a-option>
-              <a-option value="assert_text">文本断言</a-option>
-              <a-option value="assert_value">值断言</a-option>
-              <a-option value="assert_count">数量断言</a-option>
+              <a-option value="assert_visible">{{ stepText.assertVisible }}</a-option>
+              <a-option value="assert_hidden">{{ stepText.assertHidden }}</a-option>
+              <a-option value="assert_text">{{ stepText.assertText }}</a-option>
+              <a-option value="assert_value">{{ stepText.assertValue }}</a-option>
+              <a-option value="assert_count">{{ stepText.assertCount }}</a-option>
             </a-select>
           </a-form-item>
           <!-- 根据断言类型动态渲染参数 -->
@@ -183,18 +183,18 @@
             <a-form-item
               v-for="param in currentOpeParams"
               :key="param.field"
-              :label="param.label"
+              :label="getParamLabel(param)"
               :required="param.required"
             >
               <a-input
                 v-if="param.type === 'input'"
                 v-model="opeParams[param.field]"
-                :placeholder="param.placeholder"
+                :placeholder="getParamPlaceholder(param)"
               />
               <a-input-number
                 v-else-if="param.type === 'number'"
                 v-model="opeParams[param.field]"
-                :placeholder="param.placeholder"
+                :placeholder="getParamPlaceholder(param)"
                 :min="param.min"
                 :max="param.max"
               />
@@ -204,27 +204,27 @@
 
         <!-- SQL 操作 -->
         <template v-else-if="formData.step_type === 2">
-          <a-form-item field="sql_execute" label="SQL 配置">
-            <a-textarea v-model="sqlExecuteStr" placeholder="JSON 格式 SQL 配置" :auto-size="{ minRows: 3 }" />
+          <a-form-item field="sql_execute" :label="stepText.sqlConfig">
+            <a-textarea v-model="sqlExecuteStr" :placeholder="stepText.sqlConfigPlaceholder" :auto-size="{ minRows: 3 }" />
           </a-form-item>
         </template>
 
         <!-- 自定义变量 -->
         <template v-else-if="formData.step_type === 3">
-          <a-form-item field="custom" label="自定义变量">
-            <a-textarea v-model="customStr" placeholder="JSON 格式变量定义" :auto-size="{ minRows: 3 }" />
+          <a-form-item field="custom" :label="stepText.customVariable">
+            <a-textarea v-model="customStr" :placeholder="stepText.customVariablePlaceholder" :auto-size="{ minRows: 3 }" />
           </a-form-item>
         </template>
 
         <!-- 条件判断 -->
         <template v-else-if="formData.step_type === 4">
-          <a-form-item field="condition_value" label="条件配置">
-            <a-textarea v-model="conditionValueStr" placeholder="JSON 格式条件配置" :auto-size="{ minRows: 3 }" />
+          <a-form-item field="condition_value" :label="stepText.conditionConfig">
+            <a-textarea v-model="conditionValueStr" :placeholder="stepText.conditionConfigPlaceholder" :auto-size="{ minRows: 3 }" />
           </a-form-item>
         </template>
 
-        <a-form-item field="description" label="描述">
-          <a-input v-model="formData.description" placeholder="可选描述" />
+        <a-form-item field="description" :label="stepText.description">
+          <a-input v-model="formData.description" :placeholder="stepText.optionalDescription" />
         </a-form-item>
       </a-form>
     </a-modal>
@@ -236,6 +236,7 @@ import { ref, reactive, watch, computed, onMounted, onUnmounted } from 'vue'
 import { Message } from '@arco-design/web-vue'
 import { IconPlus, IconEdit, IconDelete, IconDragDotVertical, IconPlayArrow } from '@arco-design/web-vue/es/icon'
 import draggable from 'vuedraggable'
+import { useAppI18n } from '@/composables/useAppI18n'
 import { pageStepsDetailedApi, elementApi, actuatorApi, envConfigApi, type ActuatorInfo } from '../api'
 import type { UiPageStepsDetailed, UiPageSteps, UiElement, StepType, UiEnvironmentConfig } from '../types'
 import { STEP_TYPE_LABELS, extractListData, extractResponseData } from '../types'
@@ -292,7 +293,200 @@ const formatOpeValue = (opeValue: Record<string, any>) => {
 }
 
 /** 获取操作方法的显示标签 */
-const getOpeKeyLabel = (opeKey: string) => OPE_KEY_LABELS[opeKey] || opeKey
+const { isEnglish } = useAppI18n()
+
+const stepText = computed(() => isEnglish.value
+  ? {
+      stepListTitle: 'Action Steps (drag to reorder)',
+      executionEnv: 'Environment',
+      default: 'Default',
+      selectActuator: 'Select actuator',
+      offline: 'Offline',
+      debugRun: 'Debug Run',
+      addAction: 'Add action',
+      emptyActions: 'No action steps',
+      elementLabel: 'Element:',
+      actionLabel: 'Action:',
+      paramsLabel: 'Params:',
+      sqlAction: 'SQL Action',
+      customVariable: 'Custom variable',
+      conditionJudge: 'Condition',
+      deleteActionConfirm: 'Delete this action?',
+      editAction: 'Edit action',
+      actionType: 'Action Type',
+      selectElement: 'Select element',
+      pleaseSelectElement: 'Please select an element',
+      actionMethod: 'Action Method',
+      mouseActions: 'Mouse Actions',
+      inputActions: 'Input Actions',
+      otherActions: 'Other',
+      clickOption: 'Click (click)',
+      dblclickOption: 'Double click (dblclick)',
+      hoverOption: 'Hover (hover)',
+      fillOption: 'Fill (fill)',
+      typeOption: 'Type (type)',
+      clearOption: 'Clear (clear)',
+      waitOption: 'Wait (wait)',
+      screenshotOption: 'Screenshot (screenshot)',
+      selectOption: 'Select option (select_option)',
+      assertElement: 'Assertion Element',
+      assertMethod: 'Assertion Method',
+      assertVisible: 'Element visible',
+      assertHidden: 'Element hidden',
+      assertText: 'Text assertion',
+      assertValue: 'Value assertion',
+      assertCount: 'Count assertion',
+      sqlConfig: 'SQL Config',
+      sqlConfigPlaceholder: 'SQL config in JSON format',
+      customVariablePlaceholder: 'Variable definition in JSON format',
+      conditionConfig: 'Condition Config',
+      conditionConfigPlaceholder: 'Condition config in JSON format',
+      description: 'Description',
+      optionalDescription: 'Optional description',
+      selectActionTypeRequired: 'Select an action type',
+      fetchActionStepsFailed: 'Failed to fetch action steps',
+      selectActuatorFirst: 'Please select an actuator first',
+      noActionSteps: 'This page step has no actions',
+      websocketFailed: 'WebSocket connection failed. Please refresh and try again',
+      sendExecutionFailed: 'Failed to send execution command',
+      executionSuccess: (passed: number, total: number) => `Execution succeeded: ${passed}/${total} steps passed`,
+      executionFailed: (message: string) => `Execution failed: ${message}`,
+      unknownError: 'Unknown error',
+      fetchElementsFailed: 'Failed to fetch element list',
+      fillRequired: 'Fill in the required fields',
+      enterContent: 'Enter content',
+      updateSuccess: 'Updated successfully',
+      addSuccess: 'Added successfully',
+      updateFailed: 'Update failed',
+      addFailed: 'Add failed',
+      deleteSuccess: 'Deleted successfully',
+      deleteFailed: 'Delete failed',
+      sortSaved: 'Order saved',
+      saveSortFailed: 'Failed to save order',
+    }
+  : {
+      stepListTitle: '操作步骤（拖拽可排序）',
+      executionEnv: '执行环境',
+      default: '默认',
+      selectActuator: '选择执行器',
+      offline: '离线',
+      debugRun: '调试执行',
+      addAction: '添加操作',
+      emptyActions: '暂无操作步骤',
+      elementLabel: '元素:',
+      actionLabel: '操作:',
+      paramsLabel: '参数:',
+      sqlAction: 'SQL操作',
+      customVariable: '自定义变量',
+      conditionJudge: '条件判断',
+      deleteActionConfirm: '确定删除该操作？',
+      editAction: '编辑操作',
+      actionType: '操作类型',
+      selectElement: '选择元素',
+      pleaseSelectElement: '请选择元素',
+      actionMethod: '操作方法',
+      mouseActions: '鼠标操作',
+      inputActions: '输入操作',
+      otherActions: '其他',
+      clickOption: '点击 (click)',
+      dblclickOption: '双击 (dblclick)',
+      hoverOption: '悬停 (hover)',
+      fillOption: '填充 (fill)',
+      typeOption: '输入 (type)',
+      clearOption: '清空 (clear)',
+      waitOption: '等待 (wait)',
+      screenshotOption: '截图 (screenshot)',
+      selectOption: '选择下拉 (select_option)',
+      assertElement: '断言元素',
+      assertMethod: '断言方法',
+      assertVisible: '元素可见',
+      assertHidden: '元素隐藏',
+      assertText: '文本断言',
+      assertValue: '值断言',
+      assertCount: '数量断言',
+      sqlConfig: 'SQL 配置',
+      sqlConfigPlaceholder: 'JSON 格式 SQL 配置',
+      customVariablePlaceholder: 'JSON 格式变量定义',
+      conditionConfig: '条件配置',
+      conditionConfigPlaceholder: 'JSON 格式条件配置',
+      description: '描述',
+      optionalDescription: '可选描述',
+      selectActionTypeRequired: '请选择操作类型',
+      fetchActionStepsFailed: '获取操作步骤失败',
+      selectActuatorFirst: '请先选择执行器',
+      noActionSteps: '该页面步骤没有操作',
+      websocketFailed: 'WebSocket 连接失败，请刷新页面重试',
+      sendExecutionFailed: '发送执行命令失败',
+      executionSuccess: (passed: number, total: number) => `执行成功: ${passed}/${total} 步骤通过`,
+      executionFailed: (message: string) => `执行失败: ${message}`,
+      unknownError: '未知错误',
+      fetchElementsFailed: '获取元素列表失败',
+      fillRequired: '请填写必填项',
+      enterContent: '请输入内容',
+      updateSuccess: '更新成功',
+      addSuccess: '添加成功',
+      updateFailed: '更新失败',
+      addFailed: '添加失败',
+      deleteSuccess: '删除成功',
+      deleteFailed: '删除失败',
+      sortSaved: '排序已保存',
+      saveSortFailed: '保存排序失败',
+    }
+)
+
+const stepTypeLabels = computed<Record<StepType, string>>(() => isEnglish.value
+  ? {
+      0: 'Element Action',
+      1: 'Assertion',
+      2: 'SQL Action',
+      3: 'Custom Variable',
+      4: 'Condition',
+    }
+  : STEP_TYPE_LABELS
+)
+
+const opeKeyLabelsEn: Record<string, string> = {
+  click: 'Click',
+  dblclick: 'Double click',
+  hover: 'Hover',
+  fill: 'Fill',
+  type: 'Type',
+  clear: 'Clear',
+  wait: 'Wait',
+  screenshot: 'Screenshot',
+  select_option: 'Select option',
+  assert_visible: 'Element visible',
+  assert_hidden: 'Element hidden',
+  assert_text: 'Text assertion',
+  assert_value: 'Value assertion',
+  assert_count: 'Count assertion',
+}
+
+const paramLabelMap: Record<string, string> = {
+  '输入内容': 'Input text',
+  '等待时间(毫秒)': 'Wait time (ms)',
+  '截图文件名': 'Screenshot filename',
+  '选项值': 'Option value',
+  '期望文本': 'Expected text',
+  '期望值': 'Expected value',
+  '期望数量': 'Expected count',
+}
+
+const paramPlaceholderMap: Record<string, string> = {
+  '请输入要填充的文本': 'Enter the text to fill',
+  '请输入要键入的文本': 'Enter the text to type',
+  '默认1000': 'Default 1000',
+  '可选，留空自动生成': 'Optional. Leave blank to auto-generate',
+  '请输入要选择的选项值': 'Enter the option value to select',
+  '请输入期望的文本内容': 'Enter the expected text',
+  '请输入期望的值': 'Enter the expected value',
+  '请输入期望的元素数量': 'Enter the expected element count',
+}
+
+const getStepTypeLabel = (stepType: StepType) => stepTypeLabels.value[stepType] || String(stepType)
+const getOpeKeyLabel = (opeKey: string) => (isEnglish.value ? opeKeyLabelsEn[opeKey] : OPE_KEY_LABELS[opeKey]) || opeKey
+const getParamLabel = (param: OpeParamDef) => isEnglish.value ? (paramLabelMap[param.label] || param.label) : param.label
+const getParamPlaceholder = (param: OpeParamDef) => isEnglish.value ? (paramPlaceholderMap[param.placeholder] || param.placeholder) : param.placeholder
 
 const props = defineProps<{ pageStep: UiPageSteps }>()
 
@@ -342,7 +536,7 @@ const onOpeKeyChange = () => {
 }
 
 const rules = {
-  step_type: [{ required: true, message: '请选择操作类型' }],
+  step_type: [{ required: true, message: stepText.value.selectActionTypeRequired }],
   // 动态验证规则将在提交时检查
 }
 
@@ -360,7 +554,7 @@ const fetchSteps = async () => {
     const res = await pageStepsDetailedApi.list({ page_step: props.pageStep.id })
     stepData.value = extractListData<UiPageStepsDetailed>(res)
   } catch {
-    Message.error('获取操作步骤失败')
+    Message.error(stepText.value.fetchActionStepsFailed)
   } finally {
     loading.value = false
   }
@@ -409,11 +603,11 @@ const executePageStep = async () => {
     return
   }
   if (!selectedActuator.value) {
-    Message.warning('请先选择执行器')
+    Message.warning(stepText.value.selectActuatorFirst)
     return
   }
   if (stepData.value.length === 0) {
-    Message.warning('该页面步骤没有操作')
+    Message.warning(stepText.value.noActionSteps)
     return
   }
   
@@ -424,7 +618,7 @@ const executePageStep = async () => {
     try {
       await uiWebSocket.connect()
     } catch {
-      Message.error('WebSocket 连接失败，请刷新页面重试')
+      Message.error(stepText.value.websocketFailed)
       executing.value = false
       return
     }
@@ -437,7 +631,7 @@ const executePageStep = async () => {
   })
   
   if (!sent) {
-    Message.error('发送执行命令失败')
+    Message.error(stepText.value.sendExecutionFailed)
     executing.value = false
   }
 }
@@ -449,9 +643,9 @@ const handleStepResult = (data: any) => {
   if (!result) return
   
   if (result.status === 'success') {
-    Message.success(`执行成功: ${result.passed_steps || 0}/${result.total_steps || 0} 步骤通过`)
+    Message.success(stepText.value.executionSuccess(result.passed_steps || 0, result.total_steps || 0))
   } else {
-    Message.error(`执行失败: ${result.message || '未知错误'}`)
+    Message.error(stepText.value.executionFailed(result.message || stepText.value.unknownError))
   }
 }
 
@@ -460,7 +654,7 @@ const fetchElements = async () => {
     const res = await elementApi.list({ page: props.pageStep.page })
     elementOptions.value = extractListData<UiElement>(res)
   } catch {
-    Message.error('获取元素列表失败')
+    Message.error(stepText.value.fetchElementsFailed)
   }
 }
 
@@ -555,7 +749,7 @@ const handleSubmit = async (done: (closed: boolean) => void) => {
   try {
     await formRef.value?.validate()
   } catch {
-    Message.warning('请填写必填项')
+    Message.warning(stepText.value.fillRequired)
     done(false)
     return
   }
@@ -564,7 +758,7 @@ const handleSubmit = async (done: (closed: boolean) => void) => {
   if (formData.ope_key === 'fill') {
     const textValue = opeParams.text
     if (!textValue || textValue.trim() === '') {
-      Message.warning('请输入内容')
+      Message.warning(stepText.value.enterContent)
       done(false)
       return
     }
@@ -587,10 +781,10 @@ const handleSubmit = async (done: (closed: boolean) => void) => {
 
     if (isEdit.value && currentStep.value?.id) {
       await pageStepsDetailedApi.update(currentStep.value.id, data)
-      Message.success('更新成功')
+      Message.success(stepText.value.updateSuccess)
     } else {
       await pageStepsDetailedApi.create(data)
-      Message.success('添加成功')
+      Message.success(stepText.value.addSuccess)
     }
     done(true)
     fetchSteps()
@@ -603,7 +797,7 @@ const handleSubmit = async (done: (closed: boolean) => void) => {
         .join('\n')
       Message.error({ content: messages, duration: 5000 })
     } else {
-      Message.error(err?.error || (isEdit.value ? '更新失败' : '添加失败'))
+      Message.error(err?.error || (isEdit.value ? stepText.value.updateFailed : stepText.value.addFailed))
     }
     done(false)
   } finally {
@@ -619,10 +813,10 @@ const deleteStep = async (step: UiPageStepsDetailed) => {
   if (!step.id) return
   try {
     await pageStepsDetailedApi.delete(step.id)
-    Message.success('删除成功')
+    Message.success(stepText.value.deleteSuccess)
     fetchSteps()
   } catch {
-    Message.error('删除失败')
+    Message.error(stepText.value.deleteFailed)
   }
 }
 
@@ -641,9 +835,9 @@ const onDragEnd = async () => {
       description: s.description,
     }))
     await pageStepsDetailedApi.batchUpdate(props.pageStep.id, steps)
-    Message.success('排序已保存')
+    Message.success(stepText.value.sortSaved)
   } catch {
-    Message.error('保存排序失败')
+    Message.error(stepText.value.saveSortFailed)
     fetchSteps()
   }
 }

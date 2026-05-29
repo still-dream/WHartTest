@@ -43,7 +43,7 @@ PandaWiki-skill/
 build/
 dist/
 out/
-
+PandaWiki-skill/
 # Dependencies (handled by subdirectories, but backup)
 node_modules/
 nltk_data/
@@ -71,3 +71,7 @@ WHartTest_Actuator/browsers/
 .github/copilot-instructions.md
 WHartTest_Django/celerybeat-schedule
 AGENTS.md
+WHartTest_IDEA_Plugin/
+WHartTest_VSCode_Extension/
+docx-editor/
+

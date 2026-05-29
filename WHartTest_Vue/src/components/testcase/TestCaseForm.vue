@@ -4,9 +4,9 @@
       <div class="form-title">
         <a-button type="text" size="small" @click="handleBackToList">
           <template #icon><icon-arrow-left /></template>
-          返回列表
+          {{ text.backToList }}
         </a-button>
-        <h2>{{ isEditing ? '编辑测试用例' : '添加测试用例' }}</h2>
+        <h2>{{ isEditing ? text.editTitle : text.addTitle }}</h2>
       </div>
       <div class="form-actions">
         <a-space>
@@ -15,21 +15,21 @@
             <a-button-group>
               <a-button :disabled="!hasPrevTestCase" @click="goToPrevTestCase">
                 <template #icon><icon-left /></template>
-                上一条
+                {{ text.prevCase }}
               </a-button>
               <a-button disabled class="nav-indicator">
                 {{ currentTestCaseIndex + 1 }} / {{ totalTestCases }}
               </a-button>
               <a-button :disabled="!hasNextTestCase" @click="goToNextTestCase">
-                下一条
+                {{ text.nextCase }}
                 <template #icon><icon-right /></template>
               </a-button>
             </a-button-group>
             <a-divider direction="vertical" />
           </template>
-          <a-button @click="handleBackToList">取消</a-button>
+          <a-button @click="handleBackToList">{{ text.cancel }}</a-button>
           <a-button type="primary" :loading="formLoading" @click="handleSubmit">
-            保存
+            {{ text.save }}
           </a-button>
         </a-space>
       </div>
@@ -44,35 +44,32 @@
     >
       <a-row :gutter="16">
         <a-col :span="12">
-          <a-form-item field="name" label="用例名称">
-            <a-input v-model="formState.name" placeholder="请输入用例名称" allow-clear />
+          <a-form-item field="name" :label="text.caseName">
+            <a-input v-model="formState.name" :placeholder="text.caseNamePlaceholder" allow-clear />
           </a-form-item>
         </a-col>
         <a-col :span="4">
-          <a-form-item field="level" label="优先级">
-            <a-select v-model="formState.level" placeholder="请选择优先级">
-              <a-option value="P0">P0 - 最高</a-option>
-              <a-option value="P1">P1 - 高</a-option>
-              <a-option value="P2">P2 - 中</a-option>
-              <a-option value="P3">P3 - 低</a-option>
+          <a-form-item field="level" :label="text.priority">
+            <a-select v-model="formState.level" :placeholder="text.priorityPlaceholder">
+              <a-option v-for="opt in priorityOptions" :key="opt.value" :value="opt.value">{{ opt.label }}</a-option>
             </a-select>
           </a-form-item>
         </a-col>
         <a-col :span="4">
-          <a-form-item field="test_type" label="测试类型">
-            <a-select v-model="formState.test_type" placeholder="请选择测试类型">
-              <a-option v-for="opt in TEST_TYPE_OPTIONS" :key="opt.value" :value="opt.value">
+          <a-form-item field="test_type" :label="text.testType">
+            <a-select v-model="formState.test_type" :placeholder="text.testTypePlaceholder">
+              <a-option v-for="opt in localizedTestTypeOptions" :key="opt.value" :value="opt.value">
                 {{ opt.label }}
               </a-option>
             </a-select>
           </a-form-item>
         </a-col>
         <a-col :span="4">
-          <a-form-item field="module_id" label="所属模块">
+          <a-form-item field="module_id" :label="text.module">
             <a-tree-select
               v-model="formState.module_id"
               :data="moduleTree"
-              placeholder="请选择所属模块"
+              :placeholder="text.modulePlaceholder"
               allow-clear
               allow-search
               :dropdown-style="{ maxHeight: '300px', overflow: 'auto' }"
@@ -80,18 +77,19 @@
           </a-form-item>
         </a-col>
         <a-col :span="4" v-if="isEditing">
-          <a-form-item field="review_status" label="审核状态">
-            <a-select v-model="formState.review_status" placeholder="选择审核状态">
-              <a-option v-for="opt in REVIEW_STATUS_OPTIONS" :key="opt.value" :value="opt.value">
+          <a-form-item field="review_status" :label="text.reviewStatus">
+            <a-select v-model="formState.review_status" :placeholder="text.reviewStatusPlaceholder">
+              <a-option v-for="opt in localizedReviewStatusOptions" :key="opt.value" :value="opt.value">
                 <a-tag :color="opt.color" size="small">{{ opt.label }}</a-tag>
               </a-option>
             </a-select>
           </a-form-item>
         </a-col>
-      </a-row>      <a-form-item field="precondition" label="前置条件">
+      </a-row>
+      <a-form-item field="precondition" :label="text.precondition">
         <a-textarea
           v-model="formState.precondition"
-          placeholder="请输入前置条件"
+          :placeholder="text.preconditionPlaceholder"
           allow-clear
           :auto-size="{ minRows: 1, maxRows: 4 }"
         />
@@ -99,15 +97,15 @@
 
       <div class="steps-section">
         <div class="steps-header">
-          <h3>测试步骤</h3>
+          <h3>{{ text.testSteps }}</h3>
           <a-space>
             <a-tag color="blue" size="small" style="margin-right: 8px;">
               <template #icon><icon-drag-dot-vertical /></template>
-              拖动步骤可调整顺序
+              {{ text.dragHint }}
             </a-tag>
             <a-button type="primary" size="small" @click="addStep">
               <template #icon><icon-plus /></template>
-              添加步骤
+              {{ text.addStep }}
             </a-button>
           </a-space>
         </div>
@@ -116,11 +114,11 @@
           <table class="custom-steps-table">
             <thead>
               <tr>
-                <th style="width: 60px;">拖动</th>
-                <th style="width: 80px;">步骤</th>
-                <th>步骤描述</th>
-                <th>预期结果</th>
-                <th style="width: 120px;">操作</th>
+                <th style="width: 60px;">{{ text.dragColumn }}</th>
+                <th style="width: 80px;">{{ text.stepColumn }}</th>
+                <th>{{ text.stepDescriptionColumn }}</th>
+                <th>{{ text.expectedResultColumn }}</th>
+                <th style="width: 120px;">{{ text.actionColumn }}</th>
               </tr>
             </thead>
             <draggable
@@ -144,7 +142,7 @@
                   <td class="step-content-cell">
                     <a-textarea
                       v-model="record.description"
-                      placeholder="请输入步骤描述"
+                      :placeholder="text.stepDescriptionPlaceholder"
                       :auto-size="{ minRows: 1, maxRows: 4 }"
                       @blur="validateStepField(rowIndex, 'description')"
                     />
@@ -155,7 +153,7 @@
                   <td class="step-content-cell">
                     <a-textarea
                       v-model="record.expected_result"
-                      placeholder="请输入预期结果"
+                      :placeholder="text.expectedResultPlaceholder"
                       :auto-size="{ minRows: 1, maxRows: 4 }"
                       @blur="validateStepField(rowIndex, 'expected_result')"
                     />
@@ -171,7 +169,7 @@
                       size="small"
                       @click="removeStep(rowIndex)"
                     >
-                      删除
+                      {{ text.delete }}
                     </a-button>
                   </td>
                 </tr>
@@ -181,10 +179,10 @@
         </div>
       </div>
 
-      <a-form-item field="notes" label="备注">
+      <a-form-item field="notes" :label="text.notes">
         <a-textarea
           v-model="formState.notes"
-          placeholder="请输入备注信息"
+          :placeholder="text.notesPlaceholder"
           allow-clear
           :auto-size="{ minRows: 2, maxRows: 5 }"
         />
@@ -193,10 +191,10 @@
       <!-- 截图管理区域 -->
       <div class="screenshots-section" v-if="isEditing">
         <div class="screenshots-header">
-          <h3>截图</h3>
+          <h3>{{ text.screenshot }}</h3>
           <a-button type="primary" size="small" @click="triggerFileInput">
             <template #icon><icon-plus /></template>
-            上传截图
+            {{ text.uploadScreenshot }}
           </a-button>
         </div>
 
@@ -225,7 +223,7 @@
               />
               <div class="preview-overlay">
                 <icon-eye class="preview-icon" />
-                <span>点击预览</span>
+                <span>{{ text.clickPreview }}</span>
               </div>
             </div>
             <div class="screenshot-info-container">
@@ -233,7 +231,7 @@
                 <div class="screenshot-filename">{{ getScreenshotDisplayName(screenshot) }}</div>
                 <div class="screenshot-description" v-if="screenshot.description">{{ screenshot.description }}</div>
                 <div class="screenshot-meta">
-                  <span v-if="screenshot.step_number" class="step-number">步骤 {{ screenshot.step_number }}</span>
+                  <span v-if="screenshot.step_number" class="step-number">{{ text.stepLabel }} {{ screenshot.step_number }}</span>
                   <span class="screenshot-date">{{ formatDate(getScreenshotUploadTime(screenshot)) }}</span>
                 </div>
               </div>
@@ -244,7 +242,7 @@
                 class="delete-btn"
                 @click="handleDeleteExistingScreenshot(screenshot)"
               >
-                删除
+                {{ text.delete }}
               </a-button>
             </div>
           </div>
@@ -252,14 +250,14 @@
 
         <!-- 新上传的截图预览 -->
         <div v-if="newScreenshot" class="new-screenshot">
-          <div class="section-title">待上传的截图</div>
+          <div class="section-title">{{ text.pendingScreenshots }}</div>
           <div class="screenshots-grid">
             <div class="screenshot-item">
               <div class="screenshot-preview" @click="previewNewScreenshot()">
                 <img :src="getFilePreview(newScreenshot)" :alt="newScreenshot.name" class="screenshot-thumbnail" />
                 <div class="preview-overlay">
                   <icon-eye class="preview-icon" />
-                  <span>点击预览</span>
+                  <span>{{ text.clickPreview }}</span>
                 </div>
               </div>
               <div class="screenshot-info-container">
@@ -274,7 +272,7 @@
                   class="delete-btn"
                   @click="removeNewScreenshot(0)"
                 >
-                  删除
+                  {{ text.delete }}
                 </a-button>
               </div>
             </div>
@@ -282,7 +280,7 @@
         </div>
 
         <div v-if="existingScreenshots.length === 0 && !newScreenshot" class="no-screenshots">
-          <a-empty description="暂无截图" />
+          <a-empty :description="text.noScreenshots" />
         </div>
       </div>
     </a-form>
@@ -294,7 +292,7 @@
       :width="1200"
       :style="{ top: '50px' }"
       class="screenshot-preview-modal"
-      :title="`图片预览 (${currentPreviewIndex + 1}/${existingScreenshots.length})`"
+      :title="previewModalTitle"
       :mask-closable="true"
       :esc-to-close="true"
     >
@@ -303,16 +301,16 @@
         <div class="preview-sidebar">
           <!-- 图片信息 -->
           <div class="preview-info" v-if="previewInfo">
-            <h4>图片信息</h4>
+            <h4>{{ text.imageInfo }}</h4>
             <div class="info-item" v-for="(value, key) in previewInfo" :key="key">
-              <span class="label">{{ key }}：</span>
+              <span class="label">{{ key }}:</span>
               <span class="value">{{ value }}</span>
             </div>
           </div>
 
           <!-- 缩略图导航 -->
           <div class="thumbnail-navigation" v-if="existingScreenshots.length > 1">
-            <h4>所有图片 ({{ existingScreenshots.length }})</h4>
+            <h4>{{ text.allImages }} ({{ existingScreenshots.length }})</h4>
             <div class="thumbnail-grid">
               <div
                 v-for="(screenshot, index) in existingScreenshots"
@@ -391,6 +389,7 @@ import {
 } from '@/services/testcaseService';
 import { formatDate, REVIEW_STATUS_OPTIONS, TEST_TYPE_OPTIONS } from '@/utils/formatters';
 import type { ReviewStatus } from '@/services/testcaseService';
+import { useAppI18n } from '@/composables/useAppI18n';
 
 interface StepWithError extends TestCaseStep {
   temp_id?: string; // 用于表格 row-key
@@ -423,6 +422,7 @@ const emit = defineEmits<{
 }>();
 
 const { isEditing, testCaseId, currentProjectId, initialSelectedModuleId, moduleTree, testCaseIds } = toRefs(props);
+const { isEnglish } = useAppI18n();
 
 const formLoading = ref(false);
 const testCaseFormRef = ref<FormInstance>();
@@ -454,20 +454,241 @@ const previewTitle = ref<string>('');
 const previewInfo = ref<Record<string, string> | null>(null);
 const currentPreviewIndex = ref(0);
 
-const testCaseRules = {
+const text = computed(() => (isEnglish.value ? {
+  backToList: 'Back to List',
+  editTitle: 'Edit Test Case',
+  addTitle: 'Add Test Case',
+  prevCase: 'Previous',
+  nextCase: 'Next',
+  cancel: 'Cancel',
+  save: 'Save',
+  delete: 'Delete',
+  caseName: 'Case Name',
+  caseNamePlaceholder: 'Please enter case name',
+  priority: 'Priority',
+  priorityPlaceholder: 'Please select priority',
+  testType: 'Test Type',
+  testTypePlaceholder: 'Please select test type',
+  module: 'Module',
+  modulePlaceholder: 'Please select module',
+  reviewStatus: 'Review Status',
+  reviewStatusPlaceholder: 'Please select review status',
+  precondition: 'Precondition',
+  preconditionPlaceholder: 'Please enter precondition',
+  testSteps: 'Test Steps',
+  dragHint: 'Drag steps to reorder',
+  addStep: 'Add Step',
+  dragColumn: 'Drag',
+  stepColumn: 'Step',
+  stepDescriptionColumn: 'Step Description',
+  expectedResultColumn: 'Expected Result',
+  actionColumn: 'Action',
+  stepDescriptionPlaceholder: 'Please enter step description',
+  expectedResultPlaceholder: 'Please enter expected result',
+  notes: 'Notes',
+  notesPlaceholder: 'Please enter notes',
+  screenshot: 'Screenshots',
+  uploadScreenshot: 'Upload Screenshot',
+  clickPreview: 'Click to preview',
+  stepLabel: 'Step',
+  pendingScreenshots: 'Screenshots to Upload',
+  noScreenshots: 'No screenshots',
+  previewTitle: 'Image Preview',
+  imageInfo: 'Image Info',
+  allImages: 'All Images',
+  fileName: 'File Name',
+  fileSize: 'File Size',
+  fileType: 'File Type',
+  status: 'Status',
+  pendingUpload: 'Pending Upload',
+  description: 'Description',
+  uploadTime: 'Upload Time',
+  uploader: 'Uploaded By',
+  projectIdMissing: 'Project ID is missing',
+  fetchCaseDetailFailed: 'Failed to fetch test case details',
+  fetchCaseDetailError: 'An error occurred while fetching test case details',
+  noChangesDetected: 'No changes detected',
+  updateSuccess: 'Test case updated successfully',
+  createSuccess: 'Test case created successfully',
+  updateFailed: 'Update failed',
+  createFailed: 'Create failed',
+  submitError: 'An error occurred while submitting test case',
+  invalidImageFile: 'is not a valid image file',
+  imageTooLarge: 'file size exceeds 10MB',
+  confirmDelete: 'Confirm Delete',
+  confirmDeleteScreenshot: 'Are you sure you want to delete screenshot "{name}"? This action cannot be undone.',
+  confirm: 'Confirm',
+  deleteFailedMissingInfo: 'Delete failed: missing required information',
+  screenshotDeleteSuccess: 'Screenshot deleted successfully',
+  screenshotDeleteFailed: 'Failed to delete screenshot',
+  screenshotDeleteError: 'An error occurred while deleting screenshot',
+  uploadFailed: 'Upload {name} failed: {error}',
+  screenshotUploadError: 'An error occurred while uploading screenshot',
+  imageLoadFailed: 'Image failed to load',
+  nameRequired: 'Please enter case name',
+  nameTooLong: 'Case name must be within 100 characters',
+  preconditionTooLong: 'Precondition must be within 500 characters',
+  priorityRequired: 'Please select priority',
+  moduleRequired: 'Please select module',
+  notesTooLong: 'Notes must be within 1000 characters',
+  reviewStatusLabels: {
+    pending_review: 'Pending Review',
+    approved: 'Approved',
+    needs_optimization: 'Needs Optimization',
+    optimization_pending_review: 'Optimization Pending Review',
+    unavailable: 'Unavailable',
+  } as Record<string, string>,
+  testTypeLabels: {
+    smoke: 'Smoke Test',
+    functional: 'Functional Test',
+    boundary: 'Boundary Test',
+    exception: 'Exception Test',
+    permission: 'Permission Test',
+    security: 'Security Test',
+    compatibility: 'Compatibility Test',
+  } as Record<string, string>,
+  priorityLabels: {
+    P0: 'P0 - Highest',
+    P1: 'P1 - High',
+    P2: 'P2 - Medium',
+    P3: 'P3 - Low',
+  } as Record<string, string>,
+} : {
+  backToList: '返回列表',
+  editTitle: '编辑测试用例',
+  addTitle: '添加测试用例',
+  prevCase: '上一条',
+  nextCase: '下一条',
+  cancel: '取消',
+  save: '保存',
+  delete: '删除',
+  caseName: '用例名称',
+  caseNamePlaceholder: '请输入用例名称',
+  priority: '优先级',
+  priorityPlaceholder: '请选择优先级',
+  testType: '测试类型',
+  testTypePlaceholder: '请选择测试类型',
+  module: '所属模块',
+  modulePlaceholder: '请选择所属模块',
+  reviewStatus: '审核状态',
+  reviewStatusPlaceholder: '请选择审核状态',
+  precondition: '前置条件',
+  preconditionPlaceholder: '请输入前置条件',
+  testSteps: '测试步骤',
+  dragHint: '拖动步骤可调整顺序',
+  addStep: '添加步骤',
+  dragColumn: '拖动',
+  stepColumn: '步骤',
+  stepDescriptionColumn: '步骤描述',
+  expectedResultColumn: '预期结果',
+  actionColumn: '操作',
+  stepDescriptionPlaceholder: '请输入步骤描述',
+  expectedResultPlaceholder: '请输入预期结果',
+  notes: '备注',
+  notesPlaceholder: '请输入备注信息',
+  screenshot: '截图',
+  uploadScreenshot: '上传截图',
+  clickPreview: '点击预览',
+  stepLabel: '步骤',
+  pendingScreenshots: '待上传的截图',
+  noScreenshots: '暂无截图',
+  previewTitle: '图片预览',
+  imageInfo: '图片信息',
+  allImages: '所有图片',
+  fileName: '文件名',
+  fileSize: '文件大小',
+  fileType: '文件类型',
+  status: '状态',
+  pendingUpload: '待上传',
+  description: '描述',
+  uploadTime: '上传时间',
+  uploader: '上传者',
+  projectIdMissing: '项目ID不存在',
+  fetchCaseDetailFailed: '获取测试用例详情失败',
+  fetchCaseDetailError: '获取测试用例详情时发生错误',
+  noChangesDetected: '没有检测到任何变更',
+  updateSuccess: '测试用例更新成功',
+  createSuccess: '测试用例创建成功',
+  updateFailed: '更新失败',
+  createFailed: '创建失败',
+  submitError: '提交测试用例时发生错误',
+  invalidImageFile: '不是有效的图片文件',
+  imageTooLarge: '文件大小超过10MB',
+  confirmDelete: '确认删除',
+  confirmDeleteScreenshot: '确定要删除截图 "{name}" 吗？此操作不可恢复。',
+  confirm: '确认',
+  deleteFailedMissingInfo: '删除失败：缺少必要信息',
+  screenshotDeleteSuccess: '截图删除成功',
+  screenshotDeleteFailed: '删除截图失败',
+  screenshotDeleteError: '删除截图时发生错误',
+  uploadFailed: '上传 {name} 失败: {error}',
+  screenshotUploadError: '上传截图时发生错误',
+  imageLoadFailed: '图片加载失败',
+  nameRequired: '请输入用例名称',
+  nameTooLong: '用例名称长度不能超过100个字符',
+  preconditionTooLong: '前置条件长度不能超过500个字符',
+  priorityRequired: '请选择优先级',
+  moduleRequired: '请选择所属模块',
+  notesTooLong: '备注长度不能超过1000个字符',
+  reviewStatusLabels: {
+    pending_review: '待审核',
+    approved: '通过',
+    needs_optimization: '优化',
+    optimization_pending_review: '优化待审核',
+    unavailable: '不可用',
+  } as Record<string, string>,
+  testTypeLabels: {
+    smoke: '冒烟测试',
+    functional: '功能测试',
+    boundary: '边界测试',
+    exception: '异常测试',
+    permission: '权限测试',
+    security: '安全测试',
+    compatibility: '兼容性测试',
+  } as Record<string, string>,
+  priorityLabels: {
+    P0: 'P0 - 最高',
+    P1: 'P1 - 高',
+    P2: 'P2 - 中',
+    P3: 'P3 - 低',
+  } as Record<string, string>,
+}));
+
+const priorityOptions = computed(() => ([
+  { value: 'P0', label: text.value.priorityLabels.P0 },
+  { value: 'P1', label: text.value.priorityLabels.P1 },
+  { value: 'P2', label: text.value.priorityLabels.P2 },
+  { value: 'P3', label: text.value.priorityLabels.P3 },
+]));
+
+const localizedTestTypeOptions = computed(() => {
+  return TEST_TYPE_OPTIONS.map(option => ({
+    ...option,
+    label: text.value.testTypeLabels[option.value] ?? option.label,
+  }));
+});
+
+const localizedReviewStatusOptions = computed(() => {
+  return REVIEW_STATUS_OPTIONS.map(option => ({
+    ...option,
+    label: text.value.reviewStatusLabels[option.value] ?? option.label,
+  }));
+});
+
+const testCaseRules = computed(() => ({
   name: [
-    { required: true, message: '请输入用例名称' },
-    { maxLength: 100, message: '用例名称长度不能超过100个字符' },
+    { required: true, message: text.value.nameRequired },
+    { maxLength: 100, message: text.value.nameTooLong },
   ],
   precondition: [
-    { maxLength: 500, message: '前置条件长度不能超过500个字符' },
+    { maxLength: 500, message: text.value.preconditionTooLong },
   ],
-  level: [{ required: true, message: '请选择优先级' }],
-  module_id: [{ required: true, message: '请选择所属模块' }],
-  notes: [ // 备注字段的校验规则 (可选)
-    { maxLength: 1000, message: '备注长度不能超过1000个字符' },
+  level: [{ required: true, message: text.value.priorityRequired }],
+  module_id: [{ required: true, message: text.value.moduleRequired }],
+  notes: [
+    { maxLength: 1000, message: text.value.notesTooLong },
   ],
-};
+}));
 
 const stepErrors = ref<Array<{ description?: string; expected_result?: string }>>([]);
 
@@ -494,6 +715,24 @@ const hasNextTestCase = computed(() => {
 const totalTestCases = computed(() => {
   return testCaseIds?.value?.length || 0;
 });
+
+const previewModalTitle = computed(() => {
+  const total = existingScreenshots.value.length > 0 ? existingScreenshots.value.length : (newScreenshot.value ? 1 : 0);
+  const current = total > 0 ? currentPreviewIndex.value + 1 : 0;
+  return `${text.value.previewTitle} (${current}/${total})`;
+});
+
+const getPreviewInfoFromScreenshot = (screenshot: TestCaseScreenshot): Record<string, string> => {
+  const displayName = getScreenshotDisplayName(screenshot);
+  const uploadTime = getScreenshotUploadTime(screenshot);
+  return {
+    [text.value.fileName]: displayName,
+    [text.value.description]: screenshot.description || '-',
+    [text.value.stepLabel]: screenshot.step_number ? `${text.value.stepLabel} ${screenshot.step_number}` : '-',
+    [text.value.uploadTime]: formatDate(uploadTime),
+    [text.value.uploader]: screenshot.uploader_detail?.username || '-',
+  };
+};
 
 // 用例导航方法
 const goToPrevTestCase = () => {
@@ -564,11 +803,11 @@ const fetchDetailsAndSetForm = async (id: number) => {
         uploaded_at: screenshot.uploaded_at || screenshot.created_at
       }));
     } else {
-      Message.error(response.error || '获取测试用例详情失败');
+      Message.error(response.error || text.value.fetchCaseDetailFailed);
       emit('close');
     }
   } catch (error) {
-    Message.error('获取测试用例详情时发生错误');
+    Message.error(text.value.fetchCaseDetailError);
     emit('close');
   } finally {
     formLoading.value = false;
@@ -637,7 +876,7 @@ const handleBackToList = () => {
 
 const handleSubmit = async () => {
   if (!currentProjectId.value) {
-    Message.error('项目ID不存在');
+    Message.error(text.value.projectIdMissing);
     return;
   }
   try {
@@ -713,7 +952,7 @@ const handleSubmit = async () => {
       
       // 检查是否有任何变更
       if (Object.keys(updatePayload).length === 0) {
-        Message.info('没有检测到任何变更');
+        Message.info(text.value.noChangesDetected);
         formLoading.value = false;
         return;
       }
@@ -744,16 +983,16 @@ const handleSubmit = async () => {
         await uploadNewScreenshots(response.data.id);
       }
 
-      Message.success(isEditing.value ? '测试用例更新成功' : '测试用例创建成功');
+      Message.success(isEditing.value ? text.value.updateSuccess : text.value.createSuccess);
 
       // 无论是编辑还是新建，保存成功后都返回列表并刷新
       emit('submitSuccess');
     } else {
-      Message.error(response.error || (isEditing.value ? '更新失败' : '创建失败'));
+      Message.error(response.error || (isEditing.value ? text.value.updateFailed : text.value.createFailed));
     }
   } catch (error) {
     console.error('提交测试用例出错:', error);
-    Message.error('提交测试用例时发生错误');
+    Message.error(text.value.submitError);
   } finally {
     formLoading.value = false;
   }
@@ -771,11 +1010,11 @@ const handleFileSelect = (event: Event) => {
     // 验证文件类型和大小
     const validFiles = files.filter(file => {
       if (!file.type.startsWith('image/')) {
-        Message.warning(`${file.name} 不是有效的图片文件`);
+        Message.warning(`${file.name} ${text.value.invalidImageFile}`);
         return false;
       }
       if (file.size > 10 * 1024 * 1024) { // 10MB
-        Message.warning(`${file.name} 文件大小超过10MB`);
+        Message.warning(`${file.name} ${text.value.imageTooLarge}`);
         return false;
       }
       return true;
@@ -804,13 +1043,13 @@ const handleDeleteExistingScreenshot = (screenshot: TestCaseScreenshot) => {
   const displayName = getScreenshotDisplayName(screenshot);
   
   Modal.warning({
-    title: '确认删除',
-    content: `确定要删除截图 "${displayName}" 吗？此操作不可恢复。`,
-    okText: '确认',
-    cancelText: '取消',
+    title: text.value.confirmDelete,
+    content: text.value.confirmDeleteScreenshot.replace('{name}', displayName),
+    okText: text.value.confirm,
+    cancelText: text.value.cancel,
     onOk: async () => {
       if (!testCaseId?.value || !currentProjectId.value || !screenshot.id) {
-        Message.error('删除失败：缺少必要信息');
+        Message.error(text.value.deleteFailedMissingInfo);
         return;
       }
 
@@ -822,15 +1061,15 @@ const handleDeleteExistingScreenshot = (screenshot: TestCaseScreenshot) => {
         );
 
         if (response.success) {
-          Message.success('截图删除成功');
+          Message.success(text.value.screenshotDeleteSuccess);
           // 从本地列表中移除
           existingScreenshots.value = existingScreenshots.value.filter(s => s.id !== screenshot.id);
         } else {
-          Message.error(response.error || '删除截图失败');
+          Message.error(response.error || text.value.screenshotDeleteFailed);
         }
       } catch (error) {
         console.error('删除截图时发生错误:', error);
-        Message.error('删除截图时发生错误');
+        Message.error(text.value.screenshotDeleteError);
       }
     }
   });
@@ -864,13 +1103,14 @@ const getScreenshotUploadTime = (screenshot: TestCaseScreenshot): string => {
 const previewNewScreenshot = () => {
   if (newScreenshots.value.length > 0) {
     const file = newScreenshots.value[0];
+    currentPreviewIndex.value = 0;
     previewImageUrl.value = getFilePreview(file);
     previewTitle.value = file.name;
     previewInfo.value = {
-      '文件名': file.name,
-      '文件大小': formatFileSize(file.size),
-      '文件类型': file.type,
-      '状态': '待上传',
+      [text.value.fileName]: file.name,
+      [text.value.fileSize]: formatFileSize(file.size),
+      [text.value.fileType]: file.type,
+      [text.value.status]: text.value.pendingUpload,
     };
     showPreviewModal.value = true;
   }
@@ -901,7 +1141,7 @@ const uploadNewScreenshots = async (testCaseId: number) => {
       );
 
       if (!response.success) {
-        Message.warning(`上传 ${file.name} 失败: ${response.error}`);
+        Message.warning(text.value.uploadFailed.replace('{name}', file.name).replace('{error}', response.error || ''));
       }
     }
 
@@ -913,7 +1153,7 @@ const uploadNewScreenshots = async (testCaseId: number) => {
 
   } catch (error) {
     console.error('上传截图失败:', error);
-    Message.error('上传截图时发生错误');
+    Message.error(text.value.screenshotUploadError);
   } finally {
     uploadingScreenshots.value = false;
   }
@@ -929,17 +1169,9 @@ const previewExistingScreenshot = (screenshot: TestCaseScreenshot) => {
   
   const screenshotUrl = getScreenshotUrl(screenshot);
   const displayName = getScreenshotDisplayName(screenshot);
-  const uploadTime = getScreenshotUploadTime(screenshot);
-
   previewImageUrl.value = screenshotUrl;
   previewTitle.value = displayName;
-  previewInfo.value = {
-    '文件名': displayName,
-    '描述': screenshot.description || '-',
-    '步骤': screenshot.step_number ? `步骤 ${screenshot.step_number}` : '-',
-    '上传时间': formatDate(uploadTime),
-    '上传者': screenshot.uploader_detail?.username || '-',
-  };
+  previewInfo.value = getPreviewInfoFromScreenshot(screenshot);
   showPreviewModal.value = true;
 };
 
@@ -970,17 +1202,10 @@ const updatePreviewFromIndex = () => {
   if (screenshot) {
     const screenshotUrl = getScreenshotUrl(screenshot);
     const displayName = getScreenshotDisplayName(screenshot);
-    const uploadTime = getScreenshotUploadTime(screenshot);
 
     previewImageUrl.value = screenshotUrl;
     previewTitle.value = displayName;
-    previewInfo.value = {
-      '文件名': displayName,
-      '描述': screenshot.description || '-',
-      '步骤': screenshot.step_number ? `步骤 ${screenshot.step_number}` : '-',
-      '上传时间': formatDate(uploadTime),
-      '上传者': screenshot.uploader_detail?.username || '-',
-    };
+    previewInfo.value = getPreviewInfoFromScreenshot(screenshot);
   }
 };
 
@@ -991,16 +1216,18 @@ const handleImageLoad = (event: Event) => {
 
 const handleImageError = (_event: Event) => {
   console.error('图片加载失败');
-  Message.error('图片加载失败');
+  Message.error(text.value.imageLoadFailed);
 };
 </script>
 
 <style scoped>
 .testcase-form-container {
-  background-color: #fff;
+  background-color: var(--theme-card-bg);
+  color: var(--theme-page-text);
+  border: 1px solid var(--theme-card-border);
   border-radius: 8px;
   padding: 20px;
-  box-shadow: 4px 0 10px rgba(0, 0, 0, 0.2), 0 4px 10px rgba(0, 0, 0, 0.2), 0 0 10px rgba(0, 0, 0, 0.15);
+  box-shadow: var(--theme-card-shadow);
   height: 100%;
   box-sizing: border-box;
   display: flex;
@@ -1043,8 +1270,8 @@ const handleImageError = (_event: Event) => {
 /* 导航指示器样式 */
 .nav-indicator {
   cursor: default !important;
-  background-color: #f2f3f5 !important;
-  color: #1d2129 !important;
+  background-color: var(--theme-surface-soft) !important;
+  color: var(--theme-text) !important;
   font-weight: 500;
   min-width: 70px;
   text-align: center;

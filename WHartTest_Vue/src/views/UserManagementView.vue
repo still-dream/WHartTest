@@ -3,14 +3,14 @@
     <div class="page-header">
       <div class="search-box">
         <a-input-search
-          placeholder="搜索用户名/邮箱"
+          :placeholder="pageText.searchPlaceholder"
           allow-clear
           style="width: 300px"
           @search="onSearch"
         />
       </div>
       <div class="action-buttons">
-        <a-button type="primary" @click="showAddUserModal">添加用户</a-button>
+        <a-button type="primary" @click="showAddUserModal">{{ pageText.addUser }}</a-button>
       </div>
     </div>
 
@@ -24,14 +24,14 @@
     >
       <template #status="{ record }">
         <a-tag :color="record.is_active ? 'green' : 'gray'">
-          {{ record.is_active ? '启用' : '禁用' }}
+          {{ record.is_active ? pageText.enabled : pageText.disabled }}
         </a-tag>
       </template>
       <template #operations="{ record }">
         <a-space :size="4">
-          <a-button type="primary" size="mini" @click="viewUserPermissions(record)">权限</a-button>
-          <a-button type="primary" size="mini" @click="editUser(record)">编辑</a-button>
-          <a-button type="primary" status="danger" size="mini" @click="deleteUser(record)">删除</a-button>
+          <a-button type="primary" size="mini" @click="viewUserPermissions(record)">{{ pageText.permissions }}</a-button>
+          <a-button type="primary" size="mini" @click="editUser(record)">{{ pageText.edit }}</a-button>
+          <a-button type="primary" status="danger" size="mini" @click="deleteUser(record)">{{ pageText.delete }}</a-button>
         </a-space>
       </template>
     </a-table>
@@ -39,7 +39,7 @@
     <!-- 用户权限管理模态框 -->
     <a-modal
       v-model:visible="permissionsModalVisible"
-      title="用户权限管理"
+      :title="pageText.userPermissionsTitle"
       :footer="false"
       :mask-closable="true"
       :width="1200"
@@ -56,7 +56,7 @@
     <!-- 添加用户模态框 -->
     <a-modal
       v-model:visible="addUserModalVisible"
-      title="添加用户"
+      :title="pageText.addUserTitle"
       @cancel="cancelAddUser"
       @before-ok="handleAddUser"
       :mask-closable="false"
@@ -65,39 +65,39 @@
       <a-form ref="addUserFormRef" :model="addUserForm" :rules="addUserRules" layout="vertical" :auto-label-width="false">
         <a-row :gutter="16">
           <a-col :span="12">
-            <a-form-item field="username" label="用户名" required>
-              <a-input v-model="addUserForm.username" placeholder="请输入用户名" />
+            <a-form-item field="username" :label="pageText.username" required>
+              <a-input v-model="addUserForm.username" :placeholder="pageText.enterUsername" />
             </a-form-item>
           </a-col>
           <a-col :span="12">
-            <a-form-item field="email" label="邮箱" required>
-              <a-input v-model="addUserForm.email" placeholder="请输入邮箱" />
-            </a-form-item>
-          </a-col>
-        </a-row>
-
-        <a-row :gutter="16">
-          <a-col :span="12">
-            <a-form-item field="password" label="密码" required>
-              <a-input-password v-model="addUserForm.password" placeholder="请输入密码" />
-            </a-form-item>
-          </a-col>
-          <a-col :span="12">
-            <a-form-item field="confirmPassword" label="确认密码" required>
-              <a-input-password v-model="addUserForm.confirmPassword" placeholder="请再次输入密码" />
+            <a-form-item field="email" :label="pageText.email" required>
+              <a-input v-model="addUserForm.email" :placeholder="pageText.enterEmail" />
             </a-form-item>
           </a-col>
         </a-row>
 
         <a-row :gutter="16">
           <a-col :span="12">
-            <a-form-item field="first_name" label="名">
-              <a-input v-model="addUserForm.first_name" placeholder="请输入名" />
+            <a-form-item field="password" :label="pageText.password" required>
+              <a-input-password v-model="addUserForm.password" :placeholder="pageText.enterPassword" />
             </a-form-item>
           </a-col>
           <a-col :span="12">
-            <a-form-item field="last_name" label="姓">
-              <a-input v-model="addUserForm.last_name" placeholder="请输入姓" />
+            <a-form-item field="confirmPassword" :label="pageText.confirmPassword" required>
+              <a-input-password v-model="addUserForm.confirmPassword" :placeholder="pageText.enterConfirmPassword" />
+            </a-form-item>
+          </a-col>
+        </a-row>
+
+        <a-row :gutter="16">
+          <a-col :span="12">
+            <a-form-item field="first_name" :label="pageText.firstName">
+              <a-input v-model="addUserForm.first_name" :placeholder="pageText.enterFirstName" />
+            </a-form-item>
+          </a-col>
+          <a-col :span="12">
+            <a-form-item field="last_name" :label="pageText.lastName">
+              <a-input v-model="addUserForm.last_name" :placeholder="pageText.enterLastName" />
             </a-form-item>
           </a-col>
         </a-row>
@@ -105,12 +105,12 @@
         <a-row :gutter="16">
           <a-col :span="12">
             <a-form-item field="is_staff" label=" ">
-              <a-checkbox v-model="addUserForm.is_staff">管理员权限</a-checkbox>
+              <a-checkbox v-model="addUserForm.is_staff">{{ pageText.adminPrivileges }}</a-checkbox>
             </a-form-item>
           </a-col>
           <a-col :span="12">
             <a-form-item field="is_active" label=" ">
-              <a-checkbox v-model="addUserForm.is_active" default-checked>启用账户</a-checkbox>
+              <a-checkbox v-model="addUserForm.is_active" default-checked>{{ pageText.enableAccount }}</a-checkbox>
             </a-form-item>
           </a-col>
         </a-row>
@@ -120,37 +120,37 @@
     <!-- 编辑用户模态框 -->
     <a-modal
       v-model:visible="editUserModalVisible"
-      title="编辑用户"
+      :title="pageText.editUserTitle"
       @cancel="cancelEditUser"
       @before-ok="handleEditUser"
       :mask-closable="false"
       :width="1000"
     >
       <a-tabs default-active-key="basic" @change="onEditUserTabChange">
-        <a-tab-pane key="basic" title="基本信息">
+        <a-tab-pane key="basic" :title="pageText.basicInfo">
           <a-form ref="editUserFormRef" :model="editUserForm" :rules="editUserRules" layout="vertical" :auto-label-width="false">
             <a-row :gutter="16">
               <a-col :span="12">
-                <a-form-item field="username" label="用户名">
-                  <a-input v-model="editUserForm.username" placeholder="请输入用户名" disabled />
+                <a-form-item field="username" :label="pageText.username">
+                  <a-input v-model="editUserForm.username" :placeholder="pageText.enterUsername" disabled />
                 </a-form-item>
               </a-col>
               <a-col :span="12">
-                <a-form-item field="email" label="邮箱">
-                  <a-input v-model="editUserForm.email" placeholder="请输入邮箱" />
+                <a-form-item field="email" :label="pageText.email">
+                  <a-input v-model="editUserForm.email" :placeholder="pageText.enterEmail" />
                 </a-form-item>
               </a-col>
             </a-row>
 
             <a-row :gutter="16">
               <a-col :span="12">
-                <a-form-item field="first_name" label="名">
-                  <a-input v-model="editUserForm.first_name" placeholder="请输入名" />
+                <a-form-item field="first_name" :label="pageText.firstName">
+                  <a-input v-model="editUserForm.first_name" :placeholder="pageText.enterFirstName" />
                 </a-form-item>
               </a-col>
               <a-col :span="12">
-                <a-form-item field="last_name" label="姓">
-                  <a-input v-model="editUserForm.last_name" placeholder="请输入姓" />
+                <a-form-item field="last_name" :label="pageText.lastName">
+                  <a-input v-model="editUserForm.last_name" :placeholder="pageText.enterLastName" />
                 </a-form-item>
               </a-col>
             </a-row>
@@ -158,34 +158,34 @@
             <a-row :gutter="16">
               <a-col :span="12">
                 <a-form-item field="is_staff" label=" ">
-                  <a-checkbox v-model="editUserForm.is_staff">管理员权限</a-checkbox>
+                  <a-checkbox v-model="editUserForm.is_staff">{{ pageText.adminPrivileges }}</a-checkbox>
                 </a-form-item>
               </a-col>
               <a-col :span="12">
                 <a-form-item field="is_active" label=" ">
-                  <a-checkbox v-model="editUserForm.is_active">启用账户</a-checkbox>
+                  <a-checkbox v-model="editUserForm.is_active">{{ pageText.enableAccount }}</a-checkbox>
                 </a-form-item>
               </a-col>
             </a-row>
 
-            <a-divider>修改密码（可选）</a-divider>
+            <a-divider>{{ pageText.changePasswordOptional }}</a-divider>
 
             <a-row :gutter="16">
               <a-col :span="12">
-                <a-form-item field="password" label="新密码">
-                  <a-input-password v-model="editUserForm.password" placeholder="请输入新密码" allow-clear />
+                <a-form-item field="password" :label="pageText.newPassword">
+                  <a-input-password v-model="editUserForm.password" :placeholder="pageText.enterNewPassword" allow-clear />
                 </a-form-item>
               </a-col>
               <a-col :span="12">
-                <a-form-item field="confirmPassword" label="确认新密码">
-                  <a-input-password v-model="editUserForm.confirmPassword" placeholder="请再次输入新密码" allow-clear />
+                <a-form-item field="confirmPassword" :label="pageText.confirmNewPassword">
+                  <a-input-password v-model="editUserForm.confirmPassword" :placeholder="pageText.enterConfirmNewPassword" allow-clear />
                 </a-form-item>
               </a-col>
             </a-row>
           </a-form>
         </a-tab-pane>
         
-        <a-tab-pane key="permissions" title="权限管理">
+        <a-tab-pane key="permissions" :title="pageText.permissionsManagement">
           <permission-tree-selector
             v-if="editUserModalVisible && editUserForm.id"
             type="user"
@@ -200,7 +200,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, reactive, onMounted, watch, nextTick } from 'vue';
+import { ref, reactive, onMounted, watch, nextTick, computed } from 'vue';
 import { Message, Modal, Row as ARow, Col as ACol, Divider as ADivider } from '@arco-design/web-vue';
 import {
   getUserList,
@@ -212,9 +212,141 @@ import {
   type UpdateUserRequest
 } from '@/services/userService';
 import PermissionTreeSelector from '@/components/permission/PermissionTreeSelector.vue';
+import { useAppI18n } from '@/composables/useAppI18n';
 import { useProjectStore } from '@/store/projectStore';
 
 const projectStore = useProjectStore();
+const { isEnglish } = useAppI18n();
+
+const pageText = computed(() => (
+  isEnglish.value
+    ? {
+        searchPlaceholder: 'Search username/email',
+        addUser: 'Add user',
+        enabled: 'Enabled',
+        disabled: 'Disabled',
+        permissions: 'Permissions',
+        edit: 'Edit',
+        delete: 'Delete',
+        userPermissionsTitle: 'User permissions',
+        addUserTitle: 'Add user',
+        editUserTitle: 'Edit user',
+        username: 'Username',
+        email: 'Email',
+        password: 'Password',
+        confirmPassword: 'Confirm password',
+        firstName: 'First name',
+        lastName: 'Last name',
+        adminPrivileges: 'Admin privileges',
+        enableAccount: 'Enable account',
+        basicInfo: 'Basic info',
+        changePasswordOptional: 'Change password (optional)',
+        newPassword: 'New password',
+        confirmNewPassword: 'Confirm new password',
+        permissionsManagement: 'Permissions',
+        enterUsername: 'Enter username',
+        enterEmail: 'Enter email',
+        enterPassword: 'Enter password',
+        enterConfirmPassword: 'Enter the password again',
+        enterFirstName: 'Enter first name',
+        enterLastName: 'Enter last name',
+        enterNewPassword: 'Enter a new password',
+        enterConfirmNewPassword: 'Enter the new password again',
+        userId: 'User ID',
+        fullName: 'Full name',
+        admin: 'Admin',
+        yes: 'Yes',
+        no: 'No',
+        accountStatus: 'Account status',
+        actions: 'Actions',
+        fetchUserListFailed: 'Failed to fetch user list',
+        fetchUserListError: 'An error occurred while fetching the user list',
+        usernameRequired: 'Enter username',
+        usernameMinLength: 'Username must be at least 3 characters',
+        usernameMaxLength: 'Username cannot exceed 150 characters',
+        emailRequired: 'Enter email',
+        emailInvalid: 'Enter a valid email address',
+        passwordRequired: 'Enter password',
+        passwordMinLength: 'Password must be at least 8 characters',
+        confirmPasswordRequired: 'Confirm the password',
+        passwordMismatch: 'The two passwords do not match',
+        createUserSuccess: 'User created successfully',
+        createUserFailed: 'Failed to create user',
+        createUserError: 'An error occurred while creating the user',
+        updateUserSuccess: 'User updated successfully',
+        updateUserFailed: 'Failed to update user',
+        updateUserError: 'An error occurred while updating the user',
+        deleteConfirmTitle: 'Confirm deletion',
+        deleteConfirmContent: (name: string) => `Delete user "${name}"? This action cannot be undone.`,
+        deleteConfirmOk: 'Delete',
+        deleteUserSuccess: 'User deleted successfully',
+        deleteUserFailed: 'Failed to delete user',
+        deleteUserError: 'An error occurred while deleting the user',
+      }
+    : {
+        searchPlaceholder: '搜索用户名/邮箱',
+        addUser: '添加用户',
+        enabled: '启用',
+        disabled: '禁用',
+        permissions: '权限',
+        edit: '编辑',
+        delete: '删除',
+        userPermissionsTitle: '用户权限管理',
+        addUserTitle: '添加用户',
+        editUserTitle: '编辑用户',
+        username: '用户名',
+        email: '邮箱',
+        password: '密码',
+        confirmPassword: '确认密码',
+        firstName: '名',
+        lastName: '姓',
+        adminPrivileges: '管理员权限',
+        enableAccount: '启用账户',
+        basicInfo: '基本信息',
+        changePasswordOptional: '修改密码（可选）',
+        newPassword: '新密码',
+        confirmNewPassword: '确认新密码',
+        permissionsManagement: '权限管理',
+        enterUsername: '请输入用户名',
+        enterEmail: '请输入邮箱',
+        enterPassword: '请输入密码',
+        enterConfirmPassword: '请再次输入密码',
+        enterFirstName: '请输入名',
+        enterLastName: '请输入姓',
+        enterNewPassword: '请输入新密码',
+        enterConfirmNewPassword: '请再次输入新密码',
+        userId: '用户ID',
+        fullName: '姓名',
+        admin: '管理员',
+        yes: '是',
+        no: '否',
+        accountStatus: '账户状态',
+        actions: '操作',
+        fetchUserListFailed: '获取用户列表失败',
+        fetchUserListError: '获取用户列表时发生错误',
+        usernameRequired: '请输入用户名',
+        usernameMinLength: '用户名长度不能小于3个字符',
+        usernameMaxLength: '用户名长度不能超过150个字符',
+        emailRequired: '请输入邮箱',
+        emailInvalid: '请输入有效的邮箱地址',
+        passwordRequired: '请输入密码',
+        passwordMinLength: '密码长度不能小于8个字符',
+        confirmPasswordRequired: '请确认密码',
+        passwordMismatch: '两次输入的密码不一致',
+        createUserSuccess: '用户创建成功',
+        createUserFailed: '创建用户失败',
+        createUserError: '创建用户时发生错误',
+        updateUserSuccess: '用户更新成功',
+        updateUserFailed: '更新用户失败',
+        updateUserError: '更新用户时发生错误',
+        deleteConfirmTitle: '确认删除',
+        deleteConfirmContent: (name: string) => `确定要删除用户 "${name}" 吗？此操作不可恢复。`,
+        deleteConfirmOk: '确定删除',
+        deleteUserSuccess: '用户删除成功',
+        deleteUserFailed: '删除用户失败',
+        deleteUserError: '删除用户时发生错误',
+      }
+));
 
 // 加载状态
 const loading = ref(false);
@@ -222,25 +354,25 @@ const loading = ref(false);
 const searchKeyword = ref('');
 
 // 表格列定义
-const columns = [
+const columns = computed(() => [
   {
-    title: '用户ID',
+    title: pageText.value.userId,
     dataIndex: 'id',
     width: 80,
     align: 'center',
   },
   {
-    title: '用户名',
+    title: pageText.value.username,
     dataIndex: 'username',
     align: 'center',
   },
   {
-    title: '邮箱',
+    title: pageText.value.email,
     dataIndex: 'email',
     align: 'center',
   },
   {
-    title: '姓名',
+    title: pageText.value.fullName,
     dataIndex: 'name',
     align: 'center',
     render: ({ record }: { record: User }) => {
@@ -249,25 +381,25 @@ const columns = [
     },
   },
   {
-    title: '管理员',
+    title: pageText.value.admin,
     dataIndex: 'is_staff',
     align: 'center',
-    render: ({ record }: { record: User }) => record.is_staff ? '是' : '否',
+    render: ({ record }: { record: User }) => record.is_staff ? pageText.value.yes : pageText.value.no,
   },
   {
-    title: '账户状态',
+    title: pageText.value.accountStatus,
     dataIndex: 'is_active',
     slotName: 'status',
     align: 'center',
   },
   {
-    title: '操作',
+    title: pageText.value.actions,
     slotName: 'operations',
     width: 180,
     fixed: 'right',
     align: 'center',
   },
-];
+]);
 
 // 用户数据
 const userData = ref<User[]>([]);
@@ -319,13 +451,13 @@ const fetchUserList = async () => {
       userData.value = response.data;
       pagination.total = response.total || response.data.length;
     } else {
-      Message.error(response.error || '获取用户列表失败');
+      Message.error(response.error || pageText.value.fetchUserListFailed);
       userData.value = [];
       pagination.total = 0;
     }
   } catch (error) {
     console.error('获取用户列表出错:', error);
-    Message.error('获取用户列表时发生错误');
+    Message.error(pageText.value.fetchUserListError);
     userData.value = [];
     pagination.total = 0;
   } finally {
@@ -385,33 +517,33 @@ const addUserForm = reactive<CreateUserRequest & { confirmPassword: string }>({
 });
 
 // 表单验证规则
-const addUserRules = {
+const addUserRules = computed(() => ({
   username: [
-    { required: true, message: '请输入用户名' },
-    { minLength: 3, message: '用户名长度不能小于3个字符' },
-    { maxLength: 150, message: '用户名长度不能超过150个字符' }
+    { required: true, message: pageText.value.usernameRequired },
+    { minLength: 3, message: pageText.value.usernameMinLength },
+    { maxLength: 150, message: pageText.value.usernameMaxLength }
   ],
   email: [
-    { required: true, message: '请输入邮箱' },
-    { type: 'email', message: '请输入有效的邮箱地址' }
+    { required: true, message: pageText.value.emailRequired },
+    { type: 'email', message: pageText.value.emailInvalid }
   ],
   password: [
-    { required: true, message: '请输入密码' },
-    { minLength: 8, message: '密码长度不能小于8个字符' }
+    { required: true, message: pageText.value.passwordRequired },
+    { minLength: 8, message: pageText.value.passwordMinLength }
   ],
   confirmPassword: [
-    { required: true, message: '请确认密码' },
+    { required: true, message: pageText.value.confirmPasswordRequired },
     {
       validator: (value: string, callback: (error?: string) => void) => {
         if (value !== addUserForm.password) {
-          callback('两次输入的密码不一致');
+          callback(pageText.value.passwordMismatch);
         } else {
           callback();
         }
       }
     }
   ]
-};
+}));
 
 // 显示添加用户模态框
 const showAddUserModal = () => {
@@ -465,17 +597,17 @@ const handleAddUser = async (done: (closed: boolean) => void) => {
     const response = await createUser(userData);
 
     if (response.success) {
-      Message.success('用户创建成功');
+      Message.success(pageText.value.createUserSuccess);
       // 刷新用户列表
       fetchUserList();
       done(true); // 关闭模态框
     } else {
-      Message.error(response.error || '创建用户失败');
+      Message.error(response.error || pageText.value.createUserFailed);
       done(false); // 不关闭模态框
     }
   } catch (error) {
     console.error('创建用户出错:', error);
-    Message.error('创建用户时发生错误');
+    Message.error(pageText.value.createUserError);
     done(false); // 不关闭模态框
   }
 };
@@ -496,22 +628,22 @@ const editUserForm = reactive<UpdateUserRequest & { confirmPassword: string, id:
 });
 
 // 编辑用户表单验证规则
-const editUserRules = {
+const editUserRules = computed(() => ({
   email: [
-    { type: 'email', message: '请输入有效的邮箱地址' }
+    { type: 'email', message: pageText.value.emailInvalid }
   ],
   confirmPassword: [
     {
       validator: (value: string, callback: (error?: string) => void) => {
         if (value && value !== editUserForm.password) {
-          callback('两次输入的密码不一致');
+          callback(pageText.value.passwordMismatch);
         } else {
           callback();
         }
       }
     }
   ]
-};
+}));
 
 // 显示编辑用户模态框
 // 编辑用户弹窗中的标签切换处理
@@ -578,17 +710,17 @@ const handleEditUser = async (done: (closed: boolean) => void) => {
     const response = await updateUser(editUserForm.id, updateData);
 
     if (response.success) {
-      Message.success('用户更新成功');
+      Message.success(pageText.value.updateUserSuccess);
       // 刷新用户列表
       fetchUserList();
       done(true); // 关闭模态框
     } else {
-      Message.error(response.error || '更新用户失败');
+      Message.error(response.error || pageText.value.updateUserFailed);
       done(false); // 不关闭模态框
     }
   } catch (error) {
     console.error('更新用户出错:', error);
-    Message.error('更新用户时发生错误');
+    Message.error(pageText.value.updateUserError);
     done(false); // 不关闭模态框
   }
 };
@@ -596,24 +728,23 @@ const handleEditUser = async (done: (closed: boolean) => void) => {
 // 删除用户
 const deleteUser = (user: User) => {
   Modal.warning({
-    title: '确认删除',
-    content: `确定要删除用户 "${user.username}" 吗？此操作不可恢复。`,
-    okText: '确定删除',
-    cancelText: '取消',
+    title: pageText.value.deleteConfirmTitle,
+    content: pageText.value.deleteConfirmContent(user.username),
+    okText: pageText.value.deleteConfirmOk,
     onOk: async () => {
       try {
         const response = await deleteUserService(user.id);
 
         if (response.success) {
-          Message.success(response.message || '用户删除成功');
+          Message.success(response.message || pageText.value.deleteUserSuccess);
           // 刷新用户列表
           fetchUserList();
         } else {
-          Message.error(response.error || '删除用户失败');
+          Message.error(response.error || pageText.value.deleteUserFailed);
         }
       } catch (error) {
         console.error('删除用户出错:', error);
-        Message.error('删除用户时发生错误');
+        Message.error(pageText.value.deleteUserError);
       }
     }
   });

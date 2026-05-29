@@ -1,10 +1,10 @@
 <template>
-  <div :class="['message-wrapper', messageClass]">
+  <div :class="['message-wrapper', messageClass]" :style="messageWrapperStyle">
     <!-- Step Separator: 步骤分隔符 -->
     <template v-if="message.messageType === 'step_separator'">
       <div class="step-separator">
         <div class="step-separator-line"></div>
-        <span class="step-separator-label">{{ message.content }}</span>
+        <span class="step-separator-label message-render-skip" data-i18n-skip>{{ message.content }}</span>
         <div class="step-separator-line"></div>
       </div>
     </template>
@@ -14,7 +14,7 @@
       <!-- ✅ 统一使用与历史记录相同的分隔线样式 -->
       <div class="step-separator">
         <div class="step-separator-line"></div>
-        <span class="step-separator-label">{{ agentStepLabel }}</span>
+        <span class="step-separator-label message-render-skip" data-i18n-skip>{{ agentStepLabel }}</span>
         <div class="step-separator-line"></div>
       </div>
     </template>
@@ -31,17 +31,17 @@
       <div class="message-content">
       <!-- 图片显示（在消息气泡之前） -->
       <div v-if="toolImageSrc && isThisImageFloating" class="tool-image-float-placeholder" @click="emit('float-tool-image', toolImageSrc)">
-        <img :src="toolImageSrc" alt="工具截图" class="float-placeholder-thumb" />
-        <span class="float-placeholder-label">悬浮预览中</span>
+        <img :src="toolImageSrc" :alt="pageText.toolScreenshotAlt" class="float-placeholder-thumb" />
+        <span class="float-placeholder-label">{{ pageText.floatingPreview }}</span>
       </div>
       <div v-else-if="isToolImage" class="message-image-container">
         <img
           :src="toolImageSrc!"
-          alt="上传的图片"
+          :alt="pageText.uploadedImageAlt(1)"
           class="message-image"
         />
         <div v-if="isToolImage" class="float-action-btn" @click="emit('float-tool-image', toolImageSrc!)">
-          悬浮
+          {{ pageText.float }}
         </div>
       </div>
       <div
@@ -53,7 +53,7 @@
           v-for="(imageSrc, index) in messageImageSrcList"
           :key="`${imageSrc}-${index}`"
           :src="imageSrc"
-          :alt="`上传的图片 ${index + 1}`"
+          :alt="pageText.uploadedImageAlt(index + 1)"
           class="message-image"
           :class="{ 'message-image-multi': messageImageSrcList.length > 1 }"
         />
@@ -66,12 +66,13 @@
           <span></span>
         </div>
         <div v-else-if="message.messageType === 'tool'" class="tool-message-content">
-          <div v-if="message.toolName" class="tool-header">
+          <div v-if="message.toolName" class="tool-header message-render-skip" data-i18n-skip>
             🔧 {{ message.toolName }}
           </div>
           <div
-            :class="['tool-content', { 'collapsed': !message.isExpanded && shouldCollapse }]"
+            :class="['tool-content', 'message-render-skip', { 'collapsed': !message.isExpanded && shouldCollapse }]"
             :key="message.content"
+            data-i18n-skip
             v-html="formattedContent"
           ></div>
           <div v-if="toolFileAttachments.length > 0" class="tool-file-list">
@@ -84,30 +85,32 @@
                 </div>
               </div>
               <div class="tool-file-actions">
-                <a :href="file.url" target="_blank" rel="noopener noreferrer" class="tool-file-link">打开</a>
-                <a :href="file.url" :download="file.name" class="tool-file-link">下载</a>
+                <a :href="file.url" target="_blank" rel="noopener noreferrer" class="tool-file-link">{{ pageText.open }}</a>
+                <a :href="file.url" :download="file.name" class="tool-file-link">{{ pageText.download }}</a>
               </div>
             </div>
           </div>
-          <div
-            v-if="shouldCollapse"
-            class="expand-button"
-            @click="$emit('toggle-expand', message)"
-          >
-            {{ message.isExpanded ? '收起' : '展开' }}
-            <i :class="message.isExpanded ? 'icon-up' : 'icon-down'"></i>
+          <div v-if="shouldCollapse || canPreviewHtml" class="tool-footer-actions">
+            <div
+              v-if="shouldCollapse"
+              class="expand-button"
+              @click="$emit('toggle-expand', message)"
+            >
+              {{ message.isExpanded ? pageText.collapse : pageText.expand }}
+              <i :class="message.isExpanded ? 'icon-up' : 'icon-down'"></i>
+            </div>
+            <div
+              v-if="canPreviewHtml"
+              class="expand-button preview-html-button"
+              @click="handlePreviewHtml"
+            >
+              <icon-eye />
+              {{ pageText.previewHtml }}
+            </div>
           </div>
-          <div v-if="canPreviewDiagram || canPreviewHtml" class="diagram-preview-actions">
-            <a-button v-if="canPreviewDiagram" type="outline" size="mini" class="diagram-preview-btn" @click="handlePreviewDiagram">
-              <template #icon><icon-eye /></template>
-              预览图表
-            </a-button>
-            <a-button v-if="canPreviewHtml" type="outline" size="mini" class="diagram-preview-btn" @click="handlePreviewHtml">
-              <template #icon><icon-eye /></template>
-              预览HTML
-            </a-button>
+          <div v-if="canPreviewDiagram" class="diagram-preview-actions">
             <a-button v-if="canPreviewDiagram" type="text" size="mini" class="diagram-preview-btn" @click="openDiagramInNewTab">
-              新标签打开
+              {{ pageText.openInNewTab }}
             </a-button>
           </div>
         </div>
@@ -115,12 +118,13 @@
         <!-- 🎨 思考过程消息（可折叠） -->
         <div v-else-if="message.isThinkingProcess" class="thinking-process-content">
           <div class="thinking-header" @click="$emit('toggle-expand', message)">
-            <span class="thinking-label">思考过程</span>
+            <span class="thinking-label">{{ pageText.thinkingProcess }}</span>
           </div>
           <div
             v-show="message.isThinkingExpanded"
             :key="message.content"
-            class="thinking-body"
+            class="thinking-body message-render-skip"
+            data-i18n-skip
             v-html="formattedContent"
           ></div>
         </div>
@@ -129,35 +133,40 @@
         <div
           v-else
           :key="message.content"
+          class="message-render-skip"
           :class="{ 'streaming-content': isStreamingMessage }"
+          data-i18n-skip
           v-html="formattedContent"
         ></div>
-        <div v-if="canPreviewHtml && message.messageType === 'ai'" class="diagram-preview-actions">
-          <a-button type="outline" size="mini" class="diagram-preview-btn" @click="handlePreviewHtml">
+        <div v-if="(canPreviewHtml || canPreviewDiagram) && message.messageType === 'ai'" class="diagram-preview-actions">
+          <a-button v-if="canPreviewHtml" type="outline" size="mini" class="diagram-preview-btn" @click="handlePreviewHtml">
             <template #icon><icon-eye /></template>
-            预览HTML
+            {{ pageText.previewHtml }}
+          </a-button>
+          <a-button v-if="canPreviewDiagram" type="text" size="mini" class="diagram-preview-btn" @click="openDiagramInNewTab">
+            {{ pageText.openInNewTab }}
           </a-button>
         </div>
       </div>
 
       <!-- 消息操作按钮 -->
       <div v-if="showActions" class="message-actions">
-        <a-tooltip content="复制" mini>
+        <a-tooltip :content="pageText.copy" mini>
           <a-button type="text" size="mini" class="action-btn" @click="handleCopy">
             <template #icon><icon-copy /></template>
           </a-button>
         </a-tooltip>
-        <a-tooltip v-if="canQuote" content="引用" mini>
+        <a-tooltip v-if="canQuote" :content="pageText.quote" mini>
           <a-button type="text" size="mini" class="action-btn" @click="$emit('quote', message)">
             <template #icon><icon-reply /></template>
           </a-button>
         </a-tooltip>
-        <a-tooltip v-if="canRetry" content="重试" mini>
+        <a-tooltip v-if="canRetry" :content="pageText.retry" mini>
           <a-button type="text" size="mini" class="action-btn" @click="$emit('retry', message)">
             <template #icon><icon-refresh /></template>
           </a-button>
         </a-tooltip>
-        <a-tooltip v-if="canDelete" content="删除" mini>
+        <a-tooltip v-if="canDelete" :content="pageText.delete" mini>
           <a-button type="text" size="mini" class="action-btn action-btn-danger" @click="$emit('delete', message)">
             <template #icon><icon-delete /></template>
           </a-button>
@@ -176,6 +185,7 @@ import { Button as AButton, Tooltip as ATooltip, Message } from '@arco-design/we
 import { IconCopy, IconReply, IconRefresh, IconDelete, IconEye, IconTool } from '@arco-design/web-vue/es/icon';
 import DOMPurify from 'dompurify';
 import { marked } from 'marked';
+import { useAppI18n } from '@/composables/useAppI18n';
 import { brandLogoUrl } from '@/utils/assetUrl';
 import { extractDiagramToolPayload } from '../utils/diagramToolParser';
 import { extractHtmlPreviewContent } from '../utils/htmlPreviewParser';
@@ -228,6 +238,65 @@ interface Props {
 const props = withDefaults(defineProps<Props>(), {
   floatingToolImageSrc: null,
 });
+
+const { isEnglish } = useAppI18n();
+
+const pageText = computed(() => (
+  isEnglish.value
+    ? {
+        toolScreenshotAlt: 'Tool screenshot',
+        floatingPreview: 'Floating preview active',
+        uploadedImageAlt: (index: number) => `Uploaded image ${index}`,
+        float: 'Float',
+        open: 'Open',
+        download: 'Download',
+        collapse: 'Collapse',
+        expand: 'Expand',
+        previewHtml: 'Preview HTML',
+        previewDiagram: 'Preview diagram',
+        openInNewTab: 'Open in new tab',
+        thinkingProcess: 'Thinking process',
+        copy: 'Copy',
+        quote: 'Quote',
+        retry: 'Retry',
+        delete: 'Delete',
+        copySuccess: 'Copied successfully',
+        copyError: 'Copy failed, please copy manually',
+        step: 'Step',
+        you: 'You',
+        codeBlock: 'Code block',
+        generatedFiles: (count: number) => `Generated ${count} file${count === 1 ? '' : 's'}, ready to download.`,
+      }
+    : {
+        toolScreenshotAlt: '工具截图',
+        floatingPreview: '悬浮预览中',
+        uploadedImageAlt: (index: number) => `上传的图片 ${index}`,
+        float: '悬浮',
+        open: '打开',
+        download: '下载',
+        collapse: '收起',
+        expand: '展开',
+        previewHtml: '预览 HTML',
+        previewDiagram: '预览图表',
+        openInNewTab: '新标签打开',
+        thinkingProcess: '思考过程',
+        copy: '复制',
+        quote: '引用',
+        retry: '重试',
+        delete: '删除',
+        copySuccess: '复制成功',
+        copyError: '复制失败，请手动复制',
+        step: '步骤',
+        you: '你',
+        codeBlock: '代码块',
+        generatedFiles: (count: number) => `已生成 ${count} 个文件，可直接下载。`,
+      }
+));
+
+const messageWrapperStyle = computed(() => ({
+  '--message-code-expand-label': `"${pageText.value.expand}"`,
+  '--message-code-collapse-label': `"${pageText.value.collapse}"`,
+}));
 
 const emit = defineEmits<{
   'toggle-expand': [message: ChatMessage];
@@ -302,6 +371,16 @@ const canPreviewHtml = computed(() => {
   return Boolean(htmlPreviewContent.value);
 });
 
+const formattedToolMessageContent = computed(() => {
+  if (props.message.messageType !== 'tool') return '';
+  return formatToolMessage(props.message.content);
+});
+
+const isJsonToolMessage = computed(() => {
+  if (props.message.messageType !== 'tool') return false;
+  return formattedToolMessageContent.value.trimStart().startsWith('```json');
+});
+
 const toolFileAttachments = computed(() => {
   if (props.message.messageType !== 'tool') return [];
   if (Array.isArray(props.message.fileAttachments) && props.message.fileAttachments.length > 0) {
@@ -326,7 +405,7 @@ const handleCopy = async () => {
     // 优先使用 Clipboard API（HTTPS或localhost可用）
     if (navigator.clipboard && window.isSecureContext) {
       await navigator.clipboard.writeText(props.message.content);
-      Message.success('复制成功');
+      Message.success(pageText.value.copySuccess);
       return;
     }
     
@@ -344,13 +423,13 @@ const handleCopy = async () => {
     document.body.removeChild(textArea);
     
     if (successful) {
-      Message.success('复制成功');
+      Message.success(pageText.value.copySuccess);
     } else {
-      Message.error('复制失败，请手动复制');
+      Message.error(pageText.value.copyError);
     }
   } catch (error) {
     console.error('复制失败:', error);
-    Message.error('复制失败，请手动复制');
+    Message.error(pageText.value.copyError);
   }
 };
 
@@ -374,9 +453,9 @@ const agentStepLabel = computed(() => {
   const maxStepsDisplay = max !== undefined ? max : 500;
   
   if (step !== undefined) {
-    return `步骤 ${step}/${maxStepsDisplay}`;
+    return `${pageText.value.step} ${step}/${maxStepsDisplay}`;
   }
-  return '步骤';
+  return pageText.value.step;
 });
 
 // 头像样式类
@@ -388,7 +467,7 @@ const avatarClass = computed(() => {
 
 // 头像文本
 const avatarText = computed(() => {
-  if (props.message.isUser) return '你';
+  if (props.message.isUser) return pageText.value.you;
   if (props.message.messageType === 'tool') return 'MCP';
   return ''; // AI消息使用图片，不需要文本
 });
@@ -401,9 +480,9 @@ const isStreamingMessage = computed(() => {
          props.message.content.length > 0;
 });
 
-// 从工具消息中提取图表XML（display_diagram/edit_diagram）
+// 从消息内容中提取图表XML（display_diagram/edit_diagram）
 const diagramPayload = computed(() => {
-  if (props.message.messageType !== 'tool') return null;
+  if (props.message.isLoading) return null;
   return extractDiagramToolPayload(props.message.content);
 });
 
@@ -416,10 +495,13 @@ const shouldCollapse = computed(() => {
     return true;
   }
 
-  const content = props.message.content;
-  const lines = content.split('\n').length;
-  // 紧凑JSON可能只有1行但格式化后很长，同时检查字符长度
-  return lines > 4 || content.length > 200;
+  // JSON 工具结果即使原始内容是单行，也要按格式化后的代码块默认折叠
+  if (isJsonToolMessage.value) {
+    return true;
+  }
+
+  const lines = (formattedToolMessageContent.value || props.message.content).split('\n').length;
+  return lines > 4;
 });
 
 const canPreviewDiagram = computed(() => {
@@ -456,7 +538,7 @@ const handlePreviewHtml = () => {
   });
 };
 
-const REQUIREMENT_DOC_ID_RE = /需求文档ID[:：]\s*([0-9a-fA-F-]{36})/;
+const REQUIREMENT_DOC_ID_RE = /(?:需求文档ID|Requirement Document ID)[:：]\s*([0-9a-fA-F-]{36})/;
 const CODE_LANG_CLASS_RE = /\blanguage-([a-zA-Z0-9_+-]+)\b/;
 const MARKDOWN_IMAGE_RE = /!\[[^\]]*?\]\((?:docimg:\/\/|\/api\/requirements\/documents\/|https?:\/\/)[^)]+\)/;
 
@@ -562,7 +644,7 @@ const wrapCodeBlocksAsCollapsible = (html: string, isStreaming = false): string 
     const language = detectCodeLanguage(preNode);
     const header = doc.createElement('span');
     header.className = 'message-code-toggle-header';
-    header.textContent = language ? `代码块 (${language})` : '代码块';
+    header.textContent = language ? `${pageText.value.codeBlock} (${language})` : pageText.value.codeBlock;
     summary.appendChild(header);
 
     if (isStreaming) {
@@ -617,7 +699,7 @@ const formattedContent = computed(() => {
 
     // 如果是工具消息，尝试格式化JSON
     if (props.message.messageType === 'tool') {
-      processedContent = formatToolMessage(processedContent);
+      processedContent = formattedToolMessageContent.value;
     }
 
     // 对于AI消息，处理Markdown渲染
@@ -750,7 +832,7 @@ const formatToolMessage = (content: string) => {
       return parsedPayload.content;
     }
     if (parsedPayload.fileAttachments.length > 0) {
-      return `已生成 ${parsedPayload.fileAttachments.length} 个文件，可直接下载。`;
+      return pageText.value.generatedFiles(parsedPayload.fileAttachments.length);
     }
   }
 
@@ -1498,7 +1580,7 @@ const formatToolMessage = (content: string) => {
 }
 
 .message-bubble :deep(details.message-code-collapse > summary.message-code-toggle::after) {
-  content: '展开';
+  content: var(--message-code-expand-label, 'Expand');
   position: absolute;
   top: 8px;
   right: 10px;
@@ -1559,7 +1641,7 @@ const formatToolMessage = (content: string) => {
 }
 
 .message-bubble :deep(details.message-code-collapse[open] > summary.message-code-toggle::after) {
-  content: '收起';
+  content: var(--message-code-collapse-label, 'Collapse');
 }
 
 .message-bubble :deep(details.message-code-collapse[open] > summary .message-code-preview) {

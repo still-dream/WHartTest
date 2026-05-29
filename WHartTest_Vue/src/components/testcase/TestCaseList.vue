@@ -3,7 +3,7 @@
     <div class="page-header">
       <div class="search-box">
         <a-input-search
-          placeholder="搜索用例名称/前置条件"
+          :placeholder="pageText.searchPlaceholder"
           allow-clear
           class="search-input"
           @search="onSearch"
@@ -12,20 +12,19 @@
         />
         <a-select
           v-model="selectedLevel"
-          :placeholder="isSmallScreen ? '优先级' : '筛选优先级'"
+          :placeholder="isSmallScreen ? pageText.priorityShort : pageText.priorityFilter"
           allow-clear
           class="level-filter"
           :style="{ width: isSmallScreen ? '90px' : '130px' }"
           @change="onLevelChange"
         >
-          <a-option value="P0">{{ isSmallScreen ? 'P0' : 'P0 - 最高' }}</a-option>
-          <a-option value="P1">{{ isSmallScreen ? 'P1' : 'P1 - 高' }}</a-option>
-          <a-option value="P2">{{ isSmallScreen ? 'P2' : 'P2 - 中' }}</a-option>
-          <a-option value="P3">{{ isSmallScreen ? 'P3' : 'P3 - 低' }}</a-option>
+          <a-option v-for="option in levelOptions" :key="option.value" :value="option.value">
+            {{ isSmallScreen ? option.shortLabel : option.label }}
+          </a-option>
         </a-select>
         <a-select
           v-model="selectedReviewStatuses"
-          placeholder="筛选审核状态"
+          :placeholder="pageText.reviewStatusFilter"
           multiple
           allow-clear
           :max-tag-count="1"
@@ -34,19 +33,19 @@
           :style="{ width: '190px' }"
           @change="onReviewStatusChange"
         >
-          <a-option v-for="option in REVIEW_STATUS_OPTIONS" :key="option.value" :value="option.value">
+          <a-option v-for="option in reviewStatusOptions" :key="option.value" :value="option.value">
             {{ option.label }}
           </a-option>
         </a-select>
         <a-select
           v-model="selectedTestType"
-          :placeholder="isSmallScreen ? '类型' : '筛选测试类型'"
+          :placeholder="isSmallScreen ? pageText.typeShort : pageText.testTypeFilter"
           allow-clear
           class="test-type-filter"
           :style="{ width: isSmallScreen ? '90px' : '130px' }"
           @change="onTestTypeChange"
         >
-          <a-option v-for="option in TEST_TYPE_OPTIONS" :key="option.value" :value="option.value">
+          <a-option v-for="option in testTypeOptions" :key="option.value" :value="option.value">
             {{ option.label }}
           </a-option>
         </a-select>
@@ -54,13 +53,13 @@
           <template #icon>
             <icon-download />
           </template>
-          <span class="io-btn-text">导出</span>
+          <span class="io-btn-text">{{ pageText.export }}</span>
         </a-button>
         <a-button type="outline" class="io-btn" @click="handleImport">
           <template #icon>
             <icon-upload />
           </template>
-          <span class="io-btn-text">导入</span>
+          <span class="io-btn-text">{{ pageText.import }}</span>
         </a-button>
         <a-button
           v-if="selectedTestCaseIds.length > 0"
@@ -68,19 +67,19 @@
           status="danger"
           @click="handleBatchDelete"
         >
-          批量删除 ({{ selectedTestCaseIds.length }})
+          {{ pageText.batchDeleteButton(selectedTestCaseIds.length) }}
         </a-button>
       </div>
       <div class="action-buttons">
-        <a-button type="primary" @click="handleGenerateTestCases">生成用例</a-button>
-        <a-button type="primary" @click="handleAddTestCase">添加用例</a-button>
+        <a-button type="primary" @click="handleGenerateTestCases">{{ pageText.generateCases }}</a-button>
+        <a-button type="primary" @click="handleAddTestCase">{{ pageText.addCase }}</a-button>
       </div>
     </div>
 
     <div v-if="!currentProjectId" class="no-project-selected">
-      <a-empty description="请在顶部选择一个项目">
+      <a-empty :description="pageText.noProjectSelected">
         <template #image>
-          <icon-folder style="font-size: 48px; color: #c2c7d0;" />
+          <icon-folder style="font-size: 48px; color: var(--theme-empty-icon);" />
         </template>
       </a-empty>
     </div>
@@ -141,7 +140,7 @@
             <icon-down style="margin-left: 4px; font-size: 10px;" />
           </a-tag>
           <template #content>
-            <a-doption v-for="option in REVIEW_STATUS_OPTIONS" :key="option.value" :value="option.value">
+            <a-doption v-for="option in reviewStatusOptions" :key="option.value" :value="option.value">
               <a-tag :color="option.color" size="small">{{ option.label }}</a-tag>
             </a-doption>
           </template>
@@ -149,14 +148,14 @@
       </template>
       <template #module="{ record }">
         <span v-if="record.module_detail">{{ record.module_detail }}</span>
-        <span v-else class="text-gray">未分配</span>
+        <span v-else class="text-gray">{{ pageText.unassigned }}</span>
       </template>
       <template #operations="{ record }">
         <a-space :size="4">
-          <a-button type="primary" size="mini" @click.stop="handleViewTestCase(record)">查看</a-button>
-          <a-button type="primary" size="mini" @click.stop="handleEditTestCase(record)">编辑</a-button>
-          <a-button type="outline" size="mini" @click.stop="handleExecuteTestCase(record)">执行</a-button>
-          <a-button type="primary" status="danger" size="mini" @click.stop="handleDeleteTestCase(record)">删除</a-button>
+          <a-button type="primary" size="mini" @click.stop="handleViewTestCase(record)">{{ pageText.view }}</a-button>
+          <a-button type="primary" size="mini" @click.stop="handleEditTestCase(record)">{{ pageText.edit }}</a-button>
+          <a-button type="outline" size="mini" @click.stop="handleExecuteTestCase(record)">{{ pageText.execute }}</a-button>
+          <a-button type="primary" status="danger" size="mini" @click.stop="handleDeleteTestCase(record)">{{ pageText.delete }}</a-button>
         </a-space>
       </template>
     </a-table>
@@ -182,6 +181,7 @@
 import { ref, reactive, onMounted, onUnmounted, computed, watch, toRefs } from 'vue';
 import { Message, Modal } from '@arco-design/web-vue';
 import { IconFolder, IconDownload, IconUpload, IconDown } from '@arco-design/web-vue/es/icon';
+import { useAppI18n } from '@/composables/useAppI18n';
 import ImportModal from '@/features/testcase-templates/components/ImportModal.vue';
 import ExportModal from '@/features/testcase-templates/components/ExportModal.vue';
 import {
@@ -192,7 +192,7 @@ import {
   type TestCase,
   type ReviewStatus,
 } from '@/services/testcaseService';
-import { formatDate, getLevelColor, getReviewStatusLabel, getReviewStatusColor, getTestTypeLabel, REVIEW_STATUS_OPTIONS, TEST_TYPE_OPTIONS } from '@/utils/formatters';
+import { formatDate, getLevelColor, getReviewStatusColor } from '@/utils/formatters';
 import type { TreeNodeData } from '@arco-design/web-vue';
 
 const props = defineProps<{
@@ -213,6 +213,177 @@ const emit = defineEmits<{
 }>();
 
 const { currentProjectId, selectedModuleId } = toRefs(props);
+const { isEnglish } = useAppI18n();
+
+const pageText = computed(() => (
+  isEnglish.value
+    ? {
+        searchPlaceholder: 'Search case name/precondition',
+        priorityShort: 'Priority',
+        priorityFilter: 'Filter priority',
+        reviewStatusFilter: 'Filter review status',
+        typeShort: 'Type',
+        testTypeFilter: 'Test type',
+        export: 'Export',
+        import: 'Import',
+        batchDeleteButton: (count: number) => `Batch delete (${count})`,
+        generateCases: 'Generate cases',
+        addCase: 'Add case',
+        noProjectSelected: 'Select a project from the top bar',
+        unassigned: 'Unassigned',
+        view: 'View',
+        edit: 'Edit',
+        execute: 'Run',
+        delete: 'Delete',
+        select: 'Select',
+        caseName: 'Case name',
+        precondition: 'Precondition',
+        priority: 'Priority',
+        testType: 'Test type',
+        reviewStatus: 'Review status',
+        module: 'Module',
+        creator: 'Created by',
+        createdAt: 'Created at',
+        actions: 'Actions',
+        fetchCasesFailed: 'Failed to fetch test cases',
+        fetchCasesError: 'An error occurred while fetching test cases',
+        reviewStatusUpdated: 'Status updated',
+        reviewStatusUpdateFailed: 'Failed to update status',
+        reviewStatusUpdateError: 'An error occurred while updating the status',
+        selectProjectFirst: 'Select a project first',
+        confirmDeleteTitle: 'Confirm deletion',
+        confirmDeleteContent: (name: string) => `Delete test case "${name}"? This action cannot be undone.`,
+        confirmOk: 'Confirm',
+        deleteCaseSuccess: 'Test case deleted successfully',
+        deleteCaseFailed: 'Failed to delete test case',
+        deleteCaseError: 'An error occurred while deleting the test case',
+        confirmBatchDeleteTitle: 'Confirm batch deletion',
+        confirmBatchDeleteContent: (count: number, names: string) => `Delete ${count} test case(s)? This action cannot be undone.\n\n${names}`,
+        confirmBatchDeleteOk: 'Delete',
+        batchDeleteSuccess: (count: number) => `Deleted ${count} test case(s)`,
+        batchDeleteDetails: (details: string) => `Deletion details: ${details}`,
+        batchDeleteFailed: 'Failed to batch delete test cases',
+        batchDeleteError: 'An error occurred while batch deleting test cases',
+      }
+    : {
+        searchPlaceholder: '搜索用例名称/前置条件',
+        priorityShort: '优先级',
+        priorityFilter: '筛选优先级',
+        reviewStatusFilter: '筛选审核状态',
+        typeShort: '类型',
+        testTypeFilter: '筛选测试类型',
+        export: '导出',
+        import: '导入',
+        batchDeleteButton: (count: number) => `批量删除 (${count})`,
+        generateCases: '生成用例',
+        addCase: '添加用例',
+        noProjectSelected: '请在顶部选择一个项目',
+        unassigned: '未分配',
+        view: '查看',
+        edit: '编辑',
+        execute: '执行',
+        delete: '删除',
+        select: '选择',
+        caseName: '用例名称',
+        precondition: '前置条件',
+        priority: '优先级',
+        testType: '测试类型',
+        reviewStatus: '审核状态',
+        module: '所属模块',
+        creator: '创建者',
+        createdAt: '创建时间',
+        actions: '操作',
+        fetchCasesFailed: '获取测试用例列表失败',
+        fetchCasesError: '获取测试用例列表时发生错误',
+        reviewStatusUpdated: '状态更新成功',
+        reviewStatusUpdateFailed: '状态更新失败',
+        reviewStatusUpdateError: '状态更新时发生错误',
+        selectProjectFirst: '请先选择一个项目',
+        confirmDeleteTitle: '确认删除',
+        confirmDeleteContent: (name: string) => `确定要删除测试用例 "${name}" 吗？此操作不可恢复。`,
+        confirmOk: '确认',
+        deleteCaseSuccess: '测试用例删除成功',
+        deleteCaseFailed: '删除测试用例失败',
+        deleteCaseError: '删除测试用例时发生错误',
+        confirmBatchDeleteTitle: '确认批量删除',
+        confirmBatchDeleteContent: (count: number, names: string) => `确定要删除以下 ${count} 个测试用例吗？此操作不可恢复。\n\n${names}`,
+        confirmBatchDeleteOk: '确认删除',
+        batchDeleteSuccess: (count: number) => `成功删除 ${count} 个测试用例`,
+        batchDeleteDetails: (details: string) => `删除详情: ${details}`,
+        batchDeleteFailed: '批量删除测试用例失败',
+        batchDeleteError: '批量删除测试用例时发生错误',
+      }
+));
+
+const levelOptions = computed(() => (
+  isEnglish.value
+    ? [
+        { value: 'P0', shortLabel: 'P0', label: 'P0 - Highest' },
+        { value: 'P1', shortLabel: 'P1', label: 'P1 - High' },
+        { value: 'P2', shortLabel: 'P2', label: 'P2 - Medium' },
+        { value: 'P3', shortLabel: 'P3', label: 'P3 - Low' },
+      ]
+    : [
+        { value: 'P0', shortLabel: 'P0', label: 'P0 - 最高' },
+        { value: 'P1', shortLabel: 'P1', label: 'P1 - 高' },
+        { value: 'P2', shortLabel: 'P2', label: 'P2 - 中' },
+        { value: 'P3', shortLabel: 'P3', label: 'P3 - 低' },
+      ]
+));
+
+const reviewStatusOptions = computed(() => (
+  isEnglish.value
+    ? [
+        { value: 'pending_review', label: 'Pending', color: 'orange' },
+        { value: 'approved', label: 'Approved', color: 'green' },
+        { value: 'needs_optimization', label: 'Optimize', color: 'blue' },
+        { value: 'optimization_pending_review', label: 'Re-review', color: 'purple' },
+        { value: 'unavailable', label: 'N/A', color: 'red' },
+      ]
+    : [
+        { value: 'pending_review', label: '待审核', color: 'orange' },
+        { value: 'approved', label: '通过', color: 'green' },
+        { value: 'needs_optimization', label: '优化', color: 'blue' },
+        { value: 'optimization_pending_review', label: '优化待审核', color: 'purple' },
+        { value: 'unavailable', label: '不可用', color: 'red' },
+      ]
+));
+
+const testTypeOptions = computed(() => (
+  isEnglish.value
+    ? [
+        { value: 'smoke', label: 'Smoke' },
+        { value: 'functional', label: 'Functional' },
+        { value: 'boundary', label: 'Boundary' },
+        { value: 'exception', label: 'Exception' },
+        { value: 'permission', label: 'Permission' },
+        { value: 'security', label: 'Security' },
+        { value: 'compatibility', label: 'Compatibility' },
+      ]
+    : [
+        { value: 'smoke', label: '冒烟测试' },
+        { value: 'functional', label: '功能测试' },
+        { value: 'boundary', label: '边界测试' },
+        { value: 'exception', label: '异常测试' },
+        { value: 'permission', label: '权限测试' },
+        { value: 'security', label: '安全测试' },
+        { value: 'compatibility', label: '兼容性测试' },
+      ]
+));
+
+const getReviewStatusLabel = (status?: string): string => {
+  if (!status) {
+    return reviewStatusOptions.value[0]?.label || '';
+  }
+  return reviewStatusOptions.value.find(option => option.value === status)?.label || status;
+};
+
+const getTestTypeLabel = (testType?: string): string => {
+  if (!testType) {
+    return testTypeOptions.value.find(option => option.value === 'functional')?.label || '';
+  }
+  return testTypeOptions.value.find(option => option.value === testType)?.label || testType;
+};
 
 // 本地模块选择（与外部 selectedModuleId 同步）
 const localSelectedModuleId = ref<number | null>(props.selectedModuleId || null);
@@ -317,9 +488,9 @@ const handleSelectCurrentPage = (checked: boolean) => {
   }
 };
 
-const columns = [
+const columns = computed(() => [
   {
-    title: '选择',
+    title: pageText.value.select,
     slotName: 'selection',
     width: 36,
     dataIndex: 'selection',
@@ -327,28 +498,28 @@ const columns = [
     align: 'center'
   },
   { title: 'ID', dataIndex: 'id', width: 50, align: 'center' },
-  { title: '用例名称', dataIndex: 'name', slotName: 'name', width: 180, ellipsis: true, tooltip: false, align: 'center' },
-  { title: '前置条件', dataIndex: 'precondition', width: 120, ellipsis: true, tooltip: true, align: 'center' },
-  { title: '优先级', dataIndex: 'level', slotName: 'level', width: 80, align: 'center' },
-  { title: '测试类型', dataIndex: 'test_type', slotName: 'testType', width: 90, align: 'center' },
-  { title: '审核状态', dataIndex: 'review_status', slotName: 'reviewStatus', width: 120, align: 'center' },
-  { title: '所属模块', dataIndex: 'module_detail', slotName: 'module', width: 100, ellipsis: true, tooltip: true, align: 'center' },
+  { title: pageText.value.caseName, dataIndex: 'name', slotName: 'name', width: 180, ellipsis: true, tooltip: false, align: 'center' },
+  { title: pageText.value.precondition, dataIndex: 'precondition', width: 120, ellipsis: true, tooltip: true, align: 'center' },
+  { title: pageText.value.priority, dataIndex: 'level', slotName: 'level', width: 80, align: 'center' },
+  { title: pageText.value.testType, dataIndex: 'test_type', slotName: 'testType', width: 90, align: 'center' },
+  { title: pageText.value.reviewStatus, dataIndex: 'review_status', slotName: 'reviewStatus', width: 120, align: 'center' },
+  { title: pageText.value.module, dataIndex: 'module_detail', slotName: 'module', width: 100, ellipsis: true, tooltip: true, align: 'center' },
   {
-    title: '创建者',
+    title: pageText.value.creator,
     dataIndex: 'creator_detail',
     render: ({ record }: { record: TestCase }) => record.creator_detail?.username || '-',
     width: 80,
     align: 'center',
   },
   {
-    title: '创建时间',
+    title: pageText.value.createdAt,
     dataIndex: 'created_at',
     render: ({ record }: { record: TestCase }) => formatDate(record.created_at),
     width: 130,
     align: 'center',
   },
-  { title: '操作', slotName: 'operations', width: 200, fixed: 'right', align: 'center' },
-];
+  { title: pageText.value.actions, slotName: 'operations', width: 200, fixed: 'right', align: 'center' },
+]);
 
 const fetchTestCases = async () => {
   if (!currentProjectId.value) {
@@ -375,14 +546,14 @@ const fetchTestCases = async () => {
       // 清空之前页面的选中状态
       selectedTestCaseIds.value = [];
     } else {
-      Message.error(response.error || '获取测试用例列表失败');
+      Message.error(response.error || pageText.value.fetchCasesFailed);
       testCaseData.value = [];
       paginationConfig.total = 0;
       selectedTestCaseIds.value = [];
     }
   } catch (error) {
     console.error('获取测试用例列表出错:', error);
-    Message.error('获取测试用例列表时发生错误');
+    Message.error(pageText.value.fetchCasesError);
     testCaseData.value = [];
     paginationConfig.total = 0;
     selectedTestCaseIds.value = [];
@@ -432,17 +603,17 @@ const handleReviewStatusChange = async (record: TestCase, newStatus: string) => 
       newStatus as ReviewStatus
     );
     if (response.success) {
-      Message.success('状态更新成功');
+      Message.success(pageText.value.reviewStatusUpdated);
       // 更新本地数据
       const index = testCaseData.value.findIndex(tc => tc.id === record.id);
       if (index !== -1) {
         testCaseData.value[index].review_status = newStatus as ReviewStatus;
       }
     } else {
-      Message.error(response.error || '状态更新失败');
+      Message.error(response.error || pageText.value.reviewStatusUpdateFailed);
     }
   } catch (error) {
-    Message.error('状态更新时发生错误');
+    Message.error(pageText.value.reviewStatusUpdateError);
   }
 };
 
@@ -459,7 +630,7 @@ const onPageSizeChange = (pageSize: number) => {
 
 const handleAddTestCase = () => {
   if (!currentProjectId.value) {
-    Message.warning('请先选择一个项目');
+    Message.warning(pageText.value.selectProjectFirst);
     return;
   }
   emit('addTestCase');
@@ -467,7 +638,7 @@ const handleAddTestCase = () => {
 
 const handleGenerateTestCases = () => {
   if (!currentProjectId.value) {
-    Message.warning('请先选择一个项目');
+    Message.warning(pageText.value.selectProjectFirst);
     return;
   }
   emit('generate-test-cases');
@@ -484,22 +655,21 @@ const handleEditTestCase = (testCase: TestCase) => {
 const handleDeleteTestCase = (testCase: TestCase) => {
   if (!currentProjectId.value) return;
   Modal.warning({
-    title: '确认删除',
-    content: `确定要删除测试用例 "${testCase.name}" 吗？此操作不可恢复。`,
-    okText: '确认',
-    cancelText: '取消',
+    title: pageText.value.confirmDeleteTitle,
+    content: pageText.value.confirmDeleteContent(testCase.name),
+    okText: pageText.value.confirmOk,
     onOk: async () => {
       try {
         const response = await deleteTestCaseService(currentProjectId.value!, testCase.id);
         if (response.success) {
-          Message.success('测试用例删除成功');
+          Message.success(pageText.value.deleteCaseSuccess);
           fetchTestCases(); // 重新加载列表
           emit('testCaseDeleted');
         } else {
-          Message.error(response.error || '删除测试用例失败');
+          Message.error(response.error || pageText.value.deleteCaseFailed);
         }
       } catch (error) {
-        Message.error('删除测试用例时发生错误');
+        Message.error(pageText.value.deleteCaseError);
       }
     },
   });
@@ -523,10 +693,9 @@ const handleBatchDelete = () => {
     testCaseNames.substring(0, 100) + '...' : testCaseNames;
 
   Modal.warning({
-    title: '确认批量删除',
-    content: `确定要删除以下 ${selectedTestCaseIds.value.length} 个测试用例吗？此操作不可恢复。\n\n${displayNames}`,
-    okText: '确认删除',
-    cancelText: '取消',
+    title: pageText.value.confirmBatchDeleteTitle,
+    content: pageText.value.confirmBatchDeleteContent(selectedTestCaseIds.value.length, displayNames),
+    okText: pageText.value.confirmBatchDeleteOk,
     width: 500,
     onOk: async () => {
       try {
@@ -535,12 +704,12 @@ const handleBatchDelete = () => {
           // 显示详细的删除结果
           const { deleted_count, deletion_details } = response.data;
 
-          let detailMessage = `成功删除 ${deleted_count} 个测试用例`;
+          let detailMessage = pageText.value.batchDeleteSuccess(deleted_count);
           if (deletion_details) {
             const details = Object.entries(deletion_details)
               .map(([key, count]) => `${key}: ${count}`)
               .join(', ');
-            detailMessage += `\n删除详情: ${details}`;
+            detailMessage += `\n${pageText.value.batchDeleteDetails(details)}`;
           }
 
           Message.success(detailMessage);
@@ -550,11 +719,11 @@ const handleBatchDelete = () => {
           fetchTestCases();
           emit('testCaseDeleted');
         } else {
-          Message.error(response.error || '批量删除测试用例失败');
+          Message.error(response.error || pageText.value.batchDeleteFailed);
         }
       } catch (error) {
         console.error('批量删除测试用例出错:', error);
-        Message.error('批量删除测试用例时发生错误');
+        Message.error(pageText.value.batchDeleteError);
       }
     },
   });
@@ -565,7 +734,7 @@ const handleBatchDelete = () => {
 // 导出处理函数
 const handleExport = () => {
   if (!currentProjectId.value) {
-    Message.warning('请先选择一个项目');
+    Message.warning(pageText.value.selectProjectFirst);
     return;
   }
   exportModalRef.value?.open();
@@ -573,7 +742,7 @@ const handleExport = () => {
 
 const handleImport = () => {
   if (!currentProjectId.value) {
-    Message.warning('请先选择一个项目');
+    Message.warning(pageText.value.selectProjectFirst);
     return;
   }
   importModalRef.value?.open();
@@ -623,10 +792,12 @@ defineExpose({
 <style scoped>
 .testcase-content {
   flex: 1;
-  background-color: #fff;
+  background-color: var(--theme-card-bg);
+  color: var(--theme-page-text);
+  border: 1px solid var(--theme-card-border);
   border-radius: 8px;
   padding: 16px;
-  box-shadow: 4px 0 10px rgba(0, 0, 0, 0.2), 0 4px 10px rgba(0, 0, 0, 0.2), 0 0 10px rgba(0, 0, 0, 0.15);
+  box-shadow: var(--theme-card-shadow);
   height: 100%;
   box-sizing: border-box;
   display: flex;
@@ -738,7 +909,7 @@ defineExpose({
 }
 
 .text-gray {
-  color: #86909c;
+  color: var(--theme-text-tertiary);
 }
 
 :deep(.test-case-table .arco-table-td) {
@@ -776,7 +947,7 @@ defineExpose({
   gap: 6px;
   position: sticky;
   bottom: 16px;
-  background-color: #fff;
+  background-color: var(--theme-card-bg);
   z-index: 1;
   padding: 8px 0;
   box-shadow: 0 -2px 8px rgba(0, 0, 0, 0.04);
@@ -809,7 +980,7 @@ defineExpose({
 .testcase-name-link {
   display: inline-block;
   max-width: 160px;
-  color: #1890ff;
+  color: var(--theme-accent);
   cursor: pointer;
   text-decoration: none;
   transition: color 0.2s;
@@ -819,7 +990,7 @@ defineExpose({
 }
 
 .testcase-name-link:hover {
-  color: #40a9ff;
+  color: var(--theme-accent-hover);
   text-decoration: underline;
 }
 

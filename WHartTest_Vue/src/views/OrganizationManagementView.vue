@@ -3,14 +3,14 @@
     <div class="page-header">
       <div class="search-box">
         <a-input-search
-          placeholder="搜索组织名称/代码"
+          :placeholder="pageText.searchPlaceholder"
           allow-clear
           style="width: 300px"
           @search="onSearch"
         />
       </div>
       <div class="action-buttons">
-        <a-button type="primary" @click="showAddOrganizationModal">添加组织</a-button>
+        <a-button type="primary" @click="showAddOrganizationModal">{{ pageText.addOrganization }}</a-button>
       </div>
     </div>
 
@@ -25,10 +25,10 @@
     >
       <template #operations="{ record }">
         <a-space :size="4">
-          <a-button type="primary" size="mini" @click="viewOrganizationMembers(record, $event)">成员</a-button>
-          <a-button type="primary" size="mini" @click="viewOrganizationPermissions(record, $event)">权限</a-button>
-          <a-button type="primary" size="mini" @click="editOrganization(record, $event)">编辑</a-button>
-          <a-button type="primary" status="danger" size="mini" @click="deleteOrganization(record, $event)">删除</a-button>
+          <a-button type="primary" size="mini" @click="viewOrganizationMembers(record, $event)">{{ pageText.members }}</a-button>
+          <a-button type="primary" size="mini" @click="viewOrganizationPermissions(record, $event)">{{ pageText.permissions }}</a-button>
+          <a-button type="primary" size="mini" @click="editOrganization(record, $event)">{{ pageText.edit }}</a-button>
+          <a-button type="primary" status="danger" size="mini" @click="deleteOrganization(record, $event)">{{ pageText.delete }}</a-button>
         </a-space>
       </template>
     </a-table>
@@ -36,7 +36,7 @@
     <!-- 组织成员管理 -->
     <a-modal
       v-model:visible="membersModalVisible"
-      title="组织成员管理"
+      :title="pageText.membersManagementTitle"
       :footer="false"
       :mask-closable="true"
       :width="900"
@@ -50,7 +50,7 @@
     <!-- 组织权限管理 -->
     <a-modal
       v-model:visible="permissionsModalVisible"
-      title="组织权限管理"
+      :title="pageText.permissionsManagementTitle"
       :footer="false"
       :mask-closable="true"
       :width="1200"
@@ -67,7 +67,7 @@
     <!-- 添加组织模态框 -->
     <a-modal
       v-model:visible="addOrganizationModalVisible"
-      title="添加组织"
+      :title="pageText.addOrganizationTitle"
       @cancel="cancelAddOrganization"
       @before-ok="handleAddOrganization"
       :mask-closable="false"
@@ -76,8 +76,8 @@
       <a-form ref="addOrganizationFormRef" :model="addOrganizationForm" :rules="addOrganizationRules" layout="vertical" :auto-label-width="false">
         <a-row :gutter="16">
           <a-col :span="24">
-            <a-form-item field="name" label="组织名称" required>
-              <a-input v-model="addOrganizationForm.name" placeholder="请输入组织名称" />
+            <a-form-item field="name" :label="pageText.organizationName" required>
+              <a-input v-model="addOrganizationForm.name" :placeholder="pageText.enterOrganizationName" />
             </a-form-item>
           </a-col>
         </a-row>
@@ -87,7 +87,7 @@
     <!-- 编辑组织模态框 -->
     <a-modal
       v-model:visible="editOrganizationModalVisible"
-      title="编辑组织"
+      :title="pageText.editOrganizationTitle"
       @cancel="cancelEditOrganization"
       @before-ok="handleEditOrganization"
       :mask-closable="false"
@@ -96,8 +96,8 @@
       <a-form ref="editOrganizationFormRef" :model="editOrganizationForm" :rules="editOrganizationRules" layout="vertical" :auto-label-width="false">
         <a-row :gutter="16">
           <a-col :span="24">
-            <a-form-item field="name" label="组织名称" required>
-              <a-input v-model="editOrganizationForm.name" placeholder="请输入组织名称" />
+            <a-form-item field="name" :label="pageText.organizationName" required>
+              <a-input v-model="editOrganizationForm.name" :placeholder="pageText.enterOrganizationName" />
             </a-form-item>
           </a-col>
         </a-row>
@@ -107,7 +107,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, reactive, onMounted, nextTick } from 'vue';
+import { ref, reactive, onMounted, nextTick, computed } from 'vue';
 import { Message, Modal, Row as ARow, Col as ACol } from '@arco-design/web-vue';
 import {
   getOrganizationList,
@@ -121,6 +121,80 @@ import {
 } from '@/services/organizationService';
 import OrganizationMembersTable from '@/components/organization/OrganizationMembersTable.vue';
 import PermissionTreeSelector from '@/components/permission/PermissionTreeSelector.vue';
+import { useAppI18n } from '@/composables/useAppI18n';
+
+const { isEnglish } = useAppI18n();
+const pageText = computed(() => (
+  isEnglish.value
+    ? {
+        searchPlaceholder: 'Search organization name/code',
+        addOrganization: 'Add organization',
+        members: 'Members',
+        permissions: 'Permissions',
+        edit: 'Edit',
+        delete: 'Delete',
+        membersManagementTitle: 'Organization members',
+        permissionsManagementTitle: 'Organization permissions',
+        addOrganizationTitle: 'Add organization',
+        editOrganizationTitle: 'Edit organization',
+        organizationName: 'Organization name',
+        enterOrganizationName: 'Enter organization name',
+        organizationId: 'Organization ID',
+        organizationNameColumn: 'Organization name',
+        actions: 'Actions',
+        fetchOrganizationsFailed: 'Failed to fetch organizations',
+        fetchOrganizationsError: 'An error occurred while fetching organizations',
+        organizationNameRequired: 'Enter organization name',
+        organizationNameMaxLength: 'Organization name cannot exceed 100 characters',
+        createOrganizationSuccess: 'Organization created successfully',
+        createOrganizationFailed: 'Failed to create organization',
+        createOrganizationError: 'An error occurred while creating the organization',
+        updateOrganizationSuccess: 'Organization updated successfully',
+        updateOrganizationFailed: 'Failed to update organization',
+        updateOrganizationError: 'An error occurred while updating the organization',
+        deleteConfirmTitle: 'Confirm deletion',
+        deleteConfirmContent: (name: string) => `Delete organization "${name}"? This action cannot be undone.`,
+        deleteConfirmOk: 'Delete',
+        cancel: 'Cancel',
+        deleteOrganizationSuccess: 'Organization deleted successfully',
+        deleteOrganizationFailed: 'Failed to delete organization',
+        deleteOrganizationError: 'An error occurred while deleting the organization',
+      }
+    : {
+        searchPlaceholder: '搜索组织名称/代码',
+        addOrganization: '添加组织',
+        members: '成员',
+        permissions: '权限',
+        edit: '编辑',
+        delete: '删除',
+        membersManagementTitle: '组织成员管理',
+        permissionsManagementTitle: '组织权限管理',
+        addOrganizationTitle: '添加组织',
+        editOrganizationTitle: '编辑组织',
+        organizationName: '组织名称',
+        enterOrganizationName: '请输入组织名称',
+        organizationId: '组织ID',
+        organizationNameColumn: '组织名称',
+        actions: '操作',
+        fetchOrganizationsFailed: '获取组织列表失败',
+        fetchOrganizationsError: '获取组织列表时发生错误',
+        organizationNameRequired: '请输入组织名称',
+        organizationNameMaxLength: '组织名称长度不能超过100个字符',
+        createOrganizationSuccess: '组织创建成功',
+        createOrganizationFailed: '创建组织失败',
+        createOrganizationError: '创建组织时发生错误',
+        updateOrganizationSuccess: '组织更新成功',
+        updateOrganizationFailed: '更新组织失败',
+        updateOrganizationError: '更新组织时发生错误',
+        deleteConfirmTitle: '确认删除',
+        deleteConfirmContent: (name: string) => `确定要删除组织 "${name}" 吗？此操作不可恢复。`,
+        deleteConfirmOk: '确定删除',
+        cancel: '取消',
+        deleteOrganizationSuccess: '组织删除成功',
+        deleteOrganizationFailed: '删除组织失败',
+        deleteOrganizationError: '删除组织时发生错误',
+      }
+));
 
 // 加载状态
 const loading = ref(false);
@@ -130,26 +204,26 @@ const searchKeyword = ref('');
 const permissionTreeSelectorRef = ref();
 
 // 表格列定义
-const columns = [
+const columns = computed(() => [
   {
-    title: '组织ID',
+    title: pageText.value.organizationId,
     dataIndex: 'id',
-    width: 80,
+    width: 160,
     align: 'center',
   },
   {
-    title: '组织名称',
+    title: pageText.value.organizationNameColumn,
     dataIndex: 'name',
     align: 'center',
   },
   {
-    title: '操作',
+    title: pageText.value.actions,
     slotName: 'operations',
     width: 240,
     fixed: 'right',
     align: 'center',
   },
-];
+]);
 
 // 组织数据
 const organizationData = ref<Organization[]>([]);
@@ -217,13 +291,13 @@ const fetchOrganizationList = async () => {
       organizationData.value = response.data;
       pagination.total = response.total || response.data.length;
     } else {
-      Message.error(response.error || '获取组织列表失败');
+      Message.error(response.error || pageText.value.fetchOrganizationsFailed);
       organizationData.value = [];
       pagination.total = 0;
     }
   } catch (error) {
     console.error('获取组织列表出错:', error);
-    Message.error('获取组织列表时发生错误');
+    Message.error(pageText.value.fetchOrganizationsError);
     organizationData.value = [];
     pagination.total = 0;
   } finally {
@@ -264,12 +338,12 @@ const addOrganizationForm = reactive<CreateOrganizationRequest>({
 });
 
 // 表单验证规则
-const addOrganizationRules = {
+const addOrganizationRules = computed(() => ({
   name: [
-    { required: true, message: '请输入组织名称' },
-    { maxLength: 100, message: '组织名称长度不能超过100个字符' }
+    { required: true, message: pageText.value.organizationNameRequired },
+    { maxLength: 100, message: pageText.value.organizationNameMaxLength }
   ]
-};
+}));
 
 // 显示添加组织模态框
 const showAddOrganizationModal = () => {
@@ -310,17 +384,17 @@ const handleAddOrganization = async (done: (closed: boolean) => void) => {
     const response = await createOrganization(organizationData);
 
     if (response.success) {
-      Message.success('组织创建成功');
+      Message.success(pageText.value.createOrganizationSuccess);
       // 刷新组织列表
       fetchOrganizationList();
       done(true); // 关闭模态框
     } else {
-      Message.error(response.error || '创建组织失败');
+      Message.error(response.error || pageText.value.createOrganizationFailed);
       done(false); // 不关闭模态框
     }
   } catch (error) {
     console.error('创建组织出错:', error);
-    Message.error('创建组织时发生错误');
+    Message.error(pageText.value.createOrganizationError);
     done(false); // 不关闭模态框
   }
 };
@@ -334,12 +408,12 @@ const editOrganizationForm = reactive<UpdateOrganizationRequest & { id: number }
 });
 
 // 编辑组织表单验证规则
-const editOrganizationRules = {
+const editOrganizationRules = computed(() => ({
   name: [
-    { required: true, message: '请输入组织名称' },
-    { maxLength: 100, message: '组织名称长度不能超过100个字符' }
+    { required: true, message: pageText.value.organizationNameRequired },
+    { maxLength: 100, message: pageText.value.organizationNameMaxLength }
   ]
-};
+}));
 
 // 显示编辑组织模态框
 const editOrganization = (organization: Organization, event?: Event) => {
@@ -385,17 +459,17 @@ const handleEditOrganization = async (done: (closed: boolean) => void) => {
     const response = await updateOrganization(editOrganizationForm.id, updateData);
 
     if (response.success) {
-      Message.success('组织更新成功');
+      Message.success(pageText.value.updateOrganizationSuccess);
       // 刷新组织列表
       fetchOrganizationList();
       done(true); // 关闭模态框
     } else {
-      Message.error(response.error || '更新组织失败');
+      Message.error(response.error || pageText.value.updateOrganizationFailed);
       done(false); // 不关闭模态框
     }
   } catch (error) {
     console.error('更新组织出错:', error);
-    Message.error('更新组织时发生错误');
+    Message.error(pageText.value.updateOrganizationError);
     done(false); // 不关闭模态框
   }
 };
@@ -407,24 +481,24 @@ const deleteOrganization = (organization: Organization, event?: Event) => {
     event.stopPropagation();
   }
   Modal.warning({
-    title: '确认删除',
-    content: `确定要删除组织 "${organization.name}" 吗？此操作不可恢复。`,
-    okText: '确定删除',
-    cancelText: '取消',
+    title: pageText.value.deleteConfirmTitle,
+    content: pageText.value.deleteConfirmContent(organization.name),
+    okText: pageText.value.deleteConfirmOk,
+    cancelText: pageText.value.cancel,
     onOk: async () => {
       try {
         const response = await deleteOrganizationService(organization.id);
 
         if (response.success) {
-          Message.success(response.message || '组织删除成功');
+          Message.success(response.message || pageText.value.deleteOrganizationSuccess);
           // 刷新组织列表
           fetchOrganizationList();
         } else {
-          Message.error(response.error || '删除组织失败');
+          Message.error(response.error || pageText.value.deleteOrganizationFailed);
         }
       } catch (error) {
         console.error('删除组织出错:', error);
-        Message.error('删除组织时发生错误');
+        Message.error(pageText.value.deleteOrganizationError);
       }
     }
   });

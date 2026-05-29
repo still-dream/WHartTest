@@ -10,8 +10,8 @@ https://docs.djangoproject.com/en/5.2/topics/http/urls/
 from django.contrib import admin
 
 
-# 导入 path/include，用于声明 URL 与组合子路由。
-from django.urls import path, include
+# 导入 path/include/re_path，用于声明 URL 与组合子路由。
+from django.urls import path, include, re_path
 
 # 导入项目配置，后续用于读取 MEDIA/STATIC 设置。
 from django.conf import settings
@@ -55,6 +55,29 @@ from drf_spectacular.views import (
     SpectacularRedocView,
 )
 
+# 导入 API 自动化测试模块视图集。
+from api_database_configs.views import ApiDatabaseConfigViewSet
+from api_environments.views import (
+    ApiEnvironmentViewSet,
+    ApiEnvironmentVariableViewSet,
+    ApiGlobalRequestHeaderViewSet,
+)
+from api_modules.views import ApiModuleViewSet
+from api_functions.views import ApiCustomFunctionViewSet
+from api_interfaces.views import ApiInterfaceViewSet, ApiInterfaceResultViewSet
+from api_testcases.views import (
+    ApiTestCaseTagViewSet,
+    ApiTestCaseGroupViewSet,
+    ApiTestCaseViewSet,
+    ApiTestReportViewSet,
+)
+from api_testtasks.views import ApiTestTaskSuiteViewSet, ApiTestTaskExecutionViewSet
+from api_sync.views import (
+    ApiSyncConfigViewSet,
+    ApiSyncHistoryViewSet,
+    ApiGlobalSyncConfigViewSet,
+)
+
 # 创建主路由器实例。
 router = DefaultRouter()
 
@@ -90,6 +113,25 @@ projects_router.register(
 projects_router.register(r"skills", SkillViewSet, basename="project-skills")
 projects_router.register(r'scheduled-tasks', ScheduledTaskViewSet, basename='project-scheduled-tasks')
 projects_router.register(r'task-executions', TaskExecViewSet, basename='project-task-executions')
+
+# 注册 API 自动化测试嵌套路由。
+projects_router.register(r'api-database-configs', ApiDatabaseConfigViewSet, basename='project-api-database-configs')
+projects_router.register(r'api-environments', ApiEnvironmentViewSet, basename='project-api-environments')
+projects_router.register(r'api-environment-variables', ApiEnvironmentVariableViewSet, basename='project-api-environment-variables')
+projects_router.register(r'api-global-headers', ApiGlobalRequestHeaderViewSet, basename='project-api-global-headers')
+projects_router.register(r'api-modules', ApiModuleViewSet, basename='project-api-modules')
+projects_router.register(r'api-functions', ApiCustomFunctionViewSet, basename='project-api-functions')
+projects_router.register(r'api-interfaces', ApiInterfaceViewSet, basename='project-api-interfaces')
+projects_router.register(r'api-interface-results', ApiInterfaceResultViewSet, basename='project-api-interface-results')
+projects_router.register(r'api-testcase-tags', ApiTestCaseTagViewSet, basename='project-api-testcase-tags')
+projects_router.register(r'api-testcase-groups', ApiTestCaseGroupViewSet, basename='project-api-testcase-groups')
+projects_router.register(r'api-testcases', ApiTestCaseViewSet, basename='project-api-testcases')
+projects_router.register(r'api-test-reports', ApiTestReportViewSet, basename='project-api-test-reports')
+projects_router.register(r'api-task-suites', ApiTestTaskSuiteViewSet, basename='project-api-task-suites')
+projects_router.register(r'api-task-executions', ApiTestTaskExecutionViewSet, basename='project-api-task-executions')
+projects_router.register(r'api-sync-configs', ApiSyncConfigViewSet, basename='project-api-sync-configs')
+projects_router.register(r'api-sync-histories', ApiSyncHistoryViewSet, basename='project-api-sync-histories')
+projects_router.register(r'api-global-sync-configs', ApiGlobalSyncConfigViewSet, basename='project-api-global-sync-configs')
 
 # 定义根 URL 路由表。
 urlpatterns = [
@@ -152,3 +194,17 @@ urlpatterns += static(
     settings.STATIC_URL,
     document_root=settings.STATIC_ROOT if hasattr(settings, "STATIC_ROOT") else None,
 )
+
+# SPA catch-all：所有非 api/admin/media/static 的路径都返回前端 index.html，
+# 让 Vue Router 处理客户端路由（解决刷新 404 问题）。
+from django.views.generic import TemplateView
+
+# 仅在 dist/index.html 存在时启用（生产/容器环境）
+import os
+_frontend_index = os.path.join(settings.BASE_DIR.parent, 'WHartTest_Vue', 'dist', 'index.html')
+if os.path.exists(_frontend_index):
+    urlpatterns += [
+        re_path(r'^(?!api/|admin/|media/|static/).*$',
+                TemplateView.as_view(template_name='index.html'),
+                name='spa-fallback'),
+    ]

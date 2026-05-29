@@ -21,6 +21,8 @@ import os
 # 导入 dotenv 加载器，用于读取 .env 配置。
 from dotenv import load_dotenv
 
+from wharttest_django.data_variant import get_postgres_db_name, get_sqlite_db_path
+
 # 在项目内构建路径时可使用：BASE_DIR / 'subdir'。
 # 计算项目根目录（settings.py 的上两级目录）。
 BASE_DIR = Path(__file__).resolve().parent.parent
@@ -132,6 +134,14 @@ INSTALLED_APPS = [
     "weixin_integration",  # 微信扫码登录与消息集成。
     'task_center', # 任务中心应用
     'django_celery_beat', # Celery Beat 数据库调度器
+    'api_database_configs',  # API 数据库配置应用。
+    'api_environments',  # API 环境管理应用。
+    'api_modules',  # API 接口模块应用。
+    'api_functions',  # API 自定义函数应用。
+    'api_interfaces',  # API 接口管理应用。
+    'api_testcases',  # API 测试用例应用。
+    'api_testtasks',  # API 测试任务应用。
+    'api_sync',  # API 接口同步应用。
 ]
 
 # ASGI 配置（用于 Channels WebSocket）
@@ -152,6 +162,7 @@ MIDDLEWARE = [
     "django.middleware.security.SecurityMiddleware",  # 安全增强中间件（HTTPS 重定向、安全头等）。
     "django.contrib.sessions.middleware.SessionMiddleware",  # 会话读写中间件。
     "corsheaders.middleware.CorsMiddleware",  # CORS 中间件需放在 CommonMiddleware 前。
+    "django.middleware.locale.LocaleMiddleware",  # 根据请求语言协商激活当前语言。
     "django.middleware.common.CommonMiddleware",  # 通用请求处理（URL 规范化等）。
     "django.middleware.csrf.CsrfViewMiddleware",  # CSRF 防护中间件。
     "django.contrib.auth.middleware.AuthenticationMiddleware",  # 将用户对象绑定到 request。
@@ -166,7 +177,7 @@ ROOT_URLCONF = "wharttest_django.urls"
 TEMPLATES = [
     {
         "BACKEND": "django.template.backends.django.DjangoTemplates",
-        "DIRS": [],
+        "DIRS": [BASE_DIR.parent / "WHartTest_Vue" / "dist"],
         "APP_DIRS": True,
         "OPTIONS": {
             "context_processors": [
@@ -194,27 +205,6 @@ WSGI_APPLICATION = "wharttest_django.wsgi.application"
 # DATABASE_PATH: SQLite 文件路径（仅 sqlite 模式）
 # POSTGRES_*: PostgreSQL 连接参数（仅 postgres 模式）
 
-# 根据 git 分支后缀自动选择本地开发数据库，避免切分支时来回跑迁移。
-# -github → wharttest_dev_github, -pro → wharttest_dev_pro, 其他 → wharttest_dev
-def _get_postgres_db_name():
-    env_db = os.environ.get("POSTGRES_DB")
-    if env_db:
-        return env_db
-    import subprocess
-    try:
-        branch = subprocess.check_output(
-            ["git", "rev-parse", "--abbrev-ref", "HEAD"],
-            stderr=subprocess.DEVNULL, cwd=BASE_DIR,
-        ).decode().strip()
-        if branch.endswith("-github"):
-            return "wharttest_dev_github"
-        if branch.endswith("-pro"):
-            return "wharttest_dev_pro"
-    except Exception:
-        pass
-    return "wharttest_dev"
-
-
 # 读取数据库类型（默认 postgres）。
 DATABASE_TYPE = os.environ.get("DATABASE_TYPE", "postgres")
 
@@ -224,7 +214,7 @@ if DATABASE_TYPE == "postgres":
     DATABASES = {
         "default": {
             "ENGINE": "django.db.backends.postgresql",
-            "NAME": _get_postgres_db_name(),
+            "NAME": get_postgres_db_name(BASE_DIR),
             "USER": os.environ.get("POSTGRES_USER", "postgres"),
             "PASSWORD": os.environ.get("POSTGRES_PASSWORD", "postgres"),
             "HOST": os.environ.get("POSTGRES_HOST", "127.0.0.1"),
@@ -240,24 +230,12 @@ if DATABASE_TYPE == "postgres":
     }
 else:
     # SQLite 配置（默认，用于本地开发）
-    # 读取可选 SQLite 文件路径。
-    DATABASE_PATH = os.environ.get("DATABASE_PATH")
-    if DATABASE_PATH:
-        # 使用环境变量指定的路径（Docker部署）
-        DATABASES = {
-            "default": {
-                "ENGINE": "django.db.backends.sqlite3",
-                "NAME": DATABASE_PATH,
-            }
+    DATABASES = {
+        "default": {
+            "ENGINE": "django.db.backends.sqlite3",
+            "NAME": get_sqlite_db_path(BASE_DIR),
         }
-    else:
-        # 使用默认路径（本地开发）
-        DATABASES = {
-            "default": {
-                "ENGINE": "django.db.backends.sqlite3",
-                "NAME": BASE_DIR / "db.sqlite3",
-            }
-        }
+    }
 
 
 # 密码校验
@@ -289,6 +267,12 @@ AUTH_PASSWORD_VALIDATORS = [
 # 默认语言为简体中文。
 LANGUAGE_CODE = "zh-Hans"
 
+# 明确声明当前项目支持的语言。
+LANGUAGES = [
+    ("zh-hans", "简体中文"),
+    ("en", "English"),
+]
+
 # 默认时区为亚洲/上海。
 TIME_ZONE = "Asia/Shanghai"
 
@@ -297,6 +281,9 @@ USE_I18N = True
 
 # 启用时区感知时间处理。
 USE_TZ = True
+
+# 项目级翻译资源目录。
+LOCALE_PATHS = [BASE_DIR / "locale"]
 
 
 # 静态文件（CSS、JavaScript、图片）
@@ -713,3 +700,22 @@ DOCX_EDITOR_BASE_URL = os.environ.get("DOCX_EDITOR_BASE_URL", "").rstrip("/")
 DOCX_EDITOR_PUBLIC_BASE_URL = os.environ.get("DOCX_EDITOR_PUBLIC_BASE_URL", "").rstrip("/")
 # 主项目调用 docx-editor 集成接口时使用的服务密钥。
 DOCX_EDITOR_SERVICE_KEY = os.environ.get("DOCX_EDITOR_SERVICE_KEY", "").strip()
+
+# Skill 商店配置
+# 默认商店源 base URL，必须以 / 结尾，前端按相对路径拼 manifest.json 和 zip 包
+SKILL_STORE_DEFAULT_SOURCE = os.environ.get(
+    "SKILL_STORE_DEFAULT_SOURCE",
+    "https://gitee.com/duanxiangchun/didactic-octo-spork/raw/main/WHartTest_Skills/",
+)
+SKILL_STORE_DEFAULT_SOURCE_NAME = os.environ.get(
+    "SKILL_STORE_DEFAULT_SOURCE_NAME",
+    "WHartTest 官方 Skill 中心",
+)
+# 是否允许用户配置自定义源
+SKILL_STORE_ALLOW_CUSTOM_SOURCE = os.environ.get(
+    "SKILL_STORE_ALLOW_CUSTOM_SOURCE", "true"
+).lower() == "true"
+# 通过 zip URL 下载 Skill 的单包体积上限（字节，默认 10MB）
+SKILL_STORE_MAX_ZIP_SIZE = int(os.environ.get("SKILL_STORE_MAX_ZIP_SIZE", str(10 * 1024 * 1024)))
+# 通过 zip URL 下载的超时时间（秒）
+SKILL_STORE_DOWNLOAD_TIMEOUT = int(os.environ.get("SKILL_STORE_DOWNLOAD_TIMEOUT", "60"))

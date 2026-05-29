@@ -15,8 +15,8 @@
           <icon-exclamation-circle-fill />
         </div>
         <div class="header-content">
-          <h3 class="title">工具执行审批</h3>
-          <p class="subtitle">以下操作需要您的确认后才能执行</p>
+          <h3 class="title">{{ dialogText.title }}</h3>
+          <p class="subtitle">{{ dialogText.subtitle }}</p>
         </div>
       </div>
 
@@ -36,7 +36,7 @@
 
         <div class="tool-args" v-if="actionRequest?.args && Object.keys(actionRequest.args).length">
           <div class="args-label">
-            <icon-command /> 执行参数
+            <icon-command /> {{ dialogText.executionArgs }}
           </div>
           <div class="args-content">
             <pre>{{ formatArgs(actionRequest.args) }}</pre>
@@ -47,7 +47,7 @@
       <!-- 记住选择 -->
       <div class="remember-section">
         <a-checkbox v-model="rememberChoice">
-          <span class="remember-text">记住此选择</span>
+          <span class="remember-text">{{ dialogText.rememberChoice }}</span>
         </a-checkbox>
         <a-select
           v-if="rememberChoice"
@@ -67,7 +67,7 @@
           :loading="loading"
         >
           <template #icon><icon-close /></template>
-          拒绝执行
+          {{ dialogText.rejectExecution }}
         </a-button>
         <a-button
           type="primary"
@@ -77,7 +77,7 @@
           :loading="loading"
         >
           <template #icon><icon-check /></template>
-          允许执行
+          {{ dialogText.approveExecution }}
         </a-button>
       </div>
     </div>
@@ -89,6 +89,7 @@ import { ref, computed, watch } from 'vue';
 import { Message } from '@arco-design/web-vue';
 import { saveToolApproval } from '@/features/langgraph/services/toolApprovalService';
 import type { ApprovalScope } from '@/features/langgraph/types/toolApproval';
+import { useAppI18n } from '@/composables/useAppI18n';
 
 /** 工具调用请求 */
 export interface ActionRequest {
@@ -122,14 +123,45 @@ const emit = defineEmits<{
   }): void;
 }>();
 
+const { isEnglish } = useAppI18n();
 const loading = ref(false);
 const rememberChoice = ref(false);
 const rememberScope = ref<ApprovalScope>('permanent');
 
-const scopeOptions = [
-  { label: '仅本次会话', value: 'session' },
-  { label: '永久生效', value: 'permanent' },
-];
+const dialogText = computed(() => (
+  isEnglish.value
+    ? {
+        title: 'Tool Execution Approval',
+        subtitle: 'The following action requires your approval before execution',
+        executionArgs: 'Execution Arguments',
+        rememberChoice: 'Remember this choice',
+        rejectExecution: 'Reject',
+        approveExecution: 'Allow',
+        scopeSession: 'This Session Only',
+        scopePermanent: 'Always Apply',
+        setAlwaysAllow: (name: string) => `${name} is now always allowed`,
+        setAlwaysReject: (name: string) => `${name} is now always rejected`,
+        operationFailed: (reason?: string) => `Operation failed: ${reason || 'Unknown error'}`,
+      }
+    : {
+        title: '工具执行审批',
+        subtitle: '以下操作需要您的确认后才能执行',
+        executionArgs: '执行参数',
+        rememberChoice: '记住此选择',
+        rejectExecution: '拒绝执行',
+        approveExecution: '允许执行',
+        scopeSession: '仅本次会话',
+        scopePermanent: '永久生效',
+        setAlwaysAllow: (name: string) => `已设置 ${name} 为始终允许`,
+        setAlwaysReject: (name: string) => `已设置 ${name} 为始终拒绝`,
+        operationFailed: (reason?: string) => `操作失败: ${reason || '未知错误'}`,
+      }
+));
+
+const scopeOptions = computed(() => ([
+  { label: dialogText.value.scopeSession, value: 'session' },
+  { label: dialogText.value.scopePermanent, value: 'permanent' },
+]));
 
 // 当前操作请求（取第一个）
 const actionRequest = computed(() => {
@@ -169,7 +201,7 @@ const handleApprove = async () => {
         rememberScope.value,
         props.sessionId
       );
-      Message.success(`已设置 ${actionRequest.value.name} 为始终允许`);
+      Message.success(dialogText.value.setAlwaysAllow(actionRequest.value.name));
     }
 
     emit('decision', {
@@ -181,7 +213,7 @@ const handleApprove = async () => {
     });
     emit('update:visible', false);
   } catch (error: any) {
-    Message.error('操作失败: ' + (error.message || '未知错误'));
+    Message.error(dialogText.value.operationFailed(error.message));
   } finally {
     loading.value = false;
   }
@@ -205,7 +237,7 @@ const handleReject = async () => {
         rememberScope.value,
         props.sessionId
       );
-      Message.info(`已设置 ${actionRequest.value.name} 为始终拒绝`);
+      Message.info(dialogText.value.setAlwaysReject(actionRequest.value.name));
     }
 
     emit('decision', {
@@ -217,7 +249,7 @@ const handleReject = async () => {
     });
     emit('update:visible', false);
   } catch (error: any) {
-    Message.error('操作失败: ' + (error.message || '未知错误'));
+    Message.error(dialogText.value.operationFailed(error.message));
   } finally {
     loading.value = false;
   }

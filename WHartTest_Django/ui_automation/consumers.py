@@ -10,6 +10,7 @@ UI自动化 WebSocket Consumer
 import json
 import logging
 from typing import Optional
+from urllib.parse import parse_qs
 from channels.generic.websocket import AsyncWebsocketConsumer
 from asgiref.sync import sync_to_async
 
@@ -17,6 +18,7 @@ from .socket_models import (
     SocketDataModel, QueueModel, NoticeType, ResponseCode,
     UiSocketEnum, ExecutionTaskModel, StepResultModel, CaseResultModel
 )
+from wharttest_django.i18n import translate_app_text
 
 logger = logging.getLogger('ui_automation')
 
@@ -97,12 +99,26 @@ class UiAutomationConsumer(AsyncWebsocketConsumer):
         self.is_actuator: bool = False
         self.group_name: str = 'ui_automation'
         self.actuator_info: dict = {}  # 执行器信息
+        self.language: str = 'zh-Hans'
+
+    def _get_query_params(self) -> dict[str, list[str]]:
+        query_string = self.scope.get('query_string', b'').decode('utf-8')
+        if not query_string:
+            return {}
+        if '=' not in query_string:
+            return {'id': [query_string]}
+        return parse_qs(query_string)
+
+    def _localize(self, message: str) -> str:
+        return translate_app_text(message, self.language)
     
     async def connect(self):
         """建立连接"""
         import datetime
         path = self.scope.get('path', '')
-        
+        query_params = self._get_query_params()
+        self.language = query_params.get('lang', ['zh-Hans'])[0]
+
         # 获取客户端IP
         client = self.scope.get('client', ['unknown', 0])
         client_ip = client[0] if client else 'unknown'
@@ -110,7 +126,7 @@ class UiAutomationConsumer(AsyncWebsocketConsumer):
         # 根据路径判断是前端还是执行器
         if '/actuator/' in path:
             self.is_actuator = True
-            self.user_id = self.scope.get('query_string', b'').decode('utf-8')
+            self.user_id = query_params.get('id', [None])[0] or query_params.get('user_id', [None])[0]
             if not self.user_id:
                 self.user_id = f"actuator_{id(self)}"
             
@@ -143,7 +159,7 @@ class UiAutomationConsumer(AsyncWebsocketConsumer):
         # 发送连接成功消息
         await self.send_json(SocketDataModel(
             code=ResponseCode.SUCCESS,
-            msg=f"{'执行器' if self.is_actuator else 'Web客户端'}连接成功",
+            msg=self._localize(f"{'执行器' if self.is_actuator else 'Web客户端'}连接成功"),
             user=self.user_id
         ))
         
@@ -177,13 +193,13 @@ class UiAutomationConsumer(AsyncWebsocketConsumer):
             logger.error(f"JSON解析错误: {e}")
             await self.send_json(SocketDataModel(
                 code=ResponseCode.ERROR,
-                msg=f"消息格式错误: {str(e)}"
+                msg=self._localize(f"消息格式错误: {str(e)}")
             ))
         except Exception as e:
             logger.error(f"处理消息错误: {e}", exc_info=True)
             await self.send_json(SocketDataModel(
                 code=ResponseCode.ERROR,
-                msg=f"处理错误: {str(e)}"
+                msg=self._localize(f"处理错误: {str(e)}")
             ))
     
     async def route_message(self, socket_data: SocketDataModel):
@@ -216,7 +232,7 @@ class UiAutomationConsumer(AsyncWebsocketConsumer):
             logger.warning(f"未知的func_name: {func_name}")
             await self.send_json(SocketDataModel(
                 code=ResponseCode.ERROR,
-                msg=f"未知的操作: {func_name}"
+                msg=self._localize(f"未知的操作: {func_name}")
             ))
     
     async def handle_execute_page_steps(self, args: dict, user: str):
@@ -230,7 +246,7 @@ class UiAutomationConsumer(AsyncWebsocketConsumer):
         if not actuator:
             await self.send_json(SocketDataModel(
                 code=ResponseCode.ERROR,
-                msg="没有可用的执行器，请先启动执行器服务" if not actuator_id else f"执行器 {actuator_id} 不在线"
+                msg=self._localize("没有可用的执行器，请先启动执行器服务" if not actuator_id else f"执行器 {actuator_id} 不在线")
             ))
             return
         
@@ -248,7 +264,7 @@ class UiAutomationConsumer(AsyncWebsocketConsumer):
         
         await self.send_json(SocketDataModel(
             code=ResponseCode.SUCCESS,
-            msg="任务已发送给执行器"
+            msg=self._localize("任务已发送给执行器")
         ))
     
     async def handle_execute_test_case(self, args: dict, user: str):
@@ -261,7 +277,7 @@ class UiAutomationConsumer(AsyncWebsocketConsumer):
         if not actuator:
             await self.send_json(SocketDataModel(
                 code=ResponseCode.ERROR,
-                msg="没有可用的执行器，请先启动执行器服务" if not actuator_id else f"执行器 {actuator_id} 不在线"
+                msg=self._localize("没有可用的执行器，请先启动执行器服务" if not actuator_id else f"执行器 {actuator_id} 不在线")
             ))
             return
         
@@ -284,7 +300,7 @@ class UiAutomationConsumer(AsyncWebsocketConsumer):
         
         await self.send_json(SocketDataModel(
             code=ResponseCode.SUCCESS,
-            msg="任务已发送给执行器"
+            msg=self._localize("任务已发送给执行器")
         ))
     
     async def handle_execute_batch(self, args: dict, user: str):
@@ -297,7 +313,7 @@ class UiAutomationConsumer(AsyncWebsocketConsumer):
         if not actuator:
             await self.send_json(SocketDataModel(
                 code=ResponseCode.ERROR,
-                msg="没有可用的执行器，请先启动执行器服务" if not actuator_id else f"执行器 {actuator_id} 不在线"
+                msg=self._localize("没有可用的执行器，请先启动执行器服务" if not actuator_id else f"执行器 {actuator_id} 不在线")
             ))
             return
 
@@ -305,7 +321,7 @@ class UiAutomationConsumer(AsyncWebsocketConsumer):
         if not case_ids:
             await self.send_json(SocketDataModel(
                 code=ResponseCode.ERROR,
-                msg="没有选择要执行的用例"
+                msg=self._localize("没有选择要执行的用例")
             ))
             return
 
@@ -314,7 +330,7 @@ class UiAutomationConsumer(AsyncWebsocketConsumer):
         if not batch_id:
             await self.send_json(SocketDataModel(
                 code=ResponseCode.ERROR,
-                msg="创建批量执行记录失败"
+                msg=self._localize("创建批量执行记录失败")
             ))
             return
 
@@ -335,7 +351,7 @@ class UiAutomationConsumer(AsyncWebsocketConsumer):
 
         await self.send_json(SocketDataModel(
             code=ResponseCode.SUCCESS,
-            msg="批量任务已发送给执行器",
+            msg=self._localize("批量任务已发送给执行器"),
             data=QueueModel(
                 func_name='batch_created',
                 func_args={'batch_id': batch_id, 'total_cases': len(case_ids)}
@@ -359,7 +375,7 @@ class UiAutomationConsumer(AsyncWebsocketConsumer):
         
         await self.send_json(SocketDataModel(
             code=ResponseCode.SUCCESS,
-            msg="停止信号已发送"
+            msg=self._localize("停止信号已发送")
         ))
     
     async def handle_step_result(self, args: dict, user: str):

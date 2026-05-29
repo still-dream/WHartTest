@@ -100,6 +100,39 @@ class SkillGitImportSerializer(serializers.Serializer):
         return value
 
 
+class SkillZipUrlImportSerializer(serializers.Serializer):
+    """从远程 zip URL 导入 Skill 的序列化器（用于 Skill 商店）"""
+    zip_url = serializers.URLField(
+        help_text='zip 包的 HTTPS URL'
+    )
+    sha256 = serializers.CharField(
+        required=False,
+        allow_blank=True,
+        max_length=64,
+        help_text='可选：zip 包的 SHA256 校验和（64 位小写 16 进制）'
+    )
+
+    def validate_zip_url(self, value):
+        from urllib.parse import urlparse
+        parsed = urlparse(value)
+        # 仅放行 HTTPS，更细粒度的私网/回环 IP 拦截在 model 层下载前做。
+        if parsed.scheme != 'https':
+            raise serializers.ValidationError('仅支持 HTTPS 协议')
+        if not parsed.hostname:
+            raise serializers.ValidationError('无效的 URL')
+        return value
+
+    def validate_sha256(self, value):
+        import re
+        value = (value or '').strip().lower()
+        if not value:
+            return ''
+        # 校验和必须是 64 位 16 进制字符，避免传入异常值后续比对永远失败。
+        if not re.match(r'^[0-9a-f]{64}$', value):
+            raise serializers.ValidationError('SHA256 必须是 64 位小写 16 进制字符')
+        return value
+
+
 class SkillListSerializer(serializers.ModelSerializer):
     """Skill 列表序列化器（轻量）"""
     creator_name = serializers.CharField(source='creator.username', read_only=True, allow_null=True)

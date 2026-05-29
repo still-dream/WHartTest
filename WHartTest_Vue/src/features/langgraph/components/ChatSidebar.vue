@@ -7,7 +7,7 @@
           <template #icon>
             <icon-plus />
           </template>
-          新对话
+          {{ text.newChat }}
         </a-button>
         <a-button
           v-if="sessions.length > 0"
@@ -17,7 +17,7 @@
           <template #icon>
             <icon-check-circle />
           </template>
-          全选
+          {{ text.selectAll }}
         </a-button>
       </div>
       
@@ -28,7 +28,7 @@
             <template #icon>
               <icon-plus />
             </template>
-            新对话
+            {{ text.newChat }}
           </a-button>
         </div>
         <div class="header-row" style="margin-top: 12px;">
@@ -40,7 +40,7 @@
               <template #icon>
                 <icon-close-circle />
               </template>
-              取消全选
+              {{ text.clearSelection }}
             </a-button>
             <a-button
               type="primary"
@@ -51,7 +51,7 @@
               <template #icon>
                 <icon-delete />
               </template>
-              批量删除 ({{ selectedSessions.length }})
+              {{ text.batchDelete(selectedSessions.length) }}
             </a-button>
           </a-space>
         </div>
@@ -60,7 +60,7 @@
 
     <div class="chat-history-list">
       <div v-if="sessions.length === 0" class="empty-history">
-        暂无历史对话
+        {{ text.noHistory }}
       </div>
       <div
         v-for="session in sessions"
@@ -75,7 +75,7 @@
         />
         <div class="history-item-content" @click="$emit('switch-session', session.id)">
           <div class="history-item-info">
-            <div class="history-item-title">{{ session.title || '未命名对话' }}</div>
+            <div class="history-item-title">{{ session.title || text.untitledChat }}</div>
             <div class="history-item-time">{{ formatTime(session.lastTime) }}</div>
           </div>
         </div>
@@ -95,6 +95,7 @@
 import { ref, computed } from 'vue';
 import { Button as AButton, Checkbox as ACheckbox, Space as ASpace, Modal, Message } from '@arco-design/web-vue';
 import { IconPlus, IconDelete, IconCheckCircle, IconCloseCircle } from '@arco-design/web-vue/es/icon';
+import { useAppI18n } from '@/composables/useAppI18n';
 
 interface ChatSession {
   id: string;
@@ -110,6 +111,43 @@ interface Props {
 }
 
 const props = defineProps<Props>();
+const { isEnglish } = useAppI18n();
+
+const text = computed(() => (
+  isEnglish.value
+    ? {
+        newChat: 'New Chat',
+        selectAll: 'Select All',
+        clearSelection: 'Clear Selection',
+        batchDelete: (count: number) => `Batch Delete (${count})`,
+        noHistory: 'No chat history',
+        untitledChat: 'Untitled Chat',
+        selectBeforeDelete: 'Select chats to delete first',
+        confirmBatchDelete: 'Confirm Batch Delete',
+        confirmBatchDeleteContent: (count: number) => `Delete the selected ${count} chat(s)? This action cannot be undone.`,
+        confirmDelete: 'Delete',
+        cancel: 'Cancel',
+        unknownTime: 'Unknown time',
+        today: 'Today',
+        yesterday: 'Yesterday',
+      }
+    : {
+        newChat: '新对话',
+        selectAll: '全选',
+        clearSelection: '取消全选',
+        batchDelete: (count: number) => `批量删除 (${count})`,
+        noHistory: '暂无历史对话',
+        untitledChat: '未命名对话',
+        selectBeforeDelete: '请先选择要删除的对话',
+        confirmBatchDelete: '确认批量删除',
+        confirmBatchDeleteContent: (count: number) => `确定要删除选中的 ${count} 个对话吗？此操作不可恢复。`,
+        confirmDelete: '确认删除',
+        cancel: '取消',
+        unknownTime: '时间未知',
+        today: '今天',
+        yesterday: '昨天',
+      }
+));
 
 const emit = defineEmits<{
   'create-new-chat': [];
@@ -140,15 +178,15 @@ const toggleSelectAll = () => {
 // 批量删除处理
 const handleBatchDelete = () => {
   if (selectedSessions.value.length === 0) {
-    Message.warning('请先选择要删除的对话');
+    Message.warning(text.value.selectBeforeDelete);
     return;
   }
 
   Modal.confirm({
-    title: '确认批量删除',
-    content: `确定要删除选中的 ${selectedSessions.value.length} 个对话吗？此操作不可恢复。`,
-    okText: '确认删除',
-    cancelText: '取消',
+    title: text.value.confirmBatchDelete,
+    content: text.value.confirmBatchDeleteContent(selectedSessions.value.length),
+    okText: text.value.confirmDelete,
+    cancelText: text.value.cancel,
     okButtonProps: {
       status: 'danger',
     },
@@ -162,7 +200,7 @@ const handleBatchDelete = () => {
 // 格式化时间显示
 const formatTime = (date: Date) => {
   if (!date || !(date instanceof Date) || isNaN(date.getTime()) || date.getTime() === 0) {
-    return '时间未知';
+    return text.value.unknownTime;
   }
 
   const now = new Date();
@@ -171,10 +209,13 @@ const formatTime = (date: Date) => {
   yesterday.setDate(yesterday.getDate() - 1);
 
   if (date >= today) {
-    return `今天 ${date.getHours().toString().padStart(2, '0')}:${date.getMinutes().toString().padStart(2, '0')}`;
+    return `${text.value.today} ${date.getHours().toString().padStart(2, '0')}:${date.getMinutes().toString().padStart(2, '0')}`;
   } else if (date >= yesterday) {
-    return `昨天 ${date.getHours().toString().padStart(2, '0')}:${date.getMinutes().toString().padStart(2, '0')}`;
+    return `${text.value.yesterday} ${date.getHours().toString().padStart(2, '0')}:${date.getMinutes().toString().padStart(2, '0')}`;
   } else {
+    if (isEnglish.value) {
+      return `${date.getMonth() + 1}/${date.getDate()} ${date.getHours().toString().padStart(2, '0')}:${date.getMinutes().toString().padStart(2, '0')}`;
+    }
     return `${date.getMonth() + 1}月${date.getDate()}日 ${date.getHours().toString().padStart(2, '0')}:${date.getMinutes().toString().padStart(2, '0')}`;
   }
 };

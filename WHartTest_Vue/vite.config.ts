@@ -11,8 +11,10 @@ export default defineConfig({
     },
   },
   server: {
+    host: '0.0.0.0',
+    allowedHosts: ['host.docker.internal'],
     proxy: {
-      '/api': {
+      '/api/': {
         target: 'http://localhost:8000', // 您的后端 API 地址
         changeOrigin: true,
       },

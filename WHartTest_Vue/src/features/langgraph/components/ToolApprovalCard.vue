@@ -10,7 +10,7 @@
           <div class="tool-info">
             <div class="tool-header">
               <span class="tool-name">{{ actionRequest.name }}</span>
-              <span class="approval-badge">需要审批</span>
+              <span class="approval-badge">{{ text.needsApproval }}</span>
             </div>
           </div>
         </div>
@@ -33,7 +33,7 @@
               :loading="loading"
             >
               <template #icon><icon-close /></template>
-              拒绝
+              {{ text.reject }}
             </a-button>
             <a-button
               type="primary"
@@ -43,7 +43,7 @@
               :loading="loading"
             >
               <template #icon><icon-check /></template>
-              允许
+              {{ text.allow }}
             </a-button>
           </div>
         </div>
@@ -75,7 +75,7 @@
       >
         <icon-down v-if="!showDetails" />
         <icon-up v-else />
-        {{ showDetails ? '收起参数' : '查看完整参数' }}
+        {{ showDetails ? text.collapseArgs : text.viewArgs }}
       </button>
     </div>
   </Transition>
@@ -87,6 +87,7 @@ import { Message } from '@arco-design/web-vue';
 import { IconThunderbolt, IconDown, IconUp, IconCheck, IconClose } from '@arco-design/web-vue/es/icon';
 import { saveToolApproval } from '@/features/langgraph/services/toolApprovalService';
 import type { ApprovalScope } from '@/features/langgraph/types/toolApproval';
+import { useAppI18n } from '@/composables/useAppI18n';
 
 export interface ActionRequest {
   name: string;
@@ -121,11 +122,38 @@ const emit = defineEmits<{
 const loading = ref(false);
 const rememberPolicy = ref<'ask' | 'always_allow'>('ask');
 const showDetails = ref(false);
+const { isEnglish } = useAppI18n();
 
-const policyOptions = [
-  { label: '每次询问', value: 'ask' },
-  { label: '始终允许', value: 'always_allow' },
-];
+const text = computed(() => (
+  isEnglish.value
+    ? {
+        needsApproval: 'Approval required',
+        reject: 'Reject',
+        allow: 'Allow',
+        collapseArgs: 'Collapse args',
+        viewArgs: 'View full args',
+        policyAsk: 'Ask every time',
+        policyAlwaysAllow: 'Always allow',
+        setAlwaysAllowSuccess: (name: string) => `${name} is now always allowed`,
+        operationFailed: (reason?: string) => `Action failed: ${reason || 'Unknown error'}`,
+      }
+    : {
+        needsApproval: '需要审批',
+        reject: '拒绝',
+        allow: '允许',
+        collapseArgs: '收起参数',
+        viewArgs: '查看完整参数',
+        policyAsk: '每次询问',
+        policyAlwaysAllow: '始终允许',
+        setAlwaysAllowSuccess: (name: string) => `已设置 ${name} 为始终允许`,
+        operationFailed: (reason?: string) => `操作失败: ${reason || '未知错误'}`,
+      }
+));
+
+const policyOptions = computed(() => [
+  { label: text.value.policyAsk, value: 'ask' },
+  { label: text.value.policyAlwaysAllow, value: 'always_allow' },
+]);
 
 const actionRequest = computed(() => {
   return props.interrupt?.action_requests?.[0] || null;
@@ -192,7 +220,7 @@ const handleApprove = async () => {
         'permanent',
         props.sessionId
       );
-      Message.success(`已设置 ${actionRequest.value.name} 为始终允许`);
+      Message.success(text.value.setAlwaysAllowSuccess(actionRequest.value.name));
     }
 
     emit('decision', {
@@ -204,7 +232,7 @@ const handleApprove = async () => {
     });
     emit('update:visible', false);
   } catch (error: any) {
-    Message.error('操作失败: ' + (error.message || '未知错误'));
+    Message.error(text.value.operationFailed(error.message));
   } finally {
     loading.value = false;
   }
@@ -228,7 +256,7 @@ const handleReject = async () => {
     });
     emit('update:visible', false);
   } catch (error: any) {
-    Message.error('操作失败: ' + (error.message || '未知错误'));
+    Message.error(text.value.operationFailed(error.message));
   } finally {
     loading.value = false;
   }

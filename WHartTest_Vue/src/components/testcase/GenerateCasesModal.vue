@@ -1,7 +1,7 @@
 <template>
   <a-modal
     :visible="visible"
-    title="AI 生成测试用例"
+    :title="pageText.modalTitle"
     @cancel="handleCancel"
     @ok="handleOk"
     :width="800"
@@ -11,16 +11,15 @@
       <!-- 当前项目和生成模式在一行 -->
       <div class="header-row">
         <div class="header-item">
-          <span class="header-label">当前项目</span>
+          <span class="header-label">{{ pageText.currentProject }}</span>
           <a-input v-model="currentProjectName" disabled style="width: 200px;" />
         </div>
         <div class="header-item">
-          <span class="header-label">生成模式</span>
+          <span class="header-label">{{ pageText.generateMode }}</span>
           <a-radio-group v-model="formState.generateMode" type="button" @change="handleModeChange">
-            <a-radio value="full">完整生成</a-radio>
-            <a-radio value="title_only">标题生成</a-radio>
-            <a-radio value="kb_complete">知识库补全</a-radio>
-            <a-radio value="kb_generate">知识生成</a-radio>
+            <a-radio v-for="option in generateModeOptions" :key="option.value" :value="option.value">
+              {{ option.label }}
+            </a-radio>
           </a-radio-group>
         </div>
       </div>
@@ -28,23 +27,19 @@
       <!-- 测试类型选择（所有模式通用） -->
       <div class="form-row test-type-row">
         <a-checkbox-group v-model="formState.testTypes" class="test-type-checkboxes">
-          <a-checkbox value="smoke">冒烟测试</a-checkbox>
-          <a-checkbox value="functional">功能测试</a-checkbox>
-          <a-checkbox value="boundary">边界测试</a-checkbox>
-          <a-checkbox value="exception">异常测试</a-checkbox>
-          <a-checkbox value="permission">权限测试</a-checkbox>
-          <a-checkbox value="security">安全测试</a-checkbox>
-          <a-checkbox value="compatibility">兼容性测试</a-checkbox>
+          <a-checkbox v-for="option in testTypeOptions" :key="option.value" :value="option.value">
+            {{ option.label }}
+          </a-checkbox>
         </a-checkbox-group>
       </div>
 
       <!-- 需求文档和需求模块在一行显示 -->
       <div v-if="showRequirementFields" class="form-row">
         <div class="form-row-item">
-          <span class="form-row-label required">需求文档</span>
+          <span class="form-row-label required">{{ pageText.requirementDocument }}</span>
           <a-select
             v-model="formState.requirementDocumentId"
-            placeholder="请选择"
+            :placeholder="pageText.selectPlaceholder"
             :loading="isDocLoading"
             style="width: 100%;"
             @change="handleDocumentChange"
@@ -56,7 +51,7 @@
         </div>
         <div class="form-row-item">
           <span class="form-row-label required">
-            需求模块
+            {{ pageText.requirementModule }}
             <a-tooltip content="全选">
               <icon-select-all
                 class="select-all-icon"
@@ -67,11 +62,14 @@
           </span>
           <a-select
             v-model="formState.requirementModuleIds"
-            placeholder="请先选择需求文档"
+            :placeholder="pageText.requirementModulePlaceholder"
             :loading="isReqModuleLoading"
             :disabled="!formState.requirementDocumentId"
             multiple
             style="width: 100%;"
+            allow-clear
+            allow-search
+            :max-tag-count="2"
           >
             <a-option v-for="module in requirementModules" :key="module.id" :value="module.id">
               {{ module.title }}
@@ -83,10 +81,10 @@
       <!-- 完整生成/标题生成模式：提示词、知识库、保存模块在一行 -->
       <div v-if="showSaveModuleField" class="form-row form-row-3">
         <div class="form-row-item">
-          <span class="form-row-label required">选择提示词</span>
+          <span class="form-row-label required">{{ pageText.selectPrompt }}</span>
           <a-select
             v-model="formState.promptId"
-            placeholder="请选择"
+            :placeholder="pageText.selectPlaceholder"
             :loading="isPromptsLoading"
             style="width: 100%;"
           >
@@ -95,16 +93,16 @@
             </a-option>
             <template #not-found>
               <div style="padding: 10px; text-align: center;">
-                <a-empty description="没有可用的通用提示词，请先创建。" />
+                <a-empty :description="pageText.noGeneralPrompts" />
               </div>
             </template>
           </a-select>
         </div>
         <div class="form-row-item">
-          <span class="form-row-label">知识库</span>
+          <span class="form-row-label">{{ pageText.knowledgeBase }}</span>
           <a-select
             v-model="formState.knowledgeBaseId"
-            placeholder="不使用知识库"
+            :placeholder="pageText.noKnowledgeBase"
             :loading="isKbLoading"
             allow-clear
             style="width: 100%;"
@@ -117,11 +115,11 @@
           </a-select>
         </div>
         <div class="form-row-item">
-          <span class="form-row-label required">保存模块</span>
+          <span class="form-row-label required">{{ pageText.saveModule }}</span>
           <a-tree-select
             v-model="formState.testCaseModuleId"
             :data="testCaseModuleTree"
-            placeholder="请选择"
+            :placeholder="pageText.selectPlaceholder"
             allow-clear
             style="width: 100%;"
           />
@@ -131,10 +129,10 @@
       <!-- 知识库补全/知识生成模式：提示词、知识库在一行 -->
       <div v-else class="form-row">
         <div class="form-row-item">
-          <span class="form-row-label required">选择提示词</span>
+          <span class="form-row-label required">{{ pageText.selectPrompt }}</span>
           <a-select
             v-model="formState.promptId"
-            placeholder="请选择"
+            :placeholder="pageText.selectPlaceholder"
             :loading="isPromptsLoading"
             style="width: 100%;"
           >
@@ -143,16 +141,16 @@
             </a-option>
             <template #not-found>
               <div style="padding: 10px; text-align: center;">
-                <a-empty description="没有可用的通用提示词，请先创建。" />
+                <a-empty :description="pageText.noGeneralPrompts" />
               </div>
             </template>
           </a-select>
         </div>
         <div class="form-row-item">
-          <span class="form-row-label required">关联知识库</span>
+          <span class="form-row-label required">{{ pageText.linkedKnowledgeBase }}</span>
           <a-select
             v-model="formState.knowledgeBaseId"
-            placeholder="请选择知识库"
+            :placeholder="pageText.selectKnowledgeBase"
             :loading="isKbLoading"
             allow-clear
             style="width: 100%;"
@@ -166,19 +164,19 @@
 
       <!-- 用例选择表格：知识库补全、知识生成模式显示 -->
       <div v-if="showTestCaseSelector" class="testcase-selector-section">
-        <div class="section-label">选择用例</div>
+        <div class="section-label">{{ pageText.selectCases }}</div>
         <div class="testcase-selector-wrapper">
           <div class="selector-header">
             <a-input-search
               v-model="searchKeyword"
-              placeholder="搜索用例名称"
+              :placeholder="pageText.searchCaseName"
               allow-clear
               style="width: 180px;"
               @search="handleSearch"
             />
             <a-select
               v-model="selectedModule"
-              placeholder="筛选模块"
+              :placeholder="pageText.filterModule"
               allow-clear
               :loading="modulesLoading"
               style="width: 140px; margin-left: 12px;"
@@ -190,7 +188,7 @@
             </a-select>
             <a-select
               v-model="selectedLevel"
-              placeholder="优先级"
+              :placeholder="pageText.priority"
               allow-clear
               style="width: 100px; margin-left: 12px;"
               @change="handleLevelFilterChange"
@@ -201,7 +199,9 @@
               <a-option value="P3">P3</a-option>
             </a-select>
             <span class="selected-count">
-              已选 <strong>{{ selectedTestCaseIds.length }}</strong> 个
+              {{ pageText.selectedCountPrefix }}
+              <strong>{{ selectedTestCaseIds.length }}</strong>
+              {{ pageText.selectedCountSuffix }}
             </span>
           </div>
 
@@ -254,6 +254,7 @@ import { KnowledgeService } from '@/features/knowledge/services/knowledgeService
 import type { KnowledgeBase } from '@/features/knowledge/types/knowledge';
 import { getTestCaseList, type TestCase } from '@/services/testcaseService';
 import { getTestCaseModules, type TestCaseModule } from '@/services/testcaseModuleService';
+import { useAppI18n } from '@/composables/useAppI18n';
 import { getLevelColor } from '@/utils/formatters';
 
 // 生成模式类型
@@ -273,6 +274,7 @@ const props = defineProps({
 const emit = defineEmits(['update:visible', 'submit']);
 
 const projectStore = useProjectStore();
+const { isEnglish } = useAppI18n();
 const isLoading = ref(false);
 const isDocLoading = ref(false);
 const isReqModuleLoading = ref(false);
@@ -304,13 +306,139 @@ const paginationConfig = reactive({
   pageSizeOptions: [10, 20, 50],
 });
 
-const testCaseColumns = [
-  { title: '选择', slotName: 'selection', width: 50, titleSlotName: 'selectAll', align: 'center' as const },
+const pageText = computed(() => (
+  isEnglish.value
+    ? {
+        modalTitle: 'AI generate cases',
+        currentProject: 'Project',
+        generateMode: 'Mode',
+        requirementDocument: 'Req. document',
+        requirementModule: 'Req. module',
+        selectPrompt: 'Prompt',
+        knowledgeBase: 'Knowledge base',
+        linkedKnowledgeBase: 'Knowledge base',
+        saveModule: 'Save to',
+        selectCases: 'Select cases',
+        selectPlaceholder: 'Please select',
+        requirementModulePlaceholder: 'Select a document first, then choose modules',
+        noGeneralPrompts: 'No prompts yet. Create one first.',
+        noKnowledgeBase: 'None',
+        selectKnowledgeBase: 'Select knowledge base',
+        searchCaseName: 'Search case',
+        filterModule: 'Module',
+        priority: 'Priority',
+        selectedCountPrefix: 'Selected',
+        selectedCountSuffix: '',
+        select: 'Select',
+        caseName: 'Case name',
+        module: 'Module',
+        unnamedProject: 'Unnamed project',
+        testTypeRequired: 'Select at least one test type',
+        promptRequired: 'Select a prompt',
+        requiredFieldsMissing: 'Fill in all required fields',
+        requirementSelectionRequired: 'Select a requirement document and at least one requirement module',
+        knowledgeBaseRequired: 'Select a knowledge base',
+        testCaseRequired: 'Select at least one test case',
+        knowledgeBaseMustBeSelected: 'Select a knowledge base when knowledge-base mode is enabled',
+        loadRequirementDocumentsFailed: 'Failed to load requirement documents',
+        loadRequirementDocumentsError: 'An error occurred while loading requirement documents',
+        loadRequirementModulesFailed: 'Failed to load requirement modules',
+        loadRequirementModulesError: 'An error occurred while loading requirement modules',
+        loadPromptsFailed: 'Failed to load prompts',
+        loadPromptsError: 'An error occurred while loading prompts',
+        loadKnowledgeBasesFailed: 'Failed to load knowledge bases',
+        loadTestCasesFailed: 'Failed to fetch test cases',
+        loadTestCasesError: 'An error occurred while fetching test cases',
+      }
+    : {
+        modalTitle: 'AI 生成测试用例',
+        currentProject: '当前项目',
+        generateMode: '生成模式',
+        requirementDocument: '需求文档',
+        requirementModule: '需求模块',
+        selectPrompt: '选择提示词',
+        knowledgeBase: '知识库',
+        linkedKnowledgeBase: '关联知识库',
+        saveModule: '保存模块',
+        selectCases: '选择用例',
+        selectPlaceholder: '请选择',
+        requirementModulePlaceholder: '请先选择需求文档后多选需求模块',
+        noGeneralPrompts: '没有可用的通用提示词，请先创建。',
+        noKnowledgeBase: '不使用知识库',
+        selectKnowledgeBase: '请选择知识库',
+        searchCaseName: '搜索用例名称',
+        filterModule: '筛选模块',
+        priority: '优先级',
+        selectedCountPrefix: '已选',
+        selectedCountSuffix: '个',
+        select: '选择',
+        caseName: '用例名称',
+        module: '所属模块',
+        unnamedProject: '未命名项目',
+        testTypeRequired: '请至少选择一种测试类型',
+        promptRequired: '请选择提示词',
+        requiredFieldsMissing: '请填写所有必填项',
+        requirementSelectionRequired: '请选择需求文档和至少一个需求模块',
+        knowledgeBaseRequired: '请选择知识库',
+        testCaseRequired: '请至少选择一个测试用例',
+        knowledgeBaseMustBeSelected: '启用知识库后必须选择一个知识库',
+        loadRequirementDocumentsFailed: '加载需求文档列表失败',
+        loadRequirementDocumentsError: '加载需求文档列表时发生错误',
+        loadRequirementModulesFailed: '加载需求模块失败',
+        loadRequirementModulesError: '加载需求模块时发生错误',
+        loadPromptsFailed: '加载提示词列表失败',
+        loadPromptsError: '加载提示词列表时发生错误',
+        loadKnowledgeBasesFailed: '加载知识库列表失败',
+        loadTestCasesFailed: '获取测试用例列表失败',
+        loadTestCasesError: '获取测试用例列表时发生错误',
+      }
+));
+
+const generateModeOptions = computed(() => (
+  isEnglish.value
+    ? [
+        { value: 'full', label: 'Full' },
+        { value: 'title_only', label: 'Title only' },
+        { value: 'kb_complete', label: 'KB complete' },
+        { value: 'kb_generate', label: 'KB generate' },
+      ]
+    : [
+        { value: 'full', label: '完整生成' },
+        { value: 'title_only', label: '标题生成' },
+        { value: 'kb_complete', label: '知识库补全' },
+        { value: 'kb_generate', label: '知识生成' },
+      ]
+));
+
+const testTypeOptions = computed(() => (
+  isEnglish.value
+    ? [
+        { value: 'smoke', label: 'Smoke' },
+        { value: 'functional', label: 'Functional' },
+        { value: 'boundary', label: 'Boundary' },
+        { value: 'exception', label: 'Exception' },
+        { value: 'permission', label: 'Permission' },
+        { value: 'security', label: 'Security' },
+        { value: 'compatibility', label: 'Compatibility' },
+      ]
+    : [
+        { value: 'smoke', label: '冒烟测试' },
+        { value: 'functional', label: '功能测试' },
+        { value: 'boundary', label: '边界测试' },
+        { value: 'exception', label: '异常测试' },
+        { value: 'permission', label: '权限测试' },
+        { value: 'security', label: '安全测试' },
+        { value: 'compatibility', label: '兼容性测试' },
+      ]
+));
+
+const testCaseColumns = computed(() => [
+  { title: pageText.value.select, slotName: 'selection', width: 50, titleSlotName: 'selectAll', align: 'center' as const },
   { title: 'ID', dataIndex: 'id', width: 60 },
-  { title: '用例名称', dataIndex: 'name', width: 180, ellipsis: true, tooltip: true },
-  { title: '优先级', dataIndex: 'level', slotName: 'level', width: 70 },
-  { title: '所属模块', dataIndex: 'module_detail', width: 100, ellipsis: true },
-];
+  { title: pageText.value.caseName, dataIndex: 'name', width: 180, ellipsis: true, tooltip: true },
+  { title: pageText.value.priority, dataIndex: 'level', slotName: 'level', width: 70 },
+  { title: pageText.value.module, dataIndex: 'module_detail', width: 100, ellipsis: true },
+]);
 
 const formState = reactive({
   generateMode: 'full' as GenerateMode,
@@ -323,7 +451,7 @@ const formState = reactive({
   testTypes: ['functional'] as string[],
 });
 
-const currentProjectName = computed(() => projectStore.currentProject?.name || '未命名项目');
+const currentProjectName = computed(() => projectStore.currentProject?.name || pageText.value.unnamedProject);
 
 // 是否显示需求文档相关字段
 const showRequirementFields = computed(() => {
@@ -375,27 +503,27 @@ const handleCancel = () => {
 const handleOk = () => {
   // 验证测试类型
   if (!formState.testTypes || formState.testTypes.length === 0) {
-    Message.error('请至少选择一种测试类型');
+    Message.error(pageText.value.testTypeRequired);
     return;
   }
 
   // 验证提示词
   if (!formState.promptId) {
-    Message.error('请选择提示词');
+    Message.error(pageText.value.promptRequired);
     return;
   }
 
   // 根据模式验证必填项
   if (['full', 'title_only'].includes(formState.generateMode)) {
     if (!formState.requirementDocumentId || formState.requirementModuleIds.length === 0 || !formState.testCaseModuleId) {
-      Message.error('请填写所有必填项');
+      Message.error(pageText.value.requiredFieldsMissing);
       return;
     }
   }
 
   if (formState.generateMode === 'kb_generate') {
     if (!formState.requirementDocumentId || formState.requirementModuleIds.length === 0) {
-      Message.error('请选择需求文档和模块');
+      Message.error(pageText.value.requirementSelectionRequired);
       return;
     }
   }
@@ -403,18 +531,18 @@ const handleOk = () => {
   // 知识库补全和知识生成模式：知识库必选
   if (['kb_complete', 'kb_generate'].includes(formState.generateMode)) {
     if (!formState.knowledgeBaseId) {
-      Message.error('请选择知识库');
+      Message.error(pageText.value.knowledgeBaseRequired);
       return;
     }
     if (selectedTestCaseIds.value.length === 0) {
-      Message.error('请至少选择一个测试用例');
+      Message.error(pageText.value.testCaseRequired);
       return;
     }
   }
 
   // 完整生成/标题生成模式：如果启用了知识库，必须选择知识库ID
   if (['full', 'title_only'].includes(formState.generateMode) && formState.useKnowledgeBase && !formState.knowledgeBaseId) {
-    Message.error('启用知识库后必须选择一个知识库');
+    Message.error(pageText.value.knowledgeBaseMustBeSelected);
     return;
   }
 
@@ -459,11 +587,11 @@ const fetchRequirementDocuments = async () => {
     } else if (response.status === 'success' && 'results' in response.data) {
        requirementDocuments.value = response.data.results;
     } else {
-      Message.error('加载需求文档列表失败');
+      Message.error(pageText.value.loadRequirementDocumentsFailed);
       requirementDocuments.value = [];
     }
   } catch (error) {
-    Message.error('加载需求文档列表时发生错误');
+    Message.error(pageText.value.loadRequirementDocumentsError);
     requirementDocuments.value = [];
   } finally {
     isDocLoading.value = false;
@@ -479,10 +607,10 @@ const fetchRequirementModules = async (documentId: string) => {
     if (response.status === 'success' && response.data?.modules) {
       requirementModules.value = response.data.modules;
     } else {
-      Message.error('加载需求模块失败');
+      Message.error(pageText.value.loadRequirementModulesFailed);
     }
   } catch (error) {
-    Message.error('加载需求模块时发生错误');
+    Message.error(pageText.value.loadRequirementModulesError);
   } finally {
     isReqModuleLoading.value = false;
   }
@@ -516,11 +644,11 @@ const fetchPrompts = async () => {
            prompts.value = [];
        }
     } else {
-      Message.error(response.message || '加载提示词列表失败');
+      Message.error(response.message || pageText.value.loadPromptsFailed);
       prompts.value = [];
     }
   } catch (error) {
-    Message.error('加载提示词列表时发生错误');
+    Message.error(pageText.value.loadPromptsError);
     prompts.value = [];
   } finally {
     isPromptsLoading.value = false;
@@ -538,7 +666,7 @@ const fetchKnowledgeBases = async () => {
        knowledgeBases.value = response.results;
     }
   } catch (error) {
-    Message.error('加载知识库列表失败');
+    Message.error(pageText.value.loadKnowledgeBasesFailed);
     knowledgeBases.value = [];
   } finally {
     isKbLoading.value = false;
@@ -567,12 +695,12 @@ const fetchTestCases = async () => {
       testCaseData.value = response.data;
       paginationConfig.total = response.total || response.data.length;
     } else {
-      Message.error(response.error || '获取测试用例列表失败');
+      Message.error(response.error || pageText.value.loadTestCasesFailed);
       testCaseData.value = [];
       paginationConfig.total = 0;
     }
   } catch (error) {
-    Message.error('获取测试用例列表时发生错误');
+    Message.error(pageText.value.loadTestCasesError);
     testCaseData.value = [];
     paginationConfig.total = 0;
   } finally {

@@ -1,9 +1,10 @@
 <template>
   <a-modal
     v-model:visible="modalVisible"
-    title="确认执行测试套件"
+    :title="modalText.title"
     :width="600"
     :mask-closable="false"
+    :confirm-loading="loading"
     @before-ok="handleConfirm"
     @cancel="handleCancel"
   >
@@ -12,21 +13,21 @@
         <template #icon>
           <icon-info-circle />
         </template>
-        测试将在后台异步执行,您可以在执行历史中查看进度
+        {{ modalText.infoMessage }}
       </a-alert>
 
       <a-descriptions :column="1" bordered>
-        <a-descriptions-item label="测试套件">
+        <a-descriptions-item :label="modalText.testSuite">
           <strong>{{ suite?.name }}</strong>
         </a-descriptions-item>
-        <a-descriptions-item label="套件描述">
+        <a-descriptions-item :label="modalText.suiteDescription">
           {{ suite?.description || '-' }}
         </a-descriptions-item>
-        <a-descriptions-item label="用例数量">
-          <a-tag color="blue">{{ suite?.testcase_count || 0 }} 个用例</a-tag>
+        <a-descriptions-item :label="modalText.caseCountLabel">
+          <a-tag color="blue">{{ modalText.caseCount(suite?.testcase_count || 0) }}</a-tag>
         </a-descriptions-item>
-        <a-descriptions-item label="预计耗时">
-          <a-tag color="orange">约 {{ estimatedTime }} 分钟</a-tag>
+        <a-descriptions-item :label="modalText.estimatedTimeLabel">
+          <a-tag color="orange">{{ modalText.estimatedTime(estimatedTime) }}</a-tag>
         </a-descriptions-item>
       </a-descriptions>
 
@@ -35,11 +36,11 @@
           <icon-exclamation-circle />
         </template>
         <div>
-          <p style="margin-bottom: 8px;">执行注意事项:</p>
+          <p style="margin-bottom: 8px;">{{ modalText.notesTitle }}</p>
           <ul style="margin: 0; padding-left: 20px;">
-            <li>测试执行期间会占用系统资源</li>
-            <li>执行过程中可以随时取消</li>
-            <li>每个用例的执行结果和截图将被记录</li>
+            <li>{{ modalText.noteResource }}</li>
+            <li>{{ modalText.noteCancelable }}</li>
+            <li>{{ modalText.noteRecorded }}</li>
           </ul>
         </div>
       </a-alert>
@@ -51,6 +52,7 @@
 import { ref, computed } from 'vue';
 import { Message } from '@arco-design/web-vue';
 import { IconInfoCircle, IconExclamationCircle } from '@arco-design/web-vue/es/icon';
+import { useAppI18n } from '@/composables/useAppI18n';
 import { createTestExecution } from '@/services/testExecutionService';
 import type { TestSuite } from '@/services/testSuiteService';
 
@@ -61,11 +63,52 @@ interface Props {
 }
 
 const props = defineProps<Props>();
+const { isEnglish, tl } = useAppI18n();
 
 const emit = defineEmits<{
   (e: 'update:visible', value: boolean): void;
   (e: 'success', executionId: number): void;
 }>();
+
+const modalText = computed(() => (
+  isEnglish.value
+    ? {
+        title: 'Confirm test suite execution',
+        infoMessage: 'The test will run asynchronously in the background. You can track its progress in the execution history.',
+        testSuite: 'Test Suites',
+        suiteDescription: 'Suite description',
+        caseCountLabel: 'Case count',
+        caseCount: (count: number) => `${count} ${count === 1 ? 'case' : 'cases'}`,
+        estimatedTimeLabel: 'Estimated time',
+        estimatedTime: (minutes: number) => `~ ${minutes} min`,
+        notesTitle: 'Execution notes:',
+        noteResource: 'Test execution will consume system resources.',
+        noteCancelable: 'You can cancel the execution at any time.',
+        noteRecorded: 'Each test case result and screenshot will be recorded.',
+        missingRequiredInfo: 'Missing required information',
+        executionStarted: 'Test execution has started',
+        startExecutionFailed: 'Failed to start execution',
+        startExecutionError: 'An error occurred while starting the execution',
+      }
+    : {
+        title: '确认执行测试套件',
+        infoMessage: '测试将在后台异步执行,您可以在执行历史中查看进度',
+        testSuite: '测试套件',
+        suiteDescription: '套件描述',
+        caseCountLabel: '用例数量',
+        caseCount: (count: number) => `${count} 个用例`,
+        estimatedTimeLabel: '预计耗时',
+        estimatedTime: (minutes: number) => `约 ${minutes} 分钟`,
+        notesTitle: '执行注意事项:',
+        noteResource: '测试执行期间会占用系统资源',
+        noteCancelable: '执行过程中可以随时取消',
+        noteRecorded: '每个用例的执行结果和截图将被记录',
+        missingRequiredInfo: '缺少必要信息',
+        executionStarted: '测试执行已启动',
+        startExecutionFailed: '启动执行失败',
+        startExecutionError: '启动执行时发生错误',
+      }
+));
 
 const modalVisible = computed({
   get: () => props.visible,
@@ -85,7 +128,7 @@ const estimatedTime = computed(() => {
 // 确认执行
 const handleConfirm = async () => {
   if (!props.currentProjectId || !props.suite) {
-    Message.error('缺少必要信息');
+    Message.error(modalText.value.missingRequiredInfo);
     return false;
   }
 
@@ -96,17 +139,17 @@ const handleConfirm = async () => {
     });
 
     if (response.success && response.data) {
-      Message.success(response.message || '测试执行已启动');
+      Message.success(tl(response.message || modalText.value.executionStarted));
       emit('success', response.data.id);
       handleCancel();
       return true;
     } else {
-      Message.error(response.error || '启动执行失败');
+      Message.error(tl(response.error || modalText.value.startExecutionFailed));
       return false;
     }
   } catch (error) {
     console.error('启动执行失败:', error);
-    Message.error('启动执行时发生错误');
+    Message.error(modalText.value.startExecutionError);
     return false;
   } finally {
     loading.value = false;

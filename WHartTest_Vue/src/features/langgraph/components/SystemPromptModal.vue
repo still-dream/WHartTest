@@ -1,7 +1,7 @@
 <template>
   <a-modal
     :visible="visible"
-    title="我的提示词"
+    :title="text.modalTitle"
     @cancel="handleCancel"
     :mask-closable="false"
     width="800px"
@@ -13,9 +13,9 @@
             <!-- 提示词列表头部 -->
             <div class="prompts-header">
               <div class="header-left">
-                <span class="section-title">我的提示词</span>
+                <span class="section-title">{{ text.sectionTitle }}</span>
                 <a-tag v-if="defaultPrompt" color="blue" size="small">
-                  默认：{{ defaultPrompt.name }}
+                  {{ text.defaultPrefix }}{{ defaultPrompt.name }}
                 </a-tag>
               </div>
               <div class="header-right">
@@ -29,13 +29,13 @@
                   <template #icon>
                     <icon-settings />
                   </template>
-                  初始化提示词
+                  {{ text.initializePrompts }}
                 </a-button>
                 <a-button type="primary" size="small" @click="showCreatePromptForm">
                   <template #icon>
                     <icon-plus />
                   </template>
-                  新建提示词
+                  {{ text.createPrompt }}
                 </a-button>
               </div>
             </div>
@@ -44,13 +44,13 @@
             <div class="prompts-list">
               <div v-if="userPromptsLoading" class="loading-state">
                 <a-spin />
-                <span>加载中...</span>
+                <span>{{ text.loading }}</span>
               </div>
 
               <div v-else-if="!userPrompts || userPrompts.length === 0" class="empty-state">
                 <div class="empty-icon">📝</div>
-                <div class="empty-text">暂无提示词</div>
-                <div class="empty-desc">创建您的第一个提示词来开始使用</div>
+                <div class="empty-text">{{ text.emptyTitle }}</div>
+                <div class="empty-desc">{{ text.emptyDesc }}</div>
               </div>
 
               <div v-else-if="userPrompts && userPrompts.length > 0" class="prompts-list-compact">
@@ -62,18 +62,18 @@
                 >
                   <div class="prompt-info">
                     <div class="prompt-name">{{ prompt.name }}</div>
-                    <div class="prompt-description">{{ prompt.description || '暂无描述' }}</div>
+                    <div class="prompt-description">{{ prompt.description || text.noDescription }}</div>
                   </div>
                   <div class="prompt-meta">
                     <span class="prompt-time">{{ formatDateTime(prompt.created_at) }}</span>
                   </div>
                   <div class="prompt-status">
                     <div style="width: 45px;">
-                      <a-tag v-if="prompt.is_active" color="green" size="small">启用</a-tag>
-                      <a-tag v-else color="red" size="small">禁用</a-tag>
+                      <a-tag v-if="prompt.is_active" color="green" size="small">{{ text.active }}</a-tag>
+                      <a-tag v-else color="red" size="small">{{ text.disabled }}</a-tag>
                     </div>
                     <div style="width: 45px;">
-                      <a-tag v-if="prompt.is_default" color="blue" size="small">默认</a-tag>
+                      <a-tag v-if="prompt.is_default" color="blue" size="small">{{ text.defaultTag }}</a-tag>
                     </div>
                   </div>
                   <div class="prompt-actions">
@@ -81,7 +81,7 @@
                       type="text"
                       size="mini"
                       @click="editPrompt(prompt)"
-                      title="编辑"
+                      :title="text.edit"
                     >
                       <template #icon>
                         <icon-edit />
@@ -92,7 +92,7 @@
                       type="text"
                       size="mini"
                       @click="setAsDefault(prompt)"
-                      title="设为默认"
+                      :title="text.setAsDefault"
                     >
                       <template #icon>
                         <icon-star />
@@ -102,21 +102,21 @@
                       type="text"
                       size="mini"
                       @click="duplicatePrompt(prompt)"
-                      title="复制"
+                      :title="text.duplicate"
                     >
                       <template #icon>
                         <icon-copy />
                       </template>
                     </a-button>
                     <a-popconfirm
-                      content="确定要删除这个提示词吗？"
+                      :content="text.deleteConfirm"
                       @ok="deletePrompt(prompt)"
                     >
                       <a-button
                         type="text"
                         size="mini"
                         status="danger"
-                        title="删除"
+                        :title="text.delete"
                       >
                         <template #icon>
                           <icon-delete />
@@ -133,13 +133,13 @@
     <!-- 提示词表单弹窗 -->
     <a-modal
       v-model:visible="isPromptFormVisible"
-      :title="isEditingPrompt ? '编辑提示词' : '新建提示词'"
+      :title="isEditingPrompt ? text.editPromptTitle : text.createPromptTitle"
       @ok="handlePromptSubmit"
       @cancel="closePromptForm"
       :confirm-loading="promptFormLoading"
       width="600px"
-      ok-text="保存"
-      cancel-text="取消"
+      :ok-text="text.save"
+      :cancel-text="text.cancel"
     >
       <a-form
         ref="promptFormRef"
@@ -147,11 +147,11 @@
         :rules="promptFormRules"
         layout="vertical"
       >
-        <a-form-item field="prompt_type" label="提示词类型">
+        <a-form-item field="prompt_type" :label="text.promptTypeLabel">
           <div class="prompt-type-container">
             <a-select
               v-model="promptFormData.prompt_type"
-              placeholder="请选择提示词类型"
+              :placeholder="text.promptTypePlaceholder"
               @change="handlePromptTypeChange"
               :fallback-option="false"
             >
@@ -159,14 +159,14 @@
                 v-for="type in PROMPT_TYPE_CHOICES"
                 :key="type.key"
                 :value="type.key"
-                :label="type.name"
+                :label="tl(type.name)"
               >
-                {{ type.name }}
+                {{ tl(type.name) }}
               </a-option>
             </a-select>
             <a-tooltip
               v-if="isRequirementType"
-              content="每种需求评审类型只能创建一个提示词，用于该类型的专门分析"
+              :content="text.requirementTypeHint"
               position="right"
             >
               <icon-info-circle class="type-info-icon" />
@@ -174,26 +174,26 @@
           </div>
         </a-form-item>
 
-        <a-form-item field="name" label="提示词名称">
+        <a-form-item field="name" :label="text.nameLabel">
           <a-input
             v-model="promptFormData.name"
-            placeholder="请输入提示词名称"
+            :placeholder="text.namePlaceholder"
             :max-length="255"
           />
         </a-form-item>
 
-        <a-form-item field="description" label="描述">
+        <a-form-item field="description" :label="text.descriptionLabel">
           <a-input
             v-model="promptFormData.description"
-            placeholder="请输入提示词描述（可选）"
+            :placeholder="text.descriptionPlaceholder"
             :max-length="500"
           />
         </a-form-item>
 
-        <a-form-item field="content" label="提示词内容">
+        <a-form-item field="content" :label="text.contentLabel">
           <a-textarea
             v-model="promptFormData.content"
-            placeholder="请输入提示词内容"
+            :placeholder="text.contentPlaceholder"
             :rows="6"
             :max-length="10000"
             show-word-limit
@@ -204,11 +204,11 @@
         <a-form-item
           v-if="!isRequirementType"
           field="is_default"
-          label="设为默认"
+          :label="text.setDefaultLabel"
         >
           <a-switch v-model="promptFormData.is_default" />
           <span style="margin-left: 8px; font-size: 12px; color: #86909c;">
-            设为默认后，聊天时会自动使用此提示词
+            {{ text.setDefaultHint }}
           </span>
         </a-form-item>
       </a-form>
@@ -241,6 +241,7 @@ import {
   isProgramCallPromptType
 } from '@/features/prompts/types/prompt';
 import { formatDateTime } from '@/utils/formatters';
+import { useAppI18n } from '@/composables/useAppI18n';
 
 // 定义组件属性
 interface Props {
@@ -262,6 +263,139 @@ interface Emits {
 
 const props = defineProps<Props>();
 const emit = defineEmits<Emits>();
+const { isEnglish, tl } = useAppI18n();
+
+const text = computed(() => (
+  isEnglish.value
+    ? {
+        modalTitle: 'My prompts',
+        sectionTitle: 'My prompts',
+        defaultPrefix: 'Default: ',
+        initializePrompts: 'Initialize prompts',
+        createPrompt: 'New prompt',
+        loading: 'Loading...',
+        emptyTitle: 'No prompts yet',
+        emptyDesc: 'Create your first prompt to get started',
+        noDescription: 'No description',
+        active: 'Active',
+        disabled: 'Disabled',
+        defaultTag: 'Default',
+        edit: 'Edit',
+        setAsDefault: 'Set as default',
+        duplicate: 'Duplicate',
+        delete: 'Delete',
+        deleteConfirm: 'Are you sure you want to delete this prompt?',
+        editPromptTitle: 'Edit prompt',
+        createPromptTitle: 'New prompt',
+        save: 'Save',
+        cancel: 'Cancel',
+        promptTypeLabel: 'Prompt type',
+        promptTypePlaceholder: 'Select prompt type',
+        requirementTypeHint: 'Each requirement review type can only have one prompt for dedicated analysis.',
+        nameLabel: 'Prompt name',
+        namePlaceholder: 'Enter prompt name',
+        descriptionLabel: 'Description',
+        descriptionPlaceholder: 'Enter prompt description (optional)',
+        contentLabel: 'Prompt content',
+        contentPlaceholder: 'Enter prompt content',
+        setDefaultLabel: 'Set as default',
+        setDefaultHint: 'When set as default, this prompt is used automatically in chat.',
+        validateNameRequired: 'Please enter prompt name',
+        validateNameMin: 'Prompt name must be at least 2 characters',
+        validateNameMax: 'Prompt name cannot exceed 255 characters',
+        validateContentRequired: 'Please enter prompt content',
+        validateContentMin: 'Prompt content must be at least 10 characters',
+        validateContentMax: 'Prompt content cannot exceed 10000 characters',
+        validateDescriptionMax: 'Description cannot exceed 500 characters',
+        validateTypeRequired: 'Please select prompt type',
+        loadPromptsFailed: 'Failed to load prompts, but you can still create a new one',
+        getInitStatusFailed: 'Failed to get initialization status',
+        initConfirmTitle: 'Prompt initialization confirmation',
+        initConfirmContent: (existingCount: number) => `Detected ${existingCount} existing prompts.\n\nForce update all prompts to latest version?\n(Existing prompt content will be overwritten)`,
+        forceUpdate: 'Force update',
+        createMissingOnly: 'Create missing only',
+        initCompleted: 'Initialization completed!',
+        forceUpdateSuccess: (count: number) => `Force update completed! Updated ${count} prompt(s)`,
+        initSuccess: (created: number, skipped: number, message: string) => `${message} Created ${created} prompt(s), skipped ${skipped}`,
+        initFailed: 'Initialization failed',
+        getPromptDetailFailed: 'Failed to get prompt details',
+        setDefaultSuccess: 'Default prompt set successfully',
+        setDefaultFailed: 'Failed to set default prompt',
+        duplicateSuccess: 'Prompt duplicated successfully',
+        duplicateFailed: 'Failed to duplicate prompt',
+        deleteSuccess: 'Prompt deleted successfully',
+        deleteFailed: 'Failed to delete prompt',
+        checkFormInput: 'Please check the form input',
+        updateSuccess: 'Prompt updated successfully',
+        createSuccess: 'Prompt created successfully',
+        updateFailed: 'Failed to update prompt',
+        createFailed: 'Failed to create prompt',
+      }
+    : {
+        modalTitle: '我的提示词',
+        sectionTitle: '我的提示词',
+        defaultPrefix: '默认：',
+        initializePrompts: '初始化提示词',
+        createPrompt: '新建提示词',
+        loading: '加载中...',
+        emptyTitle: '暂无提示词',
+        emptyDesc: '创建您的第一个提示词来开始使用',
+        noDescription: '暂无描述',
+        active: '启用',
+        disabled: '禁用',
+        defaultTag: '默认',
+        edit: '编辑',
+        setAsDefault: '设为默认',
+        duplicate: '复制',
+        delete: '删除',
+        deleteConfirm: '确定要删除这个提示词吗？',
+        editPromptTitle: '编辑提示词',
+        createPromptTitle: '新建提示词',
+        save: '保存',
+        cancel: '取消',
+        promptTypeLabel: '提示词类型',
+        promptTypePlaceholder: '请选择提示词类型',
+        requirementTypeHint: '每种需求评审类型只能创建一个提示词，用于该类型的专门分析',
+        nameLabel: '提示词名称',
+        namePlaceholder: '请输入提示词名称',
+        descriptionLabel: '描述',
+        descriptionPlaceholder: '请输入提示词描述（可选）',
+        contentLabel: '提示词内容',
+        contentPlaceholder: '请输入提示词内容',
+        setDefaultLabel: '设为默认',
+        setDefaultHint: '设为默认后，聊天时会自动使用此提示词',
+        validateNameRequired: '请输入提示词名称',
+        validateNameMin: '提示词名称至少需要2个字符',
+        validateNameMax: '提示词名称不能超过255个字符',
+        validateContentRequired: '请输入提示词内容',
+        validateContentMin: '提示词内容至少需要10个字符',
+        validateContentMax: '提示词内容不能超过10000个字符',
+        validateDescriptionMax: '描述不能超过500个字符',
+        validateTypeRequired: '请选择提示词类型',
+        loadPromptsFailed: '加载用户提示词失败，但您仍可以创建新的提示词',
+        getInitStatusFailed: '获取初始化状态失败',
+        initConfirmTitle: '提示词初始化确认',
+        initConfirmContent: (existingCount: number) => `检测到已存在 ${existingCount} 个提示词。\n\n是否强制更新所有提示词到最新版本？\n（更新后将覆盖现有提示词内容）`,
+        forceUpdate: '强制更新',
+        createMissingOnly: '仅创建缺失的',
+        initCompleted: '初始化完成！',
+        forceUpdateSuccess: (count: number) => `强制更新完成！更新了 ${count} 个提示词`,
+        initSuccess: (created: number, skipped: number, message: string) => `${message}创建了 ${created} 个提示词，跳过 ${skipped} 个`,
+        initFailed: '初始化失败',
+        getPromptDetailFailed: '获取提示词详情失败',
+        setDefaultSuccess: '设置默认提示词成功',
+        setDefaultFailed: '设置默认提示词失败',
+        duplicateSuccess: '复制提示词成功',
+        duplicateFailed: '复制提示词失败',
+        deleteSuccess: '删除提示词成功',
+        deleteFailed: '删除提示词失败',
+        checkFormInput: '请检查表单输入！',
+        updateSuccess: '更新提示词成功',
+        createSuccess: '创建提示词成功',
+        updateFailed: '更新提示词失败',
+        createFailed: '创建提示词失败',
+      }
+));
 
 const promptFormRef = ref<FormInstance | null>(null);
 
@@ -294,24 +428,24 @@ const defaultPromptFormData = {
 };
 
 // 提示词表单验证规则
-const promptFormRules = {
+const promptFormRules = computed(() => ({
   name: [
-    { required: true, message: '请输入提示词名称' },
-    { minLength: 2, message: '提示词名称至少需要2个字符' },
-    { maxLength: 255, message: '提示词名称不能超过255个字符' }
+    { required: true, message: text.value.validateNameRequired },
+    { minLength: 2, message: text.value.validateNameMin },
+    { maxLength: 255, message: text.value.validateNameMax }
   ],
   content: [
-    { required: true, message: '请输入提示词内容' },
-    { minLength: 10, message: '提示词内容至少需要10个字符' },
-    { maxLength: 10000, message: '提示词内容不能超过10000个字符' }
+    { required: true, message: text.value.validateContentRequired },
+    { minLength: 10, message: text.value.validateContentMin },
+    { maxLength: 10000, message: text.value.validateContentMax }
   ],
   description: [
-    { maxLength: 500, message: '描述不能超过500个字符' }
+    { maxLength: 500, message: text.value.validateDescriptionMax }
   ],
   prompt_type: [
-    { required: true, message: '请选择提示词类型' }
+    { required: true, message: text.value.validateTypeRequired }
   ]
-};
+}));
 
 // 加载用户提示词列表
 const loadUserPrompts = async () => {
@@ -367,7 +501,7 @@ const loadUserPrompts = async () => {
     }
   } catch (error) {
     console.error('加载用户提示词失败:', error);
-    Message.error('加载用户提示词失败，但您仍可以创建新的提示词');
+    Message.error(text.value.loadPromptsFailed);
     // 确保即使失败也设置为空数组，这样界面能正常显示
     userPrompts.value = [];
     defaultPrompt.value = null;
@@ -397,7 +531,7 @@ const handleInitializePrompts = async () => {
     // 先检查初始化状态
     const statusResponse = await getInitializationStatus();
     if (statusResponse.status !== 'success') {
-      Message.error(statusResponse.message || '获取初始化状态失败');
+      Message.error(statusResponse.message || text.value.getInitStatusFailed);
       return;
     }
 
@@ -411,10 +545,10 @@ const handleInitializePrompts = async () => {
     if (existingCount > 0) {
       const result = await new Promise((resolve) => {
         Modal.confirm({
-          title: '提示词初始化确认',
-          content: `检测到已存在 ${existingCount} 个提示词。\n\n是否强制更新所有提示词到最新版本？\n（更新后将覆盖现有提示词内容）`,
-          okText: '强制更新',
-          cancelText: missingCount > 0 ? '仅创建缺失的' : '取消',
+          title: text.value.initConfirmTitle,
+          content: text.value.initConfirmContent(existingCount),
+          okText: text.value.forceUpdate,
+          cancelText: missingCount > 0 ? text.value.createMissingOnly : text.value.cancel,
           onOk: () => resolve('force'),
           onCancel: () => resolve(missingCount > 0 ? 'create' : 'cancel')
         });
@@ -427,26 +561,27 @@ const handleInitializePrompts = async () => {
     }
 
     // 执行初始化
-    const response = await initializeUserPrompts(forceUpdate);
+    const language: 'zh' | 'en' = isEnglish.value ? 'en' : 'zh';
+    const response = await initializeUserPrompts(forceUpdate, language);
     if (response.status === 'success') {
       const data = response.data;
       const createdCount = data.summary?.created_count || 0;
       const skippedCount = data.summary?.skipped_count || 0;
       
       if (forceUpdate) {
-        Message.success(`强制更新完成！更新了 ${createdCount} 个提示词`);
+        Message.success(text.value.forceUpdateSuccess(createdCount));
       } else {
-        Message.success(`${response.message || '初始化完成！'}创建了 ${createdCount} 个提示词，跳过 ${skippedCount} 个`);
+        Message.success(text.value.initSuccess(createdCount, skippedCount, response.message || text.value.initCompleted));
       }
       
       // 重新加载用户提示词列表
       await loadUserPrompts();
     } else {
-      Message.error(response.message || '初始化失败');
+      Message.error(response.message || text.value.initFailed);
     }
   } catch (error) {
     console.error('初始化提示词失败:', error);
-    Message.error('初始化提示词失败');
+    Message.error(text.value.initFailed);
   } finally {
     initializeLoading.value = false;
   }
@@ -474,11 +609,11 @@ const editPrompt = async (prompt: UserPrompt) => {
       console.log('📋 编辑提示词 - 类型选项:', PROMPT_TYPE_CHOICES);
       isPromptFormVisible.value = true;
     } else {
-      Message.error('获取提示词详情失败');
+      Message.error(text.value.getPromptDetailFailed);
     }
   } catch (error) {
     console.error('获取提示词详情失败:', error);
-    Message.error('获取提示词详情失败');
+    Message.error(text.value.getPromptDetailFailed);
   }
 };
 
@@ -486,11 +621,11 @@ const editPrompt = async (prompt: UserPrompt) => {
 const setAsDefault = async (prompt: UserPrompt) => {
   try {
     await setDefaultPrompt(prompt.id);
-    Message.success('设置默认提示词成功');
+    Message.success(text.value.setDefaultSuccess);
     await loadUserPrompts();
     emit('prompts-updated'); 
   } catch (error: any) {
-    Message.error(error.message || '设置默认提示词失败');
+    Message.error(error.message || text.value.setDefaultFailed);
     console.error('设置默认提示词失败:', error);
   }
 };
@@ -500,15 +635,15 @@ const duplicatePrompt = async (prompt: UserPrompt) => {
   try {
     const response = await duplicateUserPrompt(prompt.id);
     if (response.status === 'success') {
-      Message.success('复制提示词成功');
+      Message.success(text.value.duplicateSuccess);
       await loadUserPrompts();
       emit('prompts-updated'); // 通知父组件刷新提示词数据
     } else {
-      Message.error(response.message || '复制提示词失败');
+      Message.error(response.message || text.value.duplicateFailed);
     }
   } catch (error) {
     console.error('复制提示词失败:', error);
-    Message.error('复制提示词失败');
+    Message.error(text.value.duplicateFailed);
   }
 };
 
@@ -519,18 +654,18 @@ const deletePrompt = async (prompt: UserPrompt) => {
     const response = await deleteUserPrompt(prompt.id);
     if (response.status === 'success') {
       console.log('✅ 删除提示词API调用成功');
-      Message.success('删除提示词成功');
+      Message.success(text.value.deleteSuccess);
       await loadUserPrompts();
       console.log('🔄 发送提示词更新事件...');
       emit('prompts-updated'); // 通知父组件刷新提示词数据
       console.log('📤 提示词更新事件已发送');
     } else {
       console.error('❌ 删除提示词API返回失败:', response.message);
-      Message.error(response.message || '删除提示词失败');
+      Message.error(response.message || text.value.deleteFailed);
     }
   } catch (error) {
     console.error('删除提示词失败:', error);
-    Message.error('删除提示词失败');
+    Message.error(text.value.deleteFailed);
   }
 };
 
@@ -550,12 +685,12 @@ const handlePromptSubmit = async () => {
     const validation = await promptFormRef.value.validate();
     if (validation) {
       // 如果有验证错误，显示错误信息
-      Message.error('请检查表单输入！');
+      Message.error(text.value.checkFormInput);
       return;
     }
   } catch (error) {
     // 验证失败时会抛出异常
-    Message.error('请检查表单输入！');
+    Message.error(text.value.checkFormInput);
     return;
   }
 
@@ -580,16 +715,16 @@ const handlePromptSubmit = async () => {
     }
 
     if (response.status === 'success') {
-      Message.success(isEditingPrompt.value ? '更新提示词成功' : '创建提示词成功');
+      Message.success(isEditingPrompt.value ? text.value.updateSuccess : text.value.createSuccess);
       closePromptForm();
       await loadUserPrompts();
       emit('prompts-updated'); // 通知父组件刷新提示词数据
     } else {
-      Message.error(response.message || (isEditingPrompt.value ? '更新提示词失败' : '创建提示词失败'));
+      Message.error(response.message || (isEditingPrompt.value ? text.value.updateFailed : text.value.createFailed));
     }
   } catch (error) {
     console.error('提交失败:', error);
-    Message.error(isEditingPrompt.value ? '更新提示词失败' : '创建提示词失败');
+    Message.error(isEditingPrompt.value ? text.value.updateFailed : text.value.createFailed);
   } finally {
     promptFormLoading.value = false;
   }

@@ -5,44 +5,34 @@
       <div class="filter-row">
         <a-input-search
           v-model="searchKeyword"
-          placeholder="搜索文档标题或描述"
+          :placeholder="pageText.searchPlaceholder"
           @search="handleSearch"
           @clear="handleSearch"
           allow-clear
         />
         <a-select
           v-model="statusFilter"
-          placeholder="文档状态"
+          :placeholder="pageText.documentStatus"
           @change="handleSearch"
           allow-clear
         >
-          <a-option value="">全部状态</a-option>
-          <a-option value="uploaded">已上传</a-option>
-          <a-option value="processing">处理中</a-option>
-          <a-option value="module_split">模块拆分中</a-option>
-          <a-option value="user_reviewing">用户调整中</a-option>
-          <a-option value="ready_for_review">待评审</a-option>
-          <a-option value="reviewing">评审中</a-option>
-          <a-option value="review_completed">评审完成</a-option>
-          <a-option value="failed">处理失败</a-option>
+          <a-option v-for="option in statusOptions" :key="option.value || 'all'" :value="option.value">
+            {{ option.label }}
+          </a-option>
         </a-select>
         <a-select
           v-model="typeFilter"
-          placeholder="文档类型"
+          :placeholder="pageText.documentType"
           @change="handleSearch"
           allow-clear
         >
-          <a-option value="">全部类型</a-option>
-          <a-option value="pdf">PDF</a-option>
-          <a-option value="docx">Word</a-option>
-          <a-option value="pptx">PPT</a-option>
-          <a-option value="md">Markdown</a-option>
-          <a-option value="txt">文本</a-option>
-          <a-option value="html">HTML</a-option>
+          <a-option v-for="option in typeOptions" :key="option.value || 'all'" :value="option.value">
+            {{ option.label }}
+          </a-option>
         </a-select>
         <a-button type="primary" @click="showUploadModal">
           <template #icon><icon-plus /></template>
-          上传需求文档
+          {{ pageText.uploadRequirementDocument }}
         </a-button>
       </div>
     </div>
@@ -74,9 +64,9 @@
         <!-- 统计信息列 -->
         <template #stats="{ record }">
           <div class="stats-info">
-            <span class="stat-item">{{ record.word_count || 0 }} 字</span>
-            <span class="stat-item">{{ record.page_count || 0 }} 页</span>
-            <span class="stat-item">{{ record.modules_count || 0 }} 模块</span>
+            <span class="stat-item">{{ formatWordCount(record.word_count || 0) }}</span>
+            <span class="stat-item">{{ formatPageCount(record.page_count || 0) }}</span>
+            <span class="stat-item">{{ formatModuleCount(record.modules_count || 0) }}</span>
           </div>
         </template>
 
@@ -84,7 +74,7 @@
         <template #actions="{ record }">
           <div class="actions-wrapper">
             <a-button type="text" size="small" @click="viewDocument(record)">
-              详情
+              {{ pageText.details }}
             </a-button>
             <a-button
               v-if="record.status === 'uploaded'"
@@ -92,7 +82,7 @@
               size="small"
               @click="viewDocument(record)"
             >
-              拆分
+              {{ pageText.split }}
             </a-button>
             <a-button
               v-if="record.status === 'ready_for_review'"
@@ -100,7 +90,7 @@
               size="small"
               @click="startReview(record)"
             >
-              评审
+              {{ pageText.review }}
             </a-button>
             <a-button
               v-if="record.status === 'reviewing'"
@@ -109,7 +99,7 @@
               status="warning"
               @click="viewDocument(record)"
             >
-              查看进度
+              {{ pageText.viewProgress }}
             </a-button>
             <a-button
               v-if="record.status === 'review_completed'"
@@ -117,7 +107,7 @@
               size="small"
               @click="viewReports(record)"
             >
-              报告
+              {{ pageText.report }}
             </a-button>
             <a-button
               v-if="record.status === 'review_completed'"
@@ -125,7 +115,7 @@
               size="small"
               @click="restartReview(record)"
             >
-              重审
+              {{ pageText.reReview }}
             </a-button>
             <a-button
               v-if="record.status === 'failed'"
@@ -133,14 +123,14 @@
               size="small"
               @click="retryReview(record)"
             >
-              重试
+              {{ pageText.retry }}
             </a-button>
             <a-popconfirm
-              content="确定要删除这个文档吗？"
+              :content="pageText.deleteDocumentConfirm"
               @ok="deleteDocument(record)"
             >
               <a-button type="text" size="small" status="danger">
-                删除
+                {{ pageText.delete }}
               </a-button>
             </a-popconfirm>
           </div>
@@ -151,7 +141,7 @@
     <!-- 上传文档模态框 -->
     <a-modal
       v-model:visible="uploadModalVisible"
-      title="上传需求文档"
+      :title="pageText.uploadRequirementDocument"
       width="600px"
       @ok="handleUpload"
       @cancel="resetUploadForm"
@@ -163,25 +153,25 @@
         :rules="uploadRules"
         layout="vertical"
       >
-        <a-form-item label="文档标题" field="title">
-          <a-input v-model="uploadForm.title" placeholder="请输入文档标题" />
+        <a-form-item :label="pageText.documentTitle" field="title">
+          <a-input v-model="uploadForm.title" :placeholder="pageText.enterDocumentTitle" />
         </a-form-item>
-        <a-form-item label="文档描述" field="description">
+        <a-form-item :label="pageText.documentDescription" field="description">
           <a-textarea
             v-model="uploadForm.description"
-            placeholder="请输入文档描述（可选）"
+            :placeholder="pageText.enterDocumentDescription"
             :rows="3"
           />
         </a-form-item>
-        <a-form-item label="上传方式" field="uploadType">
+        <a-form-item :label="pageText.uploadMethod" field="uploadType">
           <a-radio-group v-model="uploadForm.uploadType" @change="handleUploadTypeChange">
-            <a-radio value="file">上传文件</a-radio>
-            <a-radio value="content">直接输入</a-radio>
+            <a-radio value="file">{{ pageText.uploadFile }}</a-radio>
+            <a-radio value="content">{{ pageText.directInput }}</a-radio>
           </a-radio-group>
         </a-form-item>
         <a-form-item
           v-if="uploadForm.uploadType === 'file'"
-          label="选择文件"
+          :label="pageText.selectFile"
           field="file"
         >
           <a-upload
@@ -196,8 +186,8 @@
             <template #upload-button>
               <div class="upload-area">
                 <icon-upload />
-                <div>点击上传文件</div>
-                <div class="upload-tip">支持 PDF、Word(.doc/.docx)、TXT、Markdown</div>
+                <div>{{ pageText.clickToUploadFile }}</div>
+                <div class="upload-tip">{{ pageText.uploadFileTip }}</div>
               </div>
             </template>
             <template #upload-item="{ fileItem, index }">
@@ -221,12 +211,12 @@
         </a-form-item>
         <a-form-item
           v-if="uploadForm.uploadType === 'content'"
-          label="文档内容"
+          :label="pageText.documentContent"
           field="content"
         >
           <a-textarea
             v-model="uploadForm.content"
-            placeholder="请输入或粘贴文档内容"
+            :placeholder="pageText.enterOrPasteDocumentContent"
             :rows="8"
           />
         </a-form-item>
@@ -236,24 +226,23 @@
     <!-- 评审配置模态框 -->
     <a-modal
       v-model:visible="reviewConfigVisible"
-      :title="reviewAction === 'restart' ? '重新评审配置' : '评审配置'"
+      :title="reviewAction === 'restart' ? pageText.restartReviewConfig : pageText.reviewConfigTitle"
       @ok="confirmReview"
       @cancel="reviewConfigVisible = false"
     >
       <a-alert v-if="reviewAction === 'restart'" type="warning" style="margin-bottom: 16px">
-        重新评审将创建新的评审报告，原有报告将保留。
+        {{ pageText.restartReviewHint }}
       </a-alert>
       
       <a-form :model="reviewConfig" layout="vertical">
-        <a-form-item label="并发分析数量" field="max_workers">
-          <a-select v-model="reviewConfig.max_workers" placeholder="请选择并发数量">
-            <a-option :value="1">1 (串行分析 - 最慢但最稳定)</a-option>
-            <a-option :value="2">2 (低并发 - 适合低配环境)</a-option>
-            <a-option :value="3">3 (推荐 - 平衡速度与稳定性)</a-option>
-            <a-option :value="5">5 (高并发 - 速度最快)</a-option>
+        <a-form-item :label="pageText.concurrentAnalyses" field="max_workers">
+          <a-select v-model="reviewConfig.max_workers" :placeholder="pageText.selectConcurrency">
+            <a-option v-for="option in reviewWorkerOptions" :key="option.value" :value="option.value">
+              {{ option.label }}
+            </a-option>
           </a-select>
           <template #help>
-            并发数量决定了同时进行的专项分析任务数。如果遇到API限流错误，请尝试降低并发数。
+            {{ pageText.reviewConcurrencyHelp }}
           </template>
         </a-form-item>
       </a-form>
@@ -266,6 +255,7 @@ import { ref, reactive, onMounted, computed } from 'vue';
 import { useRouter } from 'vue-router';
 import { Message } from '@arco-design/web-vue';
 import { IconPlus, IconUpload, IconFile, IconDelete } from '@arco-design/web-vue/es/icon';
+import { useAppI18n } from '@/composables/useAppI18n';
 import { useProjectStore } from '@/store/projectStore';
 import { RequirementDocumentService } from '../services/requirementService';
 import type {
@@ -275,14 +265,217 @@ import type {
   CreateDocumentRequest,
   DocumentListParams
 } from '../types';
-import {
-  DocumentStatusDisplay,
-  DocumentTypeDisplay
-} from '../types';
 
 // 状态仓库与路由
 const projectStore = useProjectStore();
 const router = useRouter();
+const { isEnglish } = useAppI18n();
+
+const pageText = computed(() => (
+  isEnglish.value
+    ? {
+        searchPlaceholder: 'Search document title or description',
+        documentStatus: 'Document status',
+        documentType: 'Document type',
+        uploadRequirementDocument: 'Upload requirement document',
+        allStatuses: 'All statuses',
+        allTypes: 'All types',
+        textType: 'Text',
+        words: 'words',
+        pages: 'pages',
+        modules: 'modules',
+        details: 'Details',
+        split: 'Split',
+        review: 'Review',
+        viewProgress: 'View progress',
+        report: 'Report',
+        reReview: 'Restart review',
+        retry: 'Retry',
+        delete: 'Delete',
+        deleteDocumentConfirm: 'Delete this document?',
+        documentTitle: 'Document title',
+        enterDocumentTitle: 'Enter document title',
+        documentDescription: 'Document description',
+        enterDocumentDescription: 'Enter document description (optional)',
+        uploadMethod: 'Upload method',
+        uploadFile: 'Upload file',
+        directInput: 'Direct input',
+        selectFile: 'Select file',
+        clickToUploadFile: 'Click to upload a file',
+        uploadFileTip: 'Supports PDF, Word (.doc/.docx), TXT, and Markdown',
+        documentContent: 'Document content',
+        enterOrPasteDocumentContent: 'Enter or paste the document content',
+        restartReviewConfig: 'Restart review configuration',
+        reviewConfigTitle: 'Review configuration',
+        restartReviewHint: 'Restarting the review creates a new report and keeps previous reports.',
+        concurrentAnalyses: 'Concurrent analyses',
+        selectConcurrency: 'Select concurrency',
+        reviewConcurrencyHelp: 'This controls how many analysis tasks run at the same time. Lower it if you hit API rate limits.',
+        titleRequired: 'Enter document title',
+        titleMaxLength: 'Title cannot exceed 200 characters',
+        descriptionMaxLength: 'Description cannot exceed 500 characters',
+        fileRequired: 'Select a file',
+        contentRequired: 'Enter document content',
+        documentNameColumn: 'Document title',
+        statusColumn: 'Status',
+        typeColumn: 'Type',
+        statsColumn: 'Stats',
+        uploaderColumn: 'Uploaded by',
+        uploadTimeColumn: 'Uploaded at',
+        actionsColumn: 'Actions',
+        selectProjectFirst: 'Select a project first',
+        loadDocumentsFailed: 'Failed to load documents',
+        uploadSuccess: 'Document uploaded successfully',
+        uploadFailed: 'Failed to upload document',
+        reviewStarted: (workers: number, isRestart: boolean) => `${isRestart ? 'Review restart' : 'Review'} started (concurrency: ${workers})`,
+        reviewStartFailed: 'Failed to start review',
+        noReportYet: 'No review report yet',
+        deleteSuccess: 'Document deleted successfully',
+        deleteFailed: 'Failed to delete document',
+        unknownSize: 'Unknown size',
+      }
+    : {
+        searchPlaceholder: '搜索文档标题或描述',
+        documentStatus: '文档状态',
+        documentType: '文档类型',
+        uploadRequirementDocument: '上传需求文档',
+        allStatuses: '全部状态',
+        allTypes: '全部类型',
+        textType: '文本',
+        words: '字',
+        pages: '页',
+        modules: '模块',
+        details: '详情',
+        split: '拆分',
+        review: '评审',
+        viewProgress: '查看进度',
+        report: '报告',
+        reReview: '重审',
+        retry: '重试',
+        delete: '删除',
+        deleteDocumentConfirm: '确定要删除这个文档吗？',
+        documentTitle: '文档标题',
+        enterDocumentTitle: '请输入文档标题',
+        documentDescription: '文档描述',
+        enterDocumentDescription: '请输入文档描述（可选）',
+        uploadMethod: '上传方式',
+        uploadFile: '上传文件',
+        directInput: '直接输入',
+        selectFile: '选择文件',
+        clickToUploadFile: '点击上传文件',
+        uploadFileTip: '支持 PDF、Word(.doc/.docx)、TXT、Markdown',
+        documentContent: '文档内容',
+        enterOrPasteDocumentContent: '请输入或粘贴文档内容',
+        restartReviewConfig: '重新评审配置',
+        reviewConfigTitle: '评审配置',
+        restartReviewHint: '重新评审将创建新的评审报告，原有报告将保留。',
+        concurrentAnalyses: '并发分析数量',
+        selectConcurrency: '请选择并发数量',
+        reviewConcurrencyHelp: '并发数量决定了同时进行的专项分析任务数。如果遇到API限流错误，请尝试降低并发数。',
+        titleRequired: '请输入文档标题',
+        titleMaxLength: '标题长度不能超过200个字符',
+        descriptionMaxLength: '描述长度不能超过500个字符',
+        fileRequired: '请选择文件',
+        contentRequired: '请输入文档内容',
+        documentNameColumn: '文档标题',
+        statusColumn: '状态',
+        typeColumn: '类型',
+        statsColumn: '统计',
+        uploaderColumn: '上传者',
+        uploadTimeColumn: '上传时间',
+        actionsColumn: '操作',
+        selectProjectFirst: '请先选择项目',
+        loadDocumentsFailed: '加载文档列表失败',
+        uploadSuccess: '文档上传成功',
+        uploadFailed: '文档上传失败',
+        reviewStarted: (workers: number, isRestart: boolean) => `${isRestart ? '重新评审' : '需求评审'}已启动 (并发数: ${workers})`,
+        reviewStartFailed: '评审启动失败',
+        noReportYet: '暂无评审报告',
+        deleteSuccess: '文档删除成功',
+        deleteFailed: '文档删除失败',
+        unknownSize: '未知大小',
+      }
+));
+
+const statusLabelMap = computed<Record<DocumentStatus, string>>(() => (
+  isEnglish.value
+    ? {
+        uploaded: 'Uploaded',
+        processing: 'Processing',
+        module_split: 'Splitting modules',
+        user_reviewing: 'User reviewing',
+        ready_for_review: 'Ready for review',
+        reviewing: 'Reviewing',
+        review_completed: 'Review completed',
+        failed: 'Failed',
+      }
+    : {
+        uploaded: '已上传',
+        processing: '处理中',
+        module_split: '模块拆分中',
+        user_reviewing: '用户调整中',
+        ready_for_review: '待评审',
+        reviewing: '评审中',
+        review_completed: '评审完成',
+        failed: '处理失败',
+      }
+));
+
+const typeLabelMap = computed<Record<DocumentType, string>>(() => (
+  isEnglish.value
+    ? {
+        pdf: 'PDF',
+        doc: 'Word document',
+        docx: 'Word document',
+        txt: 'Text file',
+        md: 'Markdown',
+      }
+    : {
+        pdf: 'PDF',
+        doc: 'Word文档',
+        docx: 'Word文档',
+        txt: '文本文件',
+        md: 'Markdown',
+      }
+));
+
+const statusOptions = computed(() => [
+  { value: '', label: pageText.value.allStatuses },
+  { value: 'uploaded', label: statusLabelMap.value.uploaded },
+  { value: 'processing', label: statusLabelMap.value.processing },
+  { value: 'module_split', label: statusLabelMap.value.module_split },
+  { value: 'user_reviewing', label: statusLabelMap.value.user_reviewing },
+  { value: 'ready_for_review', label: statusLabelMap.value.ready_for_review },
+  { value: 'reviewing', label: statusLabelMap.value.reviewing },
+  { value: 'review_completed', label: statusLabelMap.value.review_completed },
+  { value: 'failed', label: statusLabelMap.value.failed },
+]);
+
+const typeOptions = computed(() => [
+  { value: '', label: pageText.value.allTypes },
+  { value: 'pdf', label: 'PDF' },
+  { value: 'docx', label: 'Word' },
+  { value: 'pptx', label: 'PPT' },
+  { value: 'md', label: 'Markdown' },
+  { value: 'txt', label: pageText.value.textType },
+  { value: 'html', label: 'HTML' },
+]);
+
+const reviewWorkerOptions = computed(() => (
+  isEnglish.value
+    ? [
+        { value: 1, label: '1 (Serial - slowest but most stable)' },
+        { value: 2, label: '2 (Low concurrency - suitable for low-resource environments)' },
+        { value: 3, label: '3 (Recommended - balanced speed and stability)' },
+        { value: 5, label: '5 (High concurrency - fastest)' },
+      ]
+    : [
+        { value: 1, label: '1 (串行分析 - 最慢但最稳定)' },
+        { value: 2, label: '2 (低并发 - 适合低配环境)' },
+        { value: 3, label: '3 (推荐 - 平衡速度与稳定性)' },
+        { value: 5, label: '5 (高并发 - 速度最快)' },
+      ]
+));
 
 // 响应式数据
 const loading = ref(false);
@@ -326,21 +519,21 @@ const reviewConfig = ref({
 });
 
 // 表单验证规则
-const uploadRules = {
+const uploadRules = computed(() => ({
   title: [
-    { required: true, message: '请输入文档标题' },
-    { maxLength: 200, message: '标题长度不能超过200个字符' }
+    { required: true, message: pageText.value.titleRequired },
+    { maxLength: 200, message: pageText.value.titleMaxLength }
   ],
   description: [
-    { maxLength: 500, message: '描述长度不能超过500个字符' }
+    { maxLength: 500, message: pageText.value.descriptionMaxLength }
   ],
   file: [
     {
       required: true,
-      message: '请选择文件',
+      message: pageText.value.fileRequired,
       validator: (_value: any, callback: Function) => {
         if (uploadForm.uploadType === 'file' && !uploadForm.file) {
-          callback('请选择文件');
+          callback(pageText.value.fileRequired);
         } else {
           callback();
         }
@@ -350,52 +543,52 @@ const uploadRules = {
   content: [
     {
       required: true,
-      message: '请输入文档内容',
+      message: pageText.value.contentRequired,
       validator: (_value: any, callback: Function) => {
         if (uploadForm.uploadType === 'content' && !uploadForm.content) {
-          callback('请输入文档内容');
+          callback(pageText.value.contentRequired);
         } else {
           callback();
         }
       }
     }
   ]
-};
+}));
 
 // 表格列定义
-const columns = [
+const columns = computed(() => [
   {
-    title: '文档标题',
+    title: pageText.value.documentNameColumn,
     dataIndex: 'title',
     width: 200,
     ellipsis: true,
     tooltip: true
   },
   {
-    title: '状态',
+    title: pageText.value.statusColumn,
     dataIndex: 'status',
     slotName: 'status',
     width: 100
   },
   {
-    title: '类型',
+    title: pageText.value.typeColumn,
     dataIndex: 'document_type',
     slotName: 'document_type',
     width: 80
   },
   {
-    title: '统计',
+    title: pageText.value.statsColumn,
     slotName: 'stats',
     width: 180
   },
   {
-    title: '上传者',
+    title: pageText.value.uploaderColumn,
     dataIndex: 'uploader_name',
     width: 80,
     ellipsis: true
   },
   {
-    title: '上传时间',
+    title: pageText.value.uploadTimeColumn,
     dataIndex: 'uploaded_at',
     width: 170,
     render: ({ record }: { record: RequirementDocument }) => {
@@ -403,13 +596,13 @@ const columns = [
     }
   },
   {
-    title: '操作',
+    title: pageText.value.actionsColumn,
     slotName: 'actions',
     width: 260,
     fixed: 'right',
     align: 'center'
   }
-];
+]);
 
 // 计算属性
 const currentProjectId = computed(() => projectStore.currentProjectId);
@@ -430,17 +623,29 @@ const getStatusColor = (status: DocumentStatus) => {
 };
 
 const getStatusText = (status: DocumentStatus) => {
-  return DocumentStatusDisplay[status] || status;
+  return statusLabelMap.value[status] || status;
 };
 
 const getTypeText = (type: DocumentType) => {
-  return DocumentTypeDisplay[type] || type;
+  return typeLabelMap.value[type] || type;
 };
+
+const formatWordCount = (count: number) => (
+  isEnglish.value ? `${count} ${pageText.value.words}` : `${count} ${pageText.value.words}`
+);
+
+const formatPageCount = (count: number) => (
+  isEnglish.value ? `${count} ${count === 1 ? 'page' : pageText.value.pages}` : `${count} ${pageText.value.pages}`
+);
+
+const formatModuleCount = (count: number) => (
+  isEnglish.value ? `${count} ${count === 1 ? 'module' : pageText.value.modules}` : `${count} ${pageText.value.modules}`
+);
 
 // 加载文档列表
 const loadDocuments = async () => {
   if (!currentProjectId.value) {
-    Message.warning('请先选择项目');
+    Message.warning(pageText.value.selectProjectFirst);
     return;
   }
 
@@ -481,11 +686,11 @@ const loadDocuments = async () => {
         pagination.total = 0;
       }
     } else {
-      Message.error(response.message || '加载文档列表失败');
+      Message.error(response.message || pageText.value.loadDocumentsFailed);
     }
   } catch (error) {
     console.error('加载文档列表失败:', error);
-    Message.error('加载文档列表失败');
+    Message.error(pageText.value.loadDocumentsFailed);
   } finally {
     loading.value = false;
   }
@@ -512,7 +717,7 @@ const handlePageSizeChange = (pageSize: number) => {
 // 显示上传模态框
 const showUploadModal = () => {
   if (!currentProjectId.value) {
-    Message.warning('请先选择项目');
+    Message.warning(pageText.value.selectProjectFirst);
     return;
   }
   uploadForm.project = String(currentProjectId.value);
@@ -569,22 +774,22 @@ const handleUpload = async () => {
   try {
     // 手动验证必填字段
     if (!uploadForm.title.trim()) {
-      Message.error('请输入文档标题');
+      Message.error(pageText.value.titleRequired);
       return;
     }
 
     if (uploadForm.uploadType === 'file' && !uploadForm.file) {
-      Message.error('请选择文件');
+      Message.error(pageText.value.fileRequired);
       return;
     }
 
     if (uploadForm.uploadType === 'content' && (!uploadForm.content || !uploadForm.content.trim())) {
-      Message.error('请输入文档内容');
+      Message.error(pageText.value.contentRequired);
       return;
     }
 
     if (!uploadForm.project) {
-      Message.error('请先选择项目');
+      Message.error(pageText.value.selectProjectFirst);
       return;
     }
 
@@ -597,16 +802,16 @@ const handleUpload = async () => {
     console.log('上传响应:', response); // 调试日志
 
     if (response.status === 'success') {
-      Message.success('文档上传成功');
+      Message.success(pageText.value.uploadSuccess);
       uploadModalVisible.value = false;
       resetUploadForm();
       loadDocuments();
     } else {
-      Message.error(response.message || '文档上传失败');
+      Message.error(response.message || pageText.value.uploadFailed);
     }
   } catch (error) {
     console.error('文档上传失败:', error);
-    Message.error('文档上传失败');
+    Message.error(pageText.value.uploadFailed);
   } finally {
     uploadLoading.value = false;
   }
@@ -629,7 +834,7 @@ const resetUploadForm = () => {
 
 // 格式化文件大小
 const formatFileSize = (size: number | undefined): string => {
-  if (!size || isNaN(size)) return '未知大小';
+  if (!size || isNaN(size)) return pageText.value.unknownSize;
   if (size < 1024) return size + ' B';
   if (size < 1024 * 1024) return (size / 1024).toFixed(1) + ' KB';
   return (size / (1024 * 1024)).toFixed(1) + ' MB';
@@ -694,15 +899,14 @@ const confirmReview = async () => {
     }
 
     if (response.status === 'success') {
-      const actionText = reviewAction.value === 'restart' ? '重新评审' : '需求评审';
-      Message.success(`${actionText}已启动 (并发数: ${reviewConfig.value.max_workers})`);
+      Message.success(pageText.value.reviewStarted(reviewConfig.value.max_workers, reviewAction.value === 'restart'));
       loadDocuments();
     } else {
-      Message.error(response.message || '评审启动失败');
+      Message.error(response.message || pageText.value.reviewStartFailed);
     }
   } catch (error) {
     console.error('评审启动失败:', error);
-    Message.error('评审启动失败');
+    Message.error(pageText.value.reviewStartFailed);
   } finally {
     loading.value = false;
     currentDocument.value = null;
@@ -714,7 +918,7 @@ const viewReports = (document: RequirementDocument) => {
   if (document.id) {
     router.push(`/requirements/${document.id}/report`);
   } else {
-    Message.warning('暂无评审报告');
+    Message.warning(pageText.value.noReportYet);
   }
 };
 
@@ -724,14 +928,14 @@ const deleteDocument = async (document: RequirementDocument) => {
     const response = await RequirementDocumentService.deleteDocument(document.id);
 
     if (response.status === 'success') {
-      Message.success('文档删除成功');
+      Message.success(pageText.value.deleteSuccess);
       loadDocuments();
     } else {
-      Message.error(response.message || '文档删除失败');
+      Message.error(response.message || pageText.value.deleteFailed);
     }
   } catch (error) {
     console.error('文档删除失败:', error);
-    Message.error('文档删除失败');
+    Message.error(pageText.value.deleteFailed);
   } finally {
     loading.value = false;
   }

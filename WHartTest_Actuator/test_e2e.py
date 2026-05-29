@@ -18,6 +18,7 @@ import httpx
 sys.path.insert(0, str(Path(__file__).parent))
 
 from models import SocketDataModel, QueueModel, UiSocketEnum, ResponseCode, NoticeType
+from websocket_client import build_websocket_origin
 
 try:
     import websockets
@@ -179,7 +180,7 @@ async def test_websocket_execution(test_data: dict):
     print("\n🔌 步骤2: 测试WebSocket执行流程...")
     
     try:
-        async with websockets.connect(WS_URL) as ws:
+        async with websockets.connect(WS_URL, origin=build_websocket_origin(WS_URL)) as ws:
             # 接收连接成功消息
             welcome = await asyncio.wait_for(ws.recv(), timeout=5)
             data = json.loads(welcome)

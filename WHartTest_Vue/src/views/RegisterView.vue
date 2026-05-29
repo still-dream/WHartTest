@@ -1,5 +1,8 @@
 <template>
   <div class="register-container">
+    <div class="locale-switcher-shell">
+      <AppLocaleToggle />
+    </div>
     <!-- 背景装饰 -->
     <div class="background-decoration">
       <div class="decoration-circle circle-1"></div>
@@ -14,8 +17,8 @@
         <div class="brand-logo">
           <img :src="brandLogoUrl" alt="WHartTest Logo" class="logo-icon" />
         </div>
-        <h1 class="brand-title">注册新账户</h1>
-        <p class="brand-subtitle">欢迎加入WHartTest</p>
+        <h1 class="brand-title">{{ t('register.title') }}</h1>
+        <p class="brand-subtitle">{{ t('register.subtitle') }}</p>
       </div>
 
       <!-- 注册表单 -->
@@ -34,7 +37,7 @@
               v-model="formState.username"
               required
               class="form-input"
-              placeholder="请输入用户名"
+              :placeholder="t('register.usernamePlaceholder')"
             />
           </div>
         </div>
@@ -53,7 +56,7 @@
               v-model="formState.email"
               required
               class="form-input"
-              placeholder="请输入邮箱地址"
+              :placeholder="t('register.emailPlaceholder')"
             />
           </div>
         </div>
@@ -72,7 +75,7 @@
               v-model="formState.password"
               required
               class="form-input"
-              placeholder="请输入密码"
+              :placeholder="t('register.passwordPlaceholder')"
             />
             <div class="password-toggle" @click="togglePasswordVisibility">
               <svg v-if="!showPassword" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor">
@@ -100,7 +103,7 @@
               v-model="formState.confirmPassword"
               required
               class="form-input"
-              placeholder="请再次输入密码"
+              :placeholder="t('register.confirmPasswordPlaceholder')"
             />
             <div class="password-toggle" @click="toggleConfirmPasswordVisibility">
               <svg v-if="!showConfirmPassword" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor">
@@ -121,13 +124,13 @@
           :class="{'loading': isLoading}"
           :disabled="isLoading"
         >
-          <span v-if="!isLoading">注册</span>
+          <span v-if="!isLoading">{{ t('register.submit') }}</span>
           <span v-else class="loading-content">
             <svg class="loading-spinner" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
               <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
               <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
             </svg>
-            注册中...
+            {{ t('register.submitting') }}
           </span>
         </button>
 
@@ -142,8 +145,8 @@
         <!-- 登录链接 -->
         <div class="login-link">
           <p>
-            已经有账户了?
-            <router-link to="/login" class="link">点此登录</router-link>
+            {{ t('register.existingAccount') }}
+            <router-link to="/login" class="link">{{ t('register.loginNow') }}</router-link>
           </p>
         </div>
       </form>
@@ -156,10 +159,13 @@ import { reactive, computed, ref } from 'vue';
 import { useRouter } from 'vue-router';
 import { useAuthStore } from '@/store/authStore';
 import { Message } from '@arco-design/web-vue';
+import { useAppI18n } from '@/composables/useAppI18n';
 import { brandLogoUrl } from '@/utils/assetUrl';
+import AppLocaleToggle from '@/components/AppLocaleToggle.vue';
 
 const router = useRouter();
 const authStore = useAuthStore();
+const { t } = useAppI18n();
 
 const formState = reactive({
   username: '',
@@ -191,30 +197,30 @@ const validatePasswordConfirm = () => {
 // 处理注册逻辑
 const handleSubmit = async () => {
   if (!formState.username || !formState.email || !formState.password || !formState.confirmPassword) {
-    Message.warning('请填写所有必填字段');
+    Message.warning(t('register.fillRequired'));
     return;
   }
 
   if (!validatePasswordConfirm()) {
-    Message.warning('两次输入的密码不一致');
+    Message.warning(t('register.passwordMismatch'));
     return;
   }
 
   const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
   if (!emailRegex.test(formState.email)) {
-    Message.warning('请输入有效的邮箱地址');
+    Message.warning(t('register.invalidEmail'));
     return;
   }
 
   try {
     const success = await authStore.register(formState.username, formState.email, formState.password);
     if (success) {
-      Message.success('注册成功！请登录。');
+      Message.success(t('register.success'));
       router.push('/login');
     }
   } catch (e) {
     console.error('Exception during authStore.register call:', e);
-    Message.error('注册过程中发生意外错误。');
+    Message.error(t('register.unexpectedError'));
   }
 };
 </script>
@@ -231,6 +237,13 @@ const handleSubmit = async () => {
   position: relative;
   overflow: hidden;
   box-sizing: border-box;
+}
+
+.locale-switcher-shell {
+  position: absolute;
+  top: 24px;
+  right: 24px;
+  z-index: 3;
 }
 
 /* 背景装饰 */

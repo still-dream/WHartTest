@@ -1,12 +1,15 @@
 <template>
   <div class="login-page">
     <canvas ref="canvasRef" class="starry-canvas" />
+    <div class="locale-switcher-shell">
+      <AppLocaleToggle />
+    </div>
 
     <div class="content-layer">
       <div class="brand-area">
         <img :src="brandLogoUrl" alt="Logo" class="brand-logo" />
         <h1 class="brand-title">WHartTest</h1>
-        <p class="brand-subtitle">小麦智测自动化平台</p>
+        <p class="brand-subtitle">{{ brandSubtitle }}</p>
         <div class="brand-tags">
           <span v-for="tag in featureTags" :key="tag" class="tag">{{ tag }}</span>
         </div>
@@ -16,7 +19,7 @@
         ref="launcherButtonRef"
         type="button"
         class="login-launcher"
-        aria-label="打开登录弹窗"
+        :aria-label="t('login.openDialog')"
         @click="openLoginDialog"
       >
         <span class="launcher-aura" />
@@ -33,8 +36,8 @@
           </svg>
         </span>
         <span class="launcher-copy">
-          <strong>账号登录</strong>
-          <span>点击展开登录框</span>
+          <strong>{{ launcherTitle }}</strong>
+          <span>{{ launcherSubtitle }}</span>
         </span>
       </button>
     </div>
@@ -50,15 +53,15 @@
           aria-describedby="login-description"
           @keydown="handleDialogKeydown"
         >
-          <button type="button" class="dialog-close" aria-label="关闭登录弹窗" @click="closeLoginDialog">
+          <button type="button" class="dialog-close" :aria-label="t('login.closeDialog')" @click="closeLoginDialog">
             <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor">
               <path stroke-linecap="round" stroke-linejoin="round" d="M6 18 18 6M6 6l12 12" />
             </svg>
           </button>
 
           <div class="card-header">
-            <h2 id="login-title">欢迎回来</h2>
-            <p id="login-description">请登录您的账户</p>
+            <h2 id="login-title">{{ dialogTitle }}</h2>
+            <p id="login-description">{{ dialogDescription }}</p>
           </div>
 
           <form class="login-form" @submit.prevent="handleLogin">
@@ -72,7 +75,7 @@
                 type="text"
                 required
                 autocomplete="username"
-                placeholder="请输入用户名"
+                :placeholder="usernamePlaceholder"
                 class="form-input"
               />
             </div>
@@ -86,14 +89,14 @@
                 :type="showPassword ? 'text' : 'password'"
                 required
                 autocomplete="current-password"
-                placeholder="请输入密码"
+                :placeholder="passwordPlaceholder"
                 class="form-input"
               />
               <button
                 v-if="!showPassword"
                 class="toggle-icon"
                 type="button"
-                aria-label="显示密码"
+                :aria-label="t('login.showPassword')"
                 :aria-pressed="showPassword"
                 @click="showPassword = true"
               >
@@ -106,7 +109,7 @@
                 v-else
                 class="toggle-icon"
                 type="button"
-                aria-label="隐藏密码"
+                :aria-label="t('login.hidePassword')"
                 :aria-pressed="showPassword"
                 @click="showPassword = false"
               >
@@ -118,17 +121,17 @@
 
             <label class="remember-me">
               <input v-model="rememberMe" type="checkbox" />
-              <span>记住我</span>
+              <span>{{ rememberMeLabel }}</span>
             </label>
 
             <button type="submit" class="login-btn" :disabled="isLoading">
-              <template v-if="!isLoading">登录</template>
+              <template v-if="!isLoading">{{ submitLabel }}</template>
               <template v-else>
                 <svg class="spinner" viewBox="0 0 24 24" fill="none">
                   <circle cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4" opacity="0.25" />
                   <path fill="currentColor" opacity="0.75" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />
                 </svg>
-                登录中...
+                {{ submittingLabel }}
               </template>
             </button>
 
@@ -140,8 +143,8 @@
             </div>
 
             <p class="register-link">
-              还没有账号?
-              <router-link to="/register">立即注册</router-link>
+              {{ registerPrompt }}
+              <router-link to="/register">{{ registerLinkLabel }}</router-link>
             </p>
           </form>
         </div>
@@ -155,8 +158,10 @@ import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { Message } from '@arco-design/web-vue'
 import { useRouter } from 'vue-router'
 import { useStarryBackground } from '@/composables/useStarryBackground'
+import { useAppI18n } from '@/composables/useAppI18n'
 import { useAuthStore } from '@/store/authStore'
 import { brandLogoUrl } from '@/utils/assetUrl'
+import AppLocaleToggle from '@/components/AppLocaleToggle.vue'
 
 const canvasRef = ref<HTMLCanvasElement | null>(null)
 const usernameInputRef = ref<HTMLInputElement | null>(null)
@@ -172,15 +177,58 @@ const previousBodyOverflow = ref('')
 const fingerprintAssetCandidates = ['/login-fingerprint.svg', '/login-fingerprint.png'] as const
 const currentFingerprintAssetIndex = ref(0)
 const fingerprintImageLoadFailed = ref(false)
-const featureTags = ['AI 智能生成', 'RAG 知识库', 'MCP 工具调用', 'Skills 技能库', 'Playwright 自动化', 'LangGraph']
 
 useStarryBackground(canvasRef)
 
 const router = useRouter()
 const authStore = useAuthStore()
+const { isEnglish, t } = useAppI18n()
 const isLoading = computed(() => authStore.getIsLoading)
 const errorMessage = computed(() => authStore.getLoginError)
 const currentFingerprintAsset = computed(() => fingerprintAssetCandidates[currentFingerprintAssetIndex.value] ?? null)
+const featureTags = computed(() => (
+  isEnglish.value
+    ? ['AI generation', 'RAG knowledge base', 'MCP tool calling', 'Skills library', 'Playwright automation', 'LangGraph']
+    : ['AI 智能生成', 'RAG 知识库', 'MCP 工具调用', 'Skills 技能库', 'Playwright 自动化', 'LangGraph']
+))
+const brandSubtitle = computed(() => (
+  isEnglish.value ? 'Wheat intelligence test automation platform' : '小麦智测自动化平台'
+))
+const launcherTitle = computed(() => (
+  isEnglish.value ? 'Account Login' : '账号登录'
+))
+const launcherSubtitle = computed(() => (
+  isEnglish.value ? 'Click to open the sign-in dialog' : '点击展开登录框'
+))
+const usernamePlaceholder = computed(() => t('register.usernamePlaceholder'))
+const passwordPlaceholder = computed(() => t('register.passwordPlaceholder'))
+const dialogTitle = computed(() => (
+  isEnglish.value ? 'Welcome back' : '欢迎回来'
+))
+const dialogDescription = computed(() => (
+  isEnglish.value ? 'Sign in to your account' : '请登录您的账户'
+))
+const rememberMeLabel = computed(() => (
+  isEnglish.value ? 'Remember me' : '记住我'
+))
+const submitLabel = computed(() => (
+  isEnglish.value ? 'Sign in' : '登录'
+))
+const submittingLabel = computed(() => (
+  isEnglish.value ? 'Signing in...' : '登录中...'
+))
+const registerPrompt = computed(() => (
+  isEnglish.value ? 'No account yet?' : '还没有账号?'
+))
+const registerLinkLabel = computed(() => (
+  isEnglish.value ? 'Register now' : '立即注册'
+))
+const loginRequiredMessage = computed(() => (
+  isEnglish.value ? 'Enter username and password' : '请输入用户名和密码'
+))
+const loginSuccessMessage = computed(() => (
+  isEnglish.value ? 'Signed in successfully!' : '登录成功！'
+))
 
 const focusableSelector = [
   'button:not([disabled])',
@@ -256,13 +304,13 @@ const handleDialogKeydown = (event: KeyboardEvent) => {
 
 const handleLogin = async () => {
   if (!username.value || !password.value) {
-    Message.warning('请输入用户名和密码')
+    Message.warning(loginRequiredMessage.value)
     return
   }
 
   const success = await authStore.login(username.value, password.value)
   if (success) {
-    Message.success('登录成功！')
+    Message.success(loginSuccessMessage.value)
     if (rememberMe.value) {
       localStorage.setItem('rememberedUsername', username.value)
     } else {
@@ -318,6 +366,13 @@ onBeforeUnmount(() => {
   background: radial-gradient(ellipse at 20% 50%, #0a1628 0%, #020810 100%);
 }
 
+.locale-switcher-shell {
+  position: absolute;
+  top: 24px;
+  right: 24px;
+  z-index: 3;
+}
+
 .starry-canvas,
 .login-overlay {
   position: absolute;
@@ -348,7 +403,7 @@ onBeforeUnmount(() => {
 .brand-logo {
   width: 72px;
   height: 72px;
-  margin-bottom: 16px;
+  margin: 0 auto 16px;
   filter: drop-shadow(0 0 20px rgba(100, 180, 255, 0.4));
 }
 

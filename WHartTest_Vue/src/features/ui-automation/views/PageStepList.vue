@@ -4,7 +4,7 @@
       <div class="search-box">
         <a-select
           v-model="filters.page"
-          placeholder="选择页面"
+          :placeholder="pageText.selectPage"
           allow-clear
           allow-search
           style="width: 200px; margin-right: 12px"
@@ -16,7 +16,7 @@
         </a-select>
         <a-input-search
           v-model="filters.search"
-          placeholder="搜索步骤名称"
+          :placeholder="pageText.searchStepName"
           allow-clear
           style="width: 200px"
           @search="onSearch"
@@ -26,12 +26,13 @@
       <div class="action-buttons">
         <a-button type="primary" @click="showAddModal">
           <template #icon><icon-plus /></template>
-          新增步骤
+          {{ pageText.addStep }}
         </a-button>
       </div>
     </div>
 
     <a-table
+      :key="`page-step-table-${locale}`"
       :columns="columns"
       :data="pageStepData"
       :pagination="pagination"
@@ -45,7 +46,7 @@
       </template>
       <template #status="{ record }">
         <a-tag :color="statusColors[record.status as ExecutionStatus]">
-          {{ STATUS_LABELS[record.status as ExecutionStatus] }}
+          {{ formatStatusLabel(record.status as ExecutionStatus) }}
         </a-tag>
       </template>
       <template #step_count="{ record }">
@@ -58,16 +59,16 @@
         <a-space :size="4">
           <a-button type="text" size="mini" @click="viewStepDetails(record)">
             <template #icon><icon-settings /></template>
-            添加步骤
+            {{ pageText.manageStepDetails }}
           </a-button>
           <a-button type="text" size="mini" @click="editPageStep(record)">
             <template #icon><icon-edit /></template>
-            编辑
+            {{ pageText.edit }}
           </a-button>
-          <a-popconfirm content="确定删除该步骤？" @ok="deletePageStep(record)">
+          <a-popconfirm :content="pageText.deleteStepConfirm" @ok="deletePageStep(record)">
             <a-button type="text" status="danger" size="mini">
               <template #icon><icon-delete /></template>
-              删除
+              {{ pageText.delete }}
             </a-button>
           </a-popconfirm>
         </a-space>
@@ -77,7 +78,7 @@
     <!-- 新增/编辑弹窗 -->
     <a-modal
       v-model:visible="modalVisible"
-      :title="isEdit ? '编辑页面步骤' : '新增页面步骤'"
+      :title="pageStepModalTitle"
       :ok-loading="submitting"
       @before-ok="handleSubmit"
       @cancel="handleCancel"
@@ -85,8 +86,8 @@
       <a-form ref="formRef" :model="formData" :rules="rules" layout="vertical">
         <a-row :gutter="16">
           <a-col :span="12">
-            <a-form-item field="module" label="所属模块" required>
-              <a-select v-model="formData.module" placeholder="请选择模块" @change="onFormModuleChange">
+            <a-form-item field="module" :label="pageText.module" required>
+              <a-select v-model="formData.module" :placeholder="pageText.selectModule" @change="onFormModuleChange">
                 <a-option v-for="mod in moduleOptions" :key="mod.id" :value="mod.id">
                   {{ mod.name }}
                 </a-option>
@@ -94,8 +95,8 @@
             </a-form-item>
           </a-col>
           <a-col :span="12">
-            <a-form-item field="page" label="所属页面" required>
-              <a-select v-model="formData.page" placeholder="请选择页面" :disabled="!formData.module">
+            <a-form-item field="page" :label="pageText.page" required>
+              <a-select v-model="formData.page" :placeholder="pageText.selectPage" :disabled="!formData.module">
                 <a-option v-for="p in filteredPageOptions" :key="p.id" :value="p.id">
                   {{ p.name }}
                 </a-option>
@@ -103,11 +104,11 @@
             </a-form-item>
           </a-col>
         </a-row>
-        <a-form-item field="name" label="步骤名称" required>
-          <a-input v-model="formData.name" placeholder="请输入步骤名称" :max-length="64" />
+        <a-form-item field="name" :label="pageText.stepName" required>
+          <a-input v-model="formData.name" :placeholder="pageText.enterStepName" :max-length="64" />
         </a-form-item>
-        <a-form-item field="description" label="描述">
-          <a-textarea v-model="formData.description" placeholder="请输入描述" :auto-size="{ minRows: 2 }" />
+        <a-form-item field="description" :label="pageText.description">
+          <a-textarea v-model="formData.description" :placeholder="pageText.enterDescription" :auto-size="{ minRows: 2 }" />
         </a-form-item>
       </a-form>
     </a-modal>
@@ -115,7 +116,7 @@
     <!-- 步骤详情抽屉 -->
     <a-drawer
       v-model:visible="detailDrawerVisible"
-      :title="`步骤详情 - ${currentPageStep?.name || ''}`"
+      :title="pageStepDrawerTitle"
       width="50%"
       :footer="false"
     >
@@ -129,6 +130,7 @@ import { ref, reactive, computed, watch } from 'vue'
 import { Message } from '@arco-design/web-vue'
 import { IconPlus, IconEdit, IconDelete, IconSettings } from '@arco-design/web-vue/es/icon'
 import { useProjectStore } from '@/store/projectStore'
+import { useAppI18n } from '@/composables/useAppI18n'
 import { pageStepsApi, pageApi, moduleApi } from '../api'
 import type { UiPageSteps, UiPageStepsForm, UiPage, UiModule, ExecutionStatus } from '../types'
 import { STATUS_LABELS, extractListData, extractPaginationData, extractResponseData } from '../types'
@@ -140,6 +142,85 @@ const props = defineProps<{
 
 const projectStore = useProjectStore()
 const projectId = computed(() => projectStore.currentProject?.id)
+const { locale, isEnglish, tl } = useAppI18n()
+
+const pageText = computed(() => (
+  isEnglish.value
+    ? {
+        selectPage: 'Select page',
+        searchStepName: 'Search step name',
+        addStep: 'Add step',
+        manageStepDetails: 'Add step',
+        edit: 'Edit',
+        delete: 'Delete',
+        deleteStepConfirm: 'Delete this step?',
+        editPageStep: 'Edit page step',
+        addPageStep: 'Create page step',
+        module: 'Module',
+        selectModule: 'Select module',
+        page: 'Page',
+        stepName: 'Step name',
+        enterStepName: 'Enter step name',
+        description: 'Description',
+        enterDescription: 'Enter description',
+        stepDetails: 'Step details',
+        status: 'Status',
+        actionCount: 'Action count',
+        createdBy: 'Created by',
+        createdAt: 'Created at',
+        operations: 'Actions',
+        selectPageRequired: 'Select page',
+        selectModuleRequired: 'Select module',
+        enterStepNameRequired: 'Enter step name',
+        fetchPageListFailed: 'Failed to fetch page list',
+        fetchModuleListFailed: 'Failed to fetch module list',
+        fetchPageStepListFailed: 'Failed to fetch page step list',
+        fillRequired: 'Fill in the required fields',
+        updateSuccess: 'Updated successfully',
+        createSuccess: 'Created successfully',
+        updateFailed: 'Update failed',
+        createFailed: 'Creation failed',
+        deleteSuccess: 'Deleted successfully',
+        deleteBlocked: 'Linked data prevents deletion. Remove the associations first',
+      }
+    : {
+        selectPage: '选择页面',
+        searchStepName: '搜索步骤名称',
+        addStep: '新增步骤',
+        manageStepDetails: '添加步骤',
+        edit: '编辑',
+        delete: '删除',
+        deleteStepConfirm: '确定删除该步骤？',
+        editPageStep: '编辑页面步骤',
+        addPageStep: '新增页面步骤',
+        module: '所属模块',
+        selectModule: '请选择模块',
+        page: '所属页面',
+        stepName: '步骤名称',
+        enterStepName: '请输入步骤名称',
+        description: '描述',
+        enterDescription: '请输入描述',
+        stepDetails: '步骤详情',
+        status: '状态',
+        actionCount: '操作数',
+        createdBy: '创建者',
+        createdAt: '创建时间',
+        operations: '操作',
+        selectPageRequired: '请选择页面',
+        selectModuleRequired: '请选择模块',
+        enterStepNameRequired: '请输入步骤名称',
+        fetchPageListFailed: '获取页面列表失败',
+        fetchModuleListFailed: '获取模块列表失败',
+        fetchPageStepListFailed: '获取页面步骤列表失败',
+        fillRequired: '请填写必填项',
+        updateSuccess: '更新成功',
+        createSuccess: '创建成功',
+        updateFailed: '更新失败',
+        createFailed: '创建失败',
+        deleteSuccess: '删除成功',
+        deleteBlocked: '存在关联，无法删除。请先解除关联',
+      }
+))
 
 const loading = ref(false)
 const submitting = ref(false)
@@ -171,26 +252,38 @@ const formData = reactive<UiPageStepsForm>({
   flow_data: {},
 })
 
-const rules = {
-  page: [{ required: true, message: '请选择页面' }],
-  module: [{ required: true, message: '请选择模块' }],
-  name: [{ required: true, message: '请输入步骤名称' }],
-}
+const rules = computed(() => ({
+  page: [{ required: true, message: pageText.value.selectPageRequired }],
+  module: [{ required: true, message: pageText.value.selectModuleRequired }],
+  name: [{ required: true, message: pageText.value.enterStepNameRequired }],
+}))
 
 const statusColors: Record<ExecutionStatus, string> = { 0: 'gray', 1: 'blue', 2: 'green', 3: 'red' }
 
-const columns = [
-  { title: 'ID', dataIndex: 'id', width: 70, align: 'center' as const },
-  { title: '页面', slotName: 'page_name', width: 120, align: 'center' as const },
-  { title: '步骤名称', dataIndex: 'name', ellipsis: true, tooltip: true, width: 150, align: 'center' as const },
-  { title: '状态', slotName: 'status', width: 90, align: 'center' as const },
-  { title: '操作数', slotName: 'step_count', width: 80, align: 'center' as const },
-  { title: '创建者', dataIndex: 'creator_name', width: 100, align: 'center' as const },
-  { title: '创建时间', slotName: 'created_at', width: 160, align: 'center' as const },
-  { title: '操作', slotName: 'operations', width: 220, fixed: 'right' as const, align: 'center' as const },
-]
+const columns = computed(() => [
+  { title: 'ID', dataIndex: 'id', width: isEnglish.value ? 90 : 70, align: 'center' as const },
+  { title: pageText.value.page, slotName: 'page_name', width: 140, align: 'center' as const },
+  { title: pageText.value.stepName, dataIndex: 'name', ellipsis: true, tooltip: true, width: 180, align: 'center' as const },
+  { title: pageText.value.status, slotName: 'status', width: 100, align: 'center' as const },
+  { title: pageText.value.actionCount, slotName: 'step_count', width: 100, align: 'center' as const },
+  { title: pageText.value.createdBy, dataIndex: 'creator_name', width: 110, align: 'center' as const },
+  { title: pageText.value.createdAt, slotName: 'created_at', width: 180, align: 'center' as const },
+  { title: pageText.value.operations, slotName: 'operations', width: isEnglish.value ? 260 : 220, fixed: 'right' as const, align: 'center' as const },
+])
 
-const formatDate = (dateStr: string) => dateStr ? new Date(dateStr).toLocaleString('zh-CN') : '-'
+const pageStepModalTitle = computed(() => (
+  isEdit.value ? pageText.value.editPageStep : pageText.value.addPageStep
+))
+
+const pageStepDrawerTitle = computed(() => (
+  currentPageStep.value?.name
+    ? `${pageText.value.stepDetails} - ${currentPageStep.value.name}`
+    : pageText.value.stepDetails
+))
+
+const formatStatusLabel = (status: ExecutionStatus) => tl(STATUS_LABELS[status])
+
+const formatDate = (dateStr: string) => dateStr ? new Date(dateStr).toLocaleString(isEnglish.value ? 'en-US' : 'zh-CN') : '-'
 
 const fetchPages = async () => {
   if (!projectId.value) return
@@ -198,7 +291,7 @@ const fetchPages = async () => {
     const res = await pageApi.list({ project: projectId.value })
     pageOptions.value = extractListData<UiPage>(res)
   } catch {
-    Message.error('获取页面列表失败')
+    Message.error(pageText.value.fetchPageListFailed)
   }
 }
 
@@ -227,7 +320,7 @@ const fetchModules = async () => {
     const modules = extractResponseData<UiModule[]>(res) || []
     moduleOptions.value = flattenModules(modules)
   } catch {
-    Message.error('获取模块列表失败')
+    Message.error(pageText.value.fetchModuleListFailed)
   }
 }
 
@@ -245,7 +338,7 @@ const fetchPageSteps = async () => {
     pageStepData.value = items
     pagination.total = count
   } catch {
-    Message.error('获取页面步骤列表失败')
+    Message.error(pageText.value.fetchPageStepListFailed)
   } finally {
     loading.value = false
   }
@@ -322,7 +415,7 @@ const handleSubmit = async (done: (closed: boolean) => void) => {
   try {
     await formRef.value?.validate()
   } catch {
-    Message.warning('请填写必填项')
+    Message.warning(pageText.value.fillRequired)
     done(false)
     return
   }
@@ -330,10 +423,10 @@ const handleSubmit = async (done: (closed: boolean) => void) => {
   try {
     if (isEdit.value && currentPageStep.value) {
       await pageStepsApi.update(currentPageStep.value.id, formData)
-      Message.success('更新成功')
+      Message.success(pageText.value.updateSuccess)
     } else {
       await pageStepsApi.create(formData)
-      Message.success('创建成功')
+      Message.success(pageText.value.createSuccess)
     }
     done(true)
     fetchPageSteps()
@@ -346,7 +439,7 @@ const handleSubmit = async (done: (closed: boolean) => void) => {
         .join('\n')
       Message.error({ content: messages, duration: 5000 })
     } else {
-      Message.error(err?.error || (isEdit.value ? '更新失败' : '创建失败'))
+      Message.error(err?.error || (isEdit.value ? pageText.value.updateFailed : pageText.value.createFailed))
     }
     done(false)
   } finally {
@@ -361,11 +454,11 @@ const handleCancel = () => {
 const deletePageStep = async (record: UiPageSteps) => {
   try {
     await pageStepsApi.delete(record.id)
-    Message.success('删除成功')
+    Message.success(pageText.value.deleteSuccess)
     fetchPageSteps()
   } catch (error: unknown) {
     const err = error as { error?: string }
-    Message.error(err?.error || '存在关联，无法删除。请先解除关联')
+    Message.error(err?.error || pageText.value.deleteBlocked)
   }
 }
 
@@ -412,5 +505,13 @@ defineExpose({ refresh })
 .search-box {
   display: flex;
   align-items: center;
+  flex-wrap: wrap;
+  gap: 12px;
+}
+
+.action-buttons {
+  display: flex;
+  align-items: center;
+  gap: 12px;
 }
 </style>

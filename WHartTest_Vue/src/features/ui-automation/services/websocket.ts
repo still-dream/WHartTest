@@ -5,6 +5,7 @@
 
 import { ref, shallowRef } from 'vue'
 import { useAuthStore } from '@/store/authStore'
+import { getCurrentServerLanguage } from '@/utils/installLocaleAdapters'
 
 /** 消息类型枚举 */
 export const UiSocketEnum = {
@@ -69,7 +70,9 @@ class UiWebSocketService {
   private getWsUrl(): string {
     const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:'
     const host = import.meta.env.VITE_WS_HOST || window.location.host
-    return `${protocol}//${host}/ws/ui/web/`
+    const url = new URL(`${protocol}//${host}/ws/ui/web/`)
+    url.searchParams.set('lang', getCurrentServerLanguage())
+    return url.toString()
   }
   
   /** 连接 WebSocket */

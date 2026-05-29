@@ -57,10 +57,10 @@
         :style="floatingPanelStyle"
       >
         <div class="floating-panel-header" @mousedown="startDrag">
-          <span class="floating-panel-title">📷 工具截图</span>
+          <span class="floating-panel-title">📷 {{ pageText.toolScreenshot }}</span>
           <button class="floating-panel-close" @click="closeFloatingImage">&times;</button>
         </div>
-        <img :src="floatingToolImageSrc" alt="工具截图" class="floating-panel-img" />
+        <img :src="floatingToolImageSrc" :alt="pageText.toolScreenshot" class="floating-panel-img" />
       </div>
 
       <!-- ⭐ HITL 工具审批卡片（输入框上方） -->
@@ -109,7 +109,7 @@
     <!-- 图表预览弹窗 -->
     <a-modal
       v-model:visible="diagramPreviewVisible"
-      title="图表预览"
+      :title="pageText.diagramPreview"
       :width="'90%'"
       :footer="false"
       :mask-closable="true"
@@ -126,8 +126,10 @@
     <!-- HTML 预览弹窗 -->
     <a-modal
       v-model:visible="htmlPreviewVisible"
-      title="HTML 预览"
+      :title="pageText.htmlPreview"
       :width="'90%'"
+      modal-class="html-preview-modal"
+      :body-style="{ padding: '0', maxHeight: 'calc(100vh - 96px)', overflow: 'hidden' }"
       :footer="false"
       :mask-closable="true"
       :unmount-on-close="true"
@@ -147,7 +149,7 @@
         </a-button>
         <iframe
           class="diagram-preview-iframe html-preview-iframe"
-          :srcdoc="htmlPreviewContent"
+          :srcdoc="htmlPreviewIframeSrcdoc"
           sandbox="allow-scripts allow-forms allow-modals allow-popups allow-popups-to-escape-sandbox allow-top-navigation-by-user-activation"
         ></iframe>
       </div>
@@ -178,6 +180,7 @@ import type { ChatRequest, ChatHistoryMessage } from '@/features/langgraph/types
 import type { LlmConfig } from '@/features/langgraph/types/llmConfig';
 import { useProjectStore } from '@/store/projectStore';
 import { useLlmConfigRefresh } from '@/composables/useLlmConfigRefresh';
+import { useAppI18n } from '@/composables/useAppI18n';
 import { marked } from 'marked';
 import { IconFullscreen, IconFullscreenExit } from '@arco-design/web-vue/es/icon';
 import type { ToolFileAttachment } from '@/features/langgraph/utils/toolResultParser';
@@ -193,6 +196,131 @@ import ToolApprovalCard from '../components/ToolApprovalCard.vue';
 import ToolApprovalSettingsModal from '../components/ToolApprovalSettingsModal.vue';
 import WeixinConnectModal from '../components/WeixinConnectModal.vue';
 import type { InterruptEvent } from '../components/ToolApprovalCard.vue';
+
+const { isEnglish } = useAppI18n();
+const pageText = computed(() => (
+  isEnglish.value
+    ? {
+        toolScreenshot: 'Tool Screenshot',
+        diagramPreview: 'Diagram Preview',
+        htmlPreview: 'HTML Preview',
+        missingProjectOrSession: 'Cannot get project or session information',
+        executingTool: 'Executing tool...',
+        toolRejected: 'Execution rejected',
+        actionFailedRetry: 'Operation failed, please retry',
+        untitledChat: 'Untitled Chat',
+        fetchSessionsFailed: 'Failed to fetch sessions',
+        fetchSessionsFailedRetry: 'Failed to fetch sessions, please retry later',
+        stepText: 'Step',
+        yesterday: 'Yesterday',
+        historyLoadFailedNewChat: 'Failed to load chat history, a new conversation will be started',
+        noDiagramXml: 'No diagram XML available for preview',
+        noHtmlContent: 'No HTML content available for preview',
+        noFullscreenSupport: 'Fullscreen preview is not supported in this environment',
+        stoppedGeneration: 'Generation stopped',
+        messageNotFound: 'Message not found',
+        userMessageNotFound: 'Related user message not found',
+        deleteMessageNotFound: 'Message not found',
+        deleteSessionConfirmContent: 'Delete this chat? This action cannot be undone.',
+        deleteCascadeConfirm: (count: number) => `Deleting this message will also remove ${count} subsequent chat record(s). Continue?`,
+        deleteSingleConfirm: 'Delete this message?',
+        confirmDelete: 'Confirm Delete',
+        confirmDeleteAction: 'Delete',
+        cancel: 'Cancel',
+        serverRollbackWarning: 'Server rollback may be incomplete, but local messages were removed',
+        historyCleared: 'Chat history cleared',
+        messageDeleted: 'Message deleted',
+        deleteMessageFailedRetry: 'Failed to delete message, please retry later',
+        newChat: 'New Chat',
+        loadSessionHistoryFailed: 'Failed to load session history',
+        noProjectCannotDeleteSession: 'No project selected, cannot delete session',
+        chatDeleted: 'Chat deleted',
+        deleteChatFailed: 'Failed to delete chat',
+        deleteChatFailedRetry: 'Failed to delete chat, please retry later',
+        deleteSuccessCount: (count: number) => `Deleted ${count} chat(s) successfully`,
+        deletePartialResult: (successCount: number, failedCount: number) => `Deletion completed: ${successCount} succeeded, ${failedCount} failed`,
+        batchDeleteFailed: 'Failed to batch delete chats',
+        batchDeleteFailedRetry: 'Failed to batch delete chats, please retry later',
+        clearChatConfirmContent: 'Delete all history in this conversation? This action cannot be undone.',
+        historyDeletedOnServer: 'Chat history deleted from server',
+        historyLocalClearedWarning: 'Server deletion may be incomplete, but local chat was cleared',
+        deleteHistoryFailedRetry: 'Failed to delete chat history, please retry later',
+        messageEmpty: 'Message cannot be empty',
+        selectProjectFirst: 'Please select a project first',
+        selectKnowledgeBaseFirst: 'Please select a knowledge base first',
+        sendFailed: 'Failed to send message',
+        sendFailureShort: 'Send failed',
+        errorPrefix: 'Error',
+        noAvailableLlmConfig: 'No available LLM configuration found',
+        getLlmConfigFailed: 'Failed to get LLM configuration',
+        addPromptFirst: 'Please add or initialize prompts before starting a conversation',
+        legacyConfigPromptWarn: 'Current active config is from legacy defaults; slot prompt cannot be updated here',
+        systemPromptUpdateSuccess: 'System prompt updated successfully',
+        systemPromptUpdateFailed: 'Failed to update system prompt',
+        unknownTool: 'unknown',
+        autoRejectNotice: (toolNames: string) => `Tool ${toolNames} is set to always reject and has been auto-rejected`,
+      }
+    : {
+        toolScreenshot: '工具截图',
+        diagramPreview: '图表预览',
+        htmlPreview: 'HTML 预览',
+        missingProjectOrSession: '无法获取项目或会话信息',
+        executingTool: '正在执行工具...',
+        toolRejected: '已拒绝执行',
+        actionFailedRetry: '操作失败，请重试',
+        untitledChat: '未命名对话',
+        fetchSessionsFailed: '获取会话列表失败',
+        fetchSessionsFailedRetry: '获取会话列表失败，请稍后重试',
+        stepText: '步骤',
+        yesterday: '昨天',
+        historyLoadFailedNewChat: '加载聊天历史失败，将开始新的对话',
+        noDiagramXml: '未检测到可预览的图表XML',
+        noHtmlContent: '未检测到可预览的HTML内容',
+        noFullscreenSupport: '当前环境不支持全屏预览',
+        stoppedGeneration: '已停止生成',
+        messageNotFound: '未找到对应的消息',
+        userMessageNotFound: '未找到对应的用户消息',
+        deleteMessageNotFound: '未找到该消息',
+        deleteSessionConfirmContent: '确定要删除此对话吗？此操作不可恢复。',
+        deleteCascadeConfirm: (count: number) => `删除此消息将同时清除该消息之后的 ${count} 条对话记录。是否继续？`,
+        deleteSingleConfirm: '确定要删除这条消息吗？',
+        confirmDelete: '确认删除',
+        confirmDeleteAction: '确认删除',
+        cancel: '取消',
+        serverRollbackWarning: '服务器回滚可能未完成，但本地消息已删除',
+        historyCleared: '对话历史已清空',
+        messageDeleted: '消息已删除',
+        deleteMessageFailedRetry: '删除消息失败，请稍后重试',
+        newChat: '新对话',
+        loadSessionHistoryFailed: '加载会话历史失败',
+        noProjectCannotDeleteSession: '没有选择项目，无法删除会话',
+        chatDeleted: '对话已删除',
+        deleteChatFailed: '删除对话失败',
+        deleteChatFailedRetry: '删除对话失败，请稍后重试',
+        deleteSuccessCount: (count: number) => `成功删除 ${count} 个对话`,
+        deletePartialResult: (successCount: number, failedCount: number) => `删除完成：成功 ${successCount} 个，失败 ${failedCount} 个`,
+        batchDeleteFailed: '批量删除对话失败',
+        batchDeleteFailedRetry: '批量删除对话失败，请稍后重试',
+        clearChatConfirmContent: '确定要删除此对话的所有历史记录吗？此操作不可恢复。',
+        historyDeletedOnServer: '对话历史已从服务器删除',
+        historyLocalClearedWarning: '服务器删除可能未完成，但本地对话已清除',
+        deleteHistoryFailedRetry: '删除聊天历史失败，请稍后重试',
+        messageEmpty: '消息内容不能为空！',
+        selectProjectFirst: '请先选择一个项目',
+        selectKnowledgeBaseFirst: '请先选择一个知识库',
+        sendFailed: '发送消息失败',
+        sendFailureShort: '发送失败',
+        errorPrefix: '错误',
+        noAvailableLlmConfig: '未找到可用的 LLM 配置',
+        getLlmConfigFailed: '获取LLM配置失败',
+        addPromptFirst: '请添加或初始化提示词后才能开始对话',
+        legacyConfigPromptWarn: '当前生效配置来自旧版默认配置，无法在此处更新槽位提示词',
+        systemPromptUpdateSuccess: '系统提示词更新成功',
+        systemPromptUpdateFailed: '更新系统提示词失败',
+        unknownTool: '未知工具',
+        autoRejectNotice: (toolNames: string) => `工具 ${toolNames} 已被设为始终拒绝，自动拒绝执行`,
+      }
+));
 
 // 配置marked
 marked.setOptions({
@@ -244,6 +372,43 @@ interface HtmlPreviewPayload {
   sourceMessage: ChatMessage;
 }
 
+const HTML_PREVIEW_STYLE_ID = 'wharttest-html-preview-style';
+const HTML_PREVIEW_BASE_STYLE = `
+<style id="${HTML_PREVIEW_STYLE_ID}">
+  html, body {
+    margin: 0;
+    padding: 0;
+    min-height: 100%;
+    background: #fff;
+  }
+
+  body {
+    box-sizing: border-box;
+  }
+
+  *, *::before, *::after {
+    box-sizing: border-box;
+  }
+</style>`;
+
+const buildHtmlPreviewSrcdoc = (html: string): string => {
+  if (!html) return '';
+
+  if (new RegExp(`id=["']${HTML_PREVIEW_STYLE_ID}["']`, 'i').test(html)) {
+    return html;
+  }
+
+  if (/<head[^>]*>/i.test(html)) {
+    return html.replace(/<head[^>]*>/i, (match) => `${match}${HTML_PREVIEW_BASE_STYLE}`);
+  }
+
+  if (/<html[^>]*>/i.test(html)) {
+    return html.replace(/<html[^>]*>/i, (match) => `${match}<head>${HTML_PREVIEW_BASE_STYLE}</head>`);
+  }
+
+  return `<!DOCTYPE html><html lang="zh-CN"><head>${HTML_PREVIEW_BASE_STYLE}</head><body>${html}</body></html>`;
+};
+
 const messages = ref<ChatMessage[]>([]);
 const isLoading = ref(false);
 const sessionId = ref<string>('');
@@ -270,6 +435,7 @@ const isWeixinConnectVisible = ref(false);
 const htmlPreviewContent = ref('');
 const htmlPreviewContainerRef = ref<HTMLElement | null>(null);
 const isHtmlPreviewFullscreen = ref(false);
+const htmlPreviewIframeSrcdoc = computed(() => buildHtmlPreviewSrcdoc(htmlPreviewContent.value));
 
 // 工具图片悬浮预览（可拖动）
 const floatingToolImageSrc = ref<string | null>(null);
@@ -516,8 +682,8 @@ watch(currentInterrupt, async (interrupt) => {
     if (allAutoReject) {
       // 所有工具都设为"始终拒绝"，自动发送拒绝响应
       console.log('[LangGraphChatView] All tools marked as auto_reject, sending auto-reject');
-      const toolNames = actionRequests.map((ar) => ar.name || 'unknown').join(', ');
-      Message.warning(`工具 ${toolNames} 已被设为始终拒绝，自动拒绝执行`);
+      const toolNames = actionRequests.map((ar) => ar.name || pageText.value.unknownTool).join(', ');
+      Message.warning(pageText.value.autoRejectNotice(toolNames));
 
       // 延迟自动拒绝，等待当前 SSE 流完全结束
       // 避免 clearStreamState 删除 activeStreams 后 resumeAgentLoop 无法正常工作
@@ -550,7 +716,7 @@ const handleToolDecision = async (decision: {
   const projectId = projectStore.currentProjectId;
   if (!projectId || !sessionId.value) {
     console.error('[LangGraphChatView] Missing projectId or sessionId:', { projectId, sessionId: sessionId.value });
-    Message.error('无法获取项目或会话信息');
+    Message.error(pageText.value.missingProjectOrSession);
     return;
   }
 
@@ -566,7 +732,7 @@ const handleToolDecision = async (decision: {
   toolApprovalDialogVisible.value = false;
 
   // 显示操作提示
-  Message.info(decision.type === 'approve' ? '正在执行工具...' : '已拒绝执行');
+  Message.info(decision.type === 'approve' ? pageText.value.executingTool : pageText.value.toolRejected);
 
   // 获取工具调用数量
   const actionCount = currentInterrupt.value?.action_requests?.length || 1;
@@ -588,7 +754,7 @@ const handleToolDecision = async (decision: {
     // 如果有新的中断，interrupt 状态会被更新，触发新的审批对话框
   } catch (error) {
     console.error('Resume agent loop failed:', error);
-    Message.error('操作失败，请重试');
+    Message.error(pageText.value.actionFailedRetry);
   }
 };
 
@@ -690,7 +856,7 @@ const loadSessionsFromServer = async () => {
           }
           return {
             id: detail.id,
-            title: detail.title || '未命名对话',
+            title: detail.title || pageText.value.untitledChat,
             lastTime: lastTime ?? new Date(0),
             messageCount: 0
           };
@@ -707,11 +873,11 @@ const loadSessionsFromServer = async () => {
 
       saveSessionsToStorage();
     } else {
-      Message.error('获取会话列表失败');
+      Message.error(pageText.value.fetchSessionsFailed);
     }
   } catch (error) {
     console.error('获取会话列表失败:', error);
-    Message.error('获取会话列表失败，请稍后重试');
+    Message.error(pageText.value.fetchSessionsFailedRetry);
   } finally {
     safeStopLoading();
   }
@@ -738,7 +904,7 @@ const enrichMessagesWithSeparators = (rawHistory: ChatHistoryMessage[], formatHi
       // 插入分隔符: 仅当步骤号与上一条不同,或者这是第一条agent_loop消息
       if (lastAgentLoopStep === null || currentStep !== lastAgentLoopStep) {
         result.push({
-          content: `步骤 ${currentStep}/${historyItem.max_steps || 500}`,
+          content: `${pageText.value.stepText} ${currentStep}/${historyItem.max_steps || 500}`,
           isUser: false,
           time: formatHistoryTime(historyItem.timestamp),
           messageType: 'step_separator'
@@ -866,7 +1032,7 @@ const loadChatHistory = async () => {
     // 🔧 修复：网络错误等异常情况才显示错误提示
     console.error('❌ 加载聊天历史异常:', error);
     // 只在真正的错误情况下提示用户
-    Message.error('加载聊天历史失败，将开始新的对话');
+    Message.error(pageText.value.historyLoadFailedNewChat);
     localStorage.removeItem('langgraph_session_id');
     sessionId.value = '';
   } finally {
@@ -1013,10 +1179,13 @@ const formatHistoryTime = (timestamp: string) => {
     const yesterday = new Date(today);
     yesterday.setDate(yesterday.getDate() - 1);
     if (messageDate.getTime() === yesterday.getTime()) {
-      return `昨天 ${date.getHours().toString().padStart(2, '0')}:${date.getMinutes().toString().padStart(2, '0')}`;
+      return `${pageText.value.yesterday} ${date.getHours().toString().padStart(2, '0')}:${date.getMinutes().toString().padStart(2, '0')}`;
     }
 
     // 如果是更早的消息，显示月日和时间
+    if (isEnglish.value) {
+      return `${date.getMonth() + 1}/${date.getDate()} ${date.getHours().toString().padStart(2, '0')}:${date.getMinutes().toString().padStart(2, '0')}`;
+    }
     return `${date.getMonth() + 1}月${date.getDate()}日 ${date.getHours().toString().padStart(2, '0')}:${date.getMinutes().toString().padStart(2, '0')}`;
   } catch (error) {
     console.error('格式化时间失败:', error);
@@ -1076,7 +1245,7 @@ const handleQuote = (message: ChatMessage) => {
 
 const handlePreviewDiagram = (payload: DiagramPreviewPayload) => {
   if (!payload.xml || !payload.xml.trim()) {
-    Message.warning('未检测到可预览的图表XML');
+    Message.warning(pageText.value.noDiagramXml);
     return;
   }
   if (!diagramPreviewVisible.value) {
@@ -1092,7 +1261,7 @@ const handlePreviewDiagram = (payload: DiagramPreviewPayload) => {
 
 const handlePreviewHtml = (payload: HtmlPreviewPayload) => {
   if (!payload.html || !payload.html.trim()) {
-    Message.warning('未检测到可预览的HTML内容');
+    Message.warning(pageText.value.noHtmlContent);
     return;
   }
   htmlPreviewContent.value = payload.html;
@@ -1115,7 +1284,7 @@ const toggleHtmlPreviewFullscreen = async () => {
     await container.requestFullscreen();
   } catch (error) {
     console.error('切换HTML预览全屏失败:', error);
-    Message.warning('当前环境不支持全屏预览');
+    Message.warning(pageText.value.noFullscreenSupport);
   }
 };
 
@@ -1166,7 +1335,7 @@ const handleStopGeneration = async () => {
   }
 
   isLoading.value = false;
-  Message.info('已停止生成');
+  Message.info(pageText.value.stoppedGeneration);
 };
 
 // 处理重试消息
@@ -1178,7 +1347,7 @@ const handleRetry = async (message: ChatMessage) => {
   );
 
   if (msgIndex === -1) {
-    Message.warning('未找到对应的消息');
+    Message.warning(pageText.value.messageNotFound);
     return;
   }
 
@@ -1198,7 +1367,7 @@ const handleRetry = async (message: ChatMessage) => {
     }
 
     if (!foundUser) {
-      Message.warning('未找到对应的用户消息');
+      Message.warning(pageText.value.userMessageNotFound);
       return;
     }
     userMessage = foundUser;
@@ -1223,7 +1392,7 @@ const handleDeleteMessage = async (message: ChatMessage) => {
   );
 
   if (index === -1) {
-    Message.warning('未找到该消息');
+    Message.warning(pageText.value.deleteMessageNotFound);
     return;
   }
 
@@ -1239,14 +1408,14 @@ const handleDeleteMessage = async (message: ChatMessage) => {
 
   const messagesAfter = messages.value.length - index - 1;
   const confirmContent = messagesAfter > 0
-    ? `删除此消息将同时清除该消息之后的 ${messagesAfter} 条对话记录。是否继续？`
-    : '确定要删除这条消息吗？';
+    ? pageText.value.deleteCascadeConfirm(messagesAfter)
+    : pageText.value.deleteSingleConfirm;
 
   Modal.confirm({
-    title: '确认删除',
+    title: pageText.value.confirmDelete,
     content: confirmContent,
-    okText: '确认删除',
-    cancelText: '取消',
+    okText: pageText.value.confirmDeleteAction,
+    cancelText: pageText.value.cancel,
     okButtonProps: {
       status: 'danger',
     },
@@ -1263,7 +1432,7 @@ const handleDeleteMessage = async (message: ChatMessage) => {
           );
 
           if (response.status !== 'success') {
-            Message.warning('服务器回滚可能未完成，但本地消息已删除');
+            Message.warning(pageText.value.serverRollbackWarning);
           }
         }
 
@@ -1281,13 +1450,13 @@ const handleDeleteMessage = async (message: ChatMessage) => {
           localStorage.removeItem('langgraph_session_id');
           chatSessions.value = chatSessions.value.filter(s => s.id !== oldSessionId);
           saveSessionsToStorage();
-          Message.success('对话历史已清空');
+          Message.success(pageText.value.historyCleared);
         } else {
-          Message.success('消息已删除');
+          Message.success(pageText.value.messageDeleted);
         }
       } catch (error) {
         console.error('删除消息失败:', error);
-        Message.error('删除消息失败，请稍后重试');
+        Message.error(pageText.value.deleteMessageFailedRetry);
       } finally {
         safeStopLoading();
       }
@@ -1303,7 +1472,7 @@ const updateSessionInList = (id: string, firstMessage?: string, updateTime: bool
   }
 
   const existingIndex = chatSessions.value.findIndex(s => s.id === id);
-  const title = firstMessage ? (firstMessage.length > 20 ? `${firstMessage.substring(0, 20)}...` : firstMessage) : '新对话';
+  const title = firstMessage ? (firstMessage.length > 20 ? `${firstMessage.substring(0, 20)}...` : firstMessage) : pageText.value.newChat;
 
   if (existingIndex >= 0) {
     // 更新现有会话
@@ -1391,11 +1560,11 @@ const switchSession = async (id: string) => {
       // 更新会话信息（不更新时间，因为这是加载历史记录）
       updateSessionInList(id, undefined, false);
     } else {
-      Message.error('加载会话历史失败');
+      Message.error(pageText.value.loadSessionHistoryFailed);
     }
   } catch (error) {
     console.error('加载会话历史失败:', error);
-    Message.error('加载会话历史失败');
+    Message.error(pageText.value.loadSessionHistoryFailed);
   } finally {
     safeStopLoading();
   }
@@ -1415,17 +1584,17 @@ const createNewChat = () => {
 // 删除指定会话
 const deleteSession = async (id: string) => {
   Modal.confirm({
-    title: '确认删除',
-    content: '确定要删除此对话吗？此操作不可恢复。',
-    okText: '确认删除',
-    cancelText: '取消',
+    title: pageText.value.confirmDelete,
+    content: pageText.value.deleteSessionConfirmContent,
+    okText: pageText.value.confirmDeleteAction,
+    cancelText: pageText.value.cancel,
     okButtonProps: {
       status: 'danger',
     },
     async onOk() {
       try {
         if (!projectStore.currentProjectId) {
-          Message.error('没有选择项目，无法删除会话');
+          Message.error(pageText.value.noProjectCannotDeleteSession);
           return;
         }
 
@@ -1447,13 +1616,13 @@ const deleteSession = async (id: string) => {
           // 重新加载会话列表
           await loadSessionsFromServer();
 
-          Message.success('对话已删除');
+          Message.success(pageText.value.chatDeleted);
         } else {
-          Message.error('删除对话失败');
+          Message.error(pageText.value.deleteChatFailed);
         }
       } catch (error) {
         console.error('删除对话失败:', error);
-        Message.error('删除对话失败，请稍后重试');
+        Message.error(pageText.value.deleteChatFailedRetry);
       } finally {
         safeStopLoading();
       }
@@ -1465,7 +1634,7 @@ const deleteSession = async (id: string) => {
 const batchDeleteSessions = async (sessionIds: string[]) => {
   try {
     if (!projectStore.currentProjectId) {
-      Message.error('没有选择项目，无法删除会话');
+      Message.error(pageText.value.noProjectCannotDeleteSession);
       return;
     }
 
@@ -1491,16 +1660,16 @@ const batchDeleteSessions = async (sessionIds: string[]) => {
 
       // 显示结果消息
       if (failed_sessions.length === 0) {
-        Message.success(`成功删除 ${processed_sessions} 个对话`);
+        Message.success(pageText.value.deleteSuccessCount(processed_sessions));
       } else {
-        Message.warning(`删除完成：成功 ${processed_sessions - failed_sessions.length} 个，失败 ${failed_sessions.length} 个`);
+        Message.warning(pageText.value.deletePartialResult(processed_sessions - failed_sessions.length, failed_sessions.length));
       }
     } else {
-      Message.error('批量删除对话失败');
+      Message.error(pageText.value.batchDeleteFailed);
     }
   } catch (error) {
     console.error('批量删除对话失败:', error);
-    Message.error('批量删除对话失败，请稍后重试');
+    Message.error(pageText.value.batchDeleteFailedRetry);
   } finally {
     safeStopLoading();
   }
@@ -1512,10 +1681,10 @@ const clearChat = async () => {
 
   // 显示确认对话框
   Modal.confirm({
-    title: '确认删除',
-    content: '确定要删除此对话的所有历史记录吗？此操作不可恢复。',
-    okText: '确认删除',
-    cancelText: '取消',
+    title: pageText.value.confirmDelete,
+    content: pageText.value.clearChatConfirmContent,
+    okText: pageText.value.confirmDeleteAction,
+    cancelText: pageText.value.cancel,
     okButtonProps: {
       status: 'danger',
     },
@@ -1531,10 +1700,10 @@ const clearChat = async () => {
             chatSessions.value = chatSessions.value.filter(s => s.id !== sessionId.value);
             saveSessionsToStorage();
 
-            Message.success('对话历史已从服务器删除');
+            Message.success(pageText.value.historyDeletedOnServer);
           } else {
             // 即使服务器删除失败，我们仍然会清除本地状态
-            Message.warning('服务器删除可能未完成，但本地对话已清除');
+            Message.warning(pageText.value.historyLocalClearedWarning);
           }
         }
 
@@ -1544,7 +1713,7 @@ const clearChat = async () => {
         sessionId.value = '';
       } catch (error) {
         console.error('删除聊天历史失败:', error);
-        Message.error('删除聊天历史失败，请稍后重试');
+        Message.error(pageText.value.deleteHistoryFailedRetry);
       } finally {
         safeStopLoading();
       }
@@ -1572,12 +1741,12 @@ const handleSendMessage = async (data: {
   const { message } = data;
 
   if (!message.trim() && imageBase64List.length === 0) {
-    Message.warning('消息内容不能为空！');
+    Message.warning(pageText.value.messageEmpty);
     return;
   }
 
   if (!projectStore.currentProjectId) {
-    Message.error('请先选择一个项目');
+    Message.error(pageText.value.selectProjectFirst);
     return;
   }
 
@@ -1636,7 +1805,7 @@ const handleSendMessage = async (data: {
     requestData.top_k = topK.value;
   } else if (useKnowledgeBase.value && !selectedKnowledgeBaseId.value) {
     // 如果开启了知识库但没有选择知识库，提示用户
-    Message.warning('请先选择一个知识库');
+    Message.warning(pageText.value.selectKnowledgeBaseFirst);
     isLoading.value = false;
     return;
   }
@@ -1864,10 +2033,10 @@ const handleNormalMessage = async (requestData: ChatRequest, originalMessage: st
       }
     } else {
       const errorMessages = response.errors ? Object.values(response.errors).flat().join('; ') : '';
-      const errorMessage = `${response.message}${errorMessages ? ` (${errorMessages})` : ''}` || '发送消息失败';
+      const errorMessage = `${response.message}${errorMessages ? ` (${errorMessages})` : ''}` || pageText.value.sendFailed;
       Message.error(errorMessage);
       messages.value.push({
-        content: `错误: ${response.message || '发送失败'}`,
+        content: `${pageText.value.errorPrefix}: ${response.message || pageText.value.sendFailureShort}`,
         isUser: false,
         time: getCurrentTime(),
         messageType: 'ai'
@@ -1878,10 +2047,10 @@ const handleNormalMessage = async (requestData: ChatRequest, originalMessage: st
     messages.value.splice(loadingMessageIndex, 1);
 
     console.error('Error sending chat message:', error);
-    const errorDetail = error.response?.data?.message || error.message || '发送消息失败';
+    const errorDetail = error.response?.data?.message || error.message || pageText.value.sendFailed;
     Message.error(errorDetail);
     messages.value.push({
-      content: `错误: ${errorDetail}`,
+      content: `${pageText.value.errorPrefix}: ${errorDetail}`,
       isUser: false,
       time: getCurrentTime(),
       messageType: 'ai'
@@ -1910,17 +2079,20 @@ const loadCurrentLlmConfig = async () => {
   try {
     const response = await listLlmConfigs();
     if (response.status === 'success' && response.data) {
-      // 找到激活的配置
       const activeConfig = response.data.find(config => config.is_active);
       if (activeConfig) {
         currentLlmConfig.value = activeConfig;
       } else {
-        Message.warning('未找到激活的LLM配置');
+        currentLlmConfig.value = null;
+        Message.warning(pageText.value.noAvailableLlmConfig);
       }
+    } else {
+      currentLlmConfig.value = null;
+      Message.warning(response.message || pageText.value.noAvailableLlmConfig);
     }
   } catch (error) {
     console.error('获取LLM配置失败:', error);
-    Message.error('获取LLM配置失败');
+    Message.error(pageText.value.getLlmConfigFailed);
   }
 };
 
@@ -1952,7 +2124,7 @@ const checkPromptStatusAfterClose = async () => {
       
       // 如果还是没有提示词，提示用户
       if (!hasPrompts.value) {
-        Message.warning('请添加或初始化提示词后才能开始对话');
+        Message.warning(pageText.value.addPromptFirst);
       }
     }
   } catch (error) {
@@ -1969,18 +2141,18 @@ const handleUpdateSystemPrompt = async (configId: number, systemPrompt: string) 
     });
 
     if (response.status === 'success') {
-      Message.success('系统提示词更新成功');
+      Message.success(pageText.value.systemPromptUpdateSuccess);
       // 更新本地配置
       if (currentLlmConfig.value) {
         currentLlmConfig.value.system_prompt = systemPrompt;
       }
       closeSystemPromptModal();
     } else {
-      Message.error(response.message || '更新系统提示词失败');
+      Message.error(response.message || pageText.value.systemPromptUpdateFailed);
     }
   } catch (error) {
     console.error('更新系统提示词失败:', error);
-    Message.error('更新系统提示词失败');
+    Message.error(pageText.value.systemPromptUpdateFailed);
   } finally {
     isSystemPromptLoading.value = false;
   }
@@ -2285,10 +2457,49 @@ export default {
 
 .html-preview-wrapper {
   position: relative;
+  height: min(86vh, calc(100vh - 96px));
+  min-height: 320px;
+  background: #fff;
+  border: 1px solid #e5e6eb;
+  border-radius: 8px;
+  overflow: hidden;
 }
 
 .html-preview-iframe {
   display: block;
+  width: 100%;
+  height: 100%;
+  border: none;
+  border-radius: 0;
+  background: #fff;
+}
+
+.html-preview-wrapper:fullscreen {
+  width: 100vw;
+  height: 100vh;
+  border: none;
+  border-radius: 0;
+}
+
+.html-preview-wrapper:fullscreen .html-preview-iframe {
+  height: 100%;
+}
+
+.html-preview-wrapper:fullscreen .html-preview-fullscreen-btn {
+  top: 16px;
+  right: 16px;
+}
+
+:deep(.html-preview-modal .arco-modal-body) {
+  padding: 0 !important;
+  max-height: calc(100vh - 96px) !important;
+  overflow: hidden !important;
+}
+
+@media (max-width: 768px) {
+  :deep(.html-preview-modal .arco-modal-body) {
+    max-height: calc(100vh - 72px) !important;
+  }
 }
 
 .html-preview-fullscreen-btn {

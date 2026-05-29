@@ -77,7 +77,7 @@ services:
       # 如需使用 SQLite（本地开发），请设置 DATABASE_TYPE=sqlite
       - DATABASE_TYPE=${DATABASE_TYPE:-postgres}
       # SQLite 配置（DATABASE_TYPE=sqlite 时使用）
-      - DATABASE_PATH=/app/data/db.sqlite3
+      - DATABASE_PATH=${DATABASE_PATH:-/app/data/db.sqlite3}
       # PostgreSQL 配置（DATABASE_TYPE=postgres 时使用）
       - POSTGRES_HOST=${POSTGRES_HOST:-postgres}
       - POSTGRES_PORT=${POSTGRES_PORT:-5432}
@@ -85,7 +85,8 @@ services:
       - POSTGRES_USER=${POSTGRES_USER:-postgres}
       - POSTGRES_PASSWORD=${POSTGRES_PASSWORD:-postgres}
       # 其他配置
-      - MEDIA_ROOT=/app/data/media
+      - MEDIA_ROOT=${MEDIA_ROOT:-/app/data/media}
+      - LANGGRAPH_CHECKPOINT_SQLITE_PATH=${LANGGRAPH_CHECKPOINT_SQLITE_PATH:-/app/data/chat_history.sqlite}
       - DJANGO_DEBUG=True
       - DJANGO_SECRET_KEY=${DJANGO_SECRET_KEY:-django-insecure-change-this-in-production}
       - DJANGO_ALLOWED_HOSTS=${DJANGO_ALLOWED_HOSTS:-*}
@@ -139,7 +140,12 @@ services:
     environment:
       - PORT=3001
       - HOST=0.0.0.0
-      - WHARTTEST_BACKEND_URL=http://backend:8000
+      # weixin-plugin-host 回调后端的地址
+      # - Docker 全量部署（后端也在容器内）：http://backend:8000（使用 Docker 内部网络）
+      # - 本地开发（后端在宿主机上）：http://host.docker.internal:8000
+      #   注意：后端必须监听 0.0.0.0（不能是 127.0.0.1），否则容器无法访问
+      #   启动命令示例：uvicorn wharttest_django.asgi:application --host 0.0.0.0 --port 8000
+      - WHARTTEST_BACKEND_URL=${WHARTTEST_BACKEND_URL:-http://backend:8000}
       - WHARTTEST_API_KEY=${WHARTTEST_API_KEY:-wharttest-default-mcp-key-2025}
       - WHARTTEST_SHARED_DATA_DIR=/app/data
       - OPENCLAW_STATE_DIR=/app/data/openclaw-state
