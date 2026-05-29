@@ -136,15 +136,6 @@ async function main() {
     context: null,
     page: null,
   };
-  
-  // 页面状态快照，用于会话恢复
-  let savedPageState = {
-    url: null,
-    cookies: [],
-    localStorage: {},
-    sessionStorage: {},
-    timestamp: 0,
-  };
 
   async function loadDeps() {
     if (playwright && helpers) return;
@@ -167,12 +158,10 @@ async function main() {
   }
 
   function getContextOptionsWithHeaders(options = {}) {
-    const localeOptions = { locale: 'zh-CN' };
-    if (!helpers?.getExtraHeadersFromEnv) return { ...localeOptions, ...options };
+    if (!helpers?.getExtraHeadersFromEnv) return options;
     const extra = helpers.getExtraHeadersFromEnv();
-    if (!extra) return { ...localeOptions, ...options };
+    if (!extra) return options;
     return {
-      ...localeOptions,
       ...options,
       extraHTTPHeaders: {
         ...(extra || {}),
@@ -181,115 +170,10 @@ async function main() {
     };
   }
 
-  async function savePageState() {
-    try {
-      if (!state.page || typeof state.page.isClosed === 'function' && state.page.isClosed()) {
-        return;
-      }
-      
-      const url = await state.page.url();
-      const cookies = state.context ? await state.context.cookies() : [];
-      
-      const localStorage = await state.page.evaluate(() => {
-        const data = {};
-        for (let i = 0; i < localStorage.length; i++) {
-          const key = localStorage.key(i);
-          data[key] = localStorage.getItem(key);
-        }
-        return data;
-      }).catch(() => ({}));
-      
-      const sessionStorage = await state.page.evaluate(() => {
-        const data = {};
-        for (let i = 0; i < sessionStorage.length; i++) {
-          const key = sessionStorage.key(i);
-          data[key] = sessionStorage.getItem(key);
-        }
-        return data;
-      }).catch(() => ({}));
-      
-      savedPageState = {
-        url,
-        cookies,
-        localStorage,
-        sessionStorage,
-        timestamp: Date.now(),
-      };
-      
-      serverLog('[savePageState] 页面状态已保存:', url);
-    } catch (e) {
-      serverLog('[savePageState] 保存失败:', e.message);
-    }
-  }
-
-  async function restorePageState() {
-    if (!savedPageState.url || !state.page) {
-      serverLog('[restorePageState] 跳过恢复：无保存的 URL 或页面不存在');
-      return false;
-    }
-
-    if (state.page.isClosed && state.page.isClosed()) {
-      serverLog('[restorePageState] 跳过恢复：页面已关闭');
-      return false;
-    }
-
-    try {
-      serverLog('[restorePageState] 尝试恢复页面状态:', savedPageState.url);
-
-      // 设置 cookies
-      if (state.context && savedPageState.cookies && savedPageState.cookies.length > 0) {
-        try {
-          await state.context.addCookies(savedPageState.cookies);
-        } catch (cookieErr) {
-          serverLog('[restorePageState] 设置 cookies 失败:', cookieErr.message);
-        }
-      }
-
-      // 导航到保存的 URL（带超时）
-      await state.page.goto(savedPageState.url, { timeout: 30000, waitUntil: 'domcontentloaded' });
-
-      // 恢复 localStorage
-      if (savedPageState.localStorage && Object.keys(savedPageState.localStorage).length > 0) {
-        try {
-          await state.page.evaluate((data) => {
-            for (const [key, value] of Object.entries(data)) {
-              localStorage.setItem(key, value);
-            }
-          }, savedPageState.localStorage);
-        } catch (lsErr) {
-          serverLog('[restorePageState] 恢复 localStorage 失败:', lsErr.message);
-        }
-      }
-
-      // 恢复 sessionStorage
-      if (savedPageState.sessionStorage && Object.keys(savedPageState.sessionStorage).length > 0) {
-        try {
-          await state.page.evaluate((data) => {
-            for (const [key, value] of Object.entries(data)) {
-              sessionStorage.setItem(key, value);
-            }
-          }, savedPageState.sessionStorage);
-        } catch (ssErr) {
-          serverLog('[restorePageState] 恢复 sessionStorage 失败:', ssErr.message);
-        }
-      }
-
-      serverLog('[restorePageState] 页面状态恢复成功');
-      return true;
-    } catch (e) {
-      serverLog('[restorePageState] 恢复失败:', e.message);
-      // 清除保存的状态，避免误导
-      savedPageState = { url: null, cookies: [], localStorage: {}, sessionStorage: {}, timestamp: 0 };
-      return false;
-    }
-  }
-
   async function ensureBrowserContextPage() {
     await loadDeps();
-    
-    const wasConnected = state.browser && typeof state.browser.isConnected === 'function' && state.browser.isConnected();
 
-    if (!state.browser || !state.browser.isConnected()) {
+    if (!state.browser || (typeof state.browser.isConnected === 'function' && !state.browser.isConnected())) {
       const browserType = (process.env.PW_BROWSER_TYPE || 'chromium').toLowerCase();
       state.browser = await helpers.launchBrowser(browserType);
       state.context = null;
@@ -300,15 +184,8 @@ async function main() {
       state.context = await state.browser.newContext(getContextOptionsWithHeaders({}));
     }
 
-    const pageWasClosed = !state.page || (typeof state.page.isClosed === 'function' && state.page.isClosed());
-
-    if (pageWasClosed) {
+    if (!state.page || (typeof state.page.isClosed === 'function' && state.page.isClosed())) {
       state.page = await state.context.newPage();
-
-      // 如果之前有保存的页面状态，尝试恢复（无论是浏览器断开还是页面关闭）
-      if (savedPageState.url) {
-        await restorePageState();
-      }
     }
   }
 
@@ -455,21 +332,14 @@ state.page = page;
           }
 
           const result = await runUserCode(code);
-          
-          // 执行成功后保存页面状态，用于会话恢复
-          if (result.ok) {
-            await savePageState();
-          }
-          
           const pageUrl = state.page && typeof state.page.url === 'function' ? state.page.url() : null;
-          const hasSavedState = savedPageState.url ? true : false;
           send({
             id,
             ok: !!result.ok,
             stdout: result.stdout || [],
             stderr: result.stderr || [],
             error: result.error,
-            state: { pageUrl, hasSavedState },
+            state: { pageUrl },
           });
           return;
         }
