@@ -392,8 +392,8 @@ const addUserRules = {
     {
       validator: async (value: string, callback: (error?: string) => void) => {
         if (value && value.length >= 3) {
-          const exists = await checkUsernameExists(value);
-          if (exists) {
+          const result = await checkUsernameExists(value);
+          if (result.success && result.exists) {
             callback('用户名已存在');
           } else {
             callback();
@@ -525,8 +525,8 @@ const editUserRules = {
     {
       validator: async (value: string, callback: (error?: string) => void) => {
         if (value && value.length >= 3) {
-          const exists = await checkUsernameExists(value);
-          if (exists) {
+          const result = await checkUsernameExists(value);
+          if (result.success && result.exists) {
             callback('用户名已存在');
           } else {
             callback();
