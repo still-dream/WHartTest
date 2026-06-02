@@ -44,7 +44,6 @@
         </div>
       </div>
       <div class="user-info">
-        <AppLocaleToggle />
         <button
           type="button"
           class="theme-switch-button"
@@ -262,7 +261,6 @@ import { useThemeStore } from '@/store/themeStore';
 import { useEnvironmentStore } from '@/features/api-testing/stores/environmentStore';
 import { useAppI18n } from '@/composables/useAppI18n';
 import { brandLogoUrl } from '@/utils/assetUrl';
-import AppLocaleToggle from '@/components/AppLocaleToggle.vue';
 import {
   getCurrentVersion,
   formatVersion,

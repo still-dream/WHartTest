@@ -4,7 +4,6 @@ import {
   DEFAULT_APP_LOCALE,
   LOCALE_STORAGE_KEY,
   applyDocumentLanguage,
-  getSavedLocale,
   type AppLocale,
 } from '@/i18n';
 
@@ -28,7 +27,10 @@ export const useLocaleStore = defineStore('locale', () => {
   };
 
   const initializeLocale = () => {
-    setLocale(getSavedLocale());
+    if (isBrowser()) {
+      window.localStorage.removeItem(LOCALE_STORAGE_KEY);
+    }
+    setLocale(DEFAULT_APP_LOCALE);
   };
 
   return {

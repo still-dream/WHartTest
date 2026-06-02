@@ -115,6 +115,8 @@ services:
       start_period: 40s
 
   weixin-plugin-host:
+    # image: ${DOCKER_WEIXIN_PLUGIN_HOST_IMAGE:-ghcr.io/mgdaaslab/wharttest-weixin-plugin-host:latest}
+    # 如果需要本地构建，注释掉上面的image行，取消注释下面的build部分
     build:
       context: ./WHartTest_WeixinPluginHost
       dockerfile: Dockerfile
