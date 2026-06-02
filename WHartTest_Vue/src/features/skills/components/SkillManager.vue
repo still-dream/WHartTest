@@ -2,15 +2,19 @@
   <div class="skill-manager">
     <!-- 头部操作栏 -->
     <div class="header-bar">
-      <h3>Skills 管理</h3>
+      <h3>{{ text.title }}</h3>
       <a-space>
+        <a-button type="primary" status="success" @click="showStoreModal = true">
+          <template #icon><icon-storage /></template>
+          {{ text.skillStore }}
+        </a-button>
         <a-button @click="showGitImportModal = true">
           <template #icon><icon-github /></template>
-          从 Git 导入
+          {{ text.importFromGit }}
         </a-button>
         <a-button type="primary" @click="showUploadModal = true">
           <template #icon><icon-upload /></template>
-          上传 Skill
+          {{ text.uploadSkill }}
         </a-button>
       </a-space>
     </div>
@@ -19,7 +23,7 @@
     <a-spin :loading="loading">
       <div v-if="skills.length === 0" class="empty-state">
         <icon-apps style="font-size: 48px; color: #c0c4cc" />
-        <p>暂无 Skills，点击上方按钮上传</p>
+        <p>{{ text.emptyState }}</p>
       </div>
 
       <div v-else class="skill-list">
@@ -50,7 +54,7 @@
                 <icon-eye />
               </a-button>
               <a-popconfirm
-                content="确定删除此 Skill 吗？"
+                :content="text.deleteConfirm"
                 @ok="handleDelete(skill)"
               >
                 <a-button type="text" size="mini" status="danger">
@@ -66,9 +70,11 @@
     <!-- 上传弹窗 -->
     <a-modal
       v-model:visible="showUploadModal"
-      title="上传 Skill"
+      :title="text.uploadSkill"
       :width="500"
       @ok="handleUpload"
+      :ok-text="text.confirm"
+      :cancel-text="text.cancel"
       :confirm-loading="uploading"
     >
       <div class="upload-container">
@@ -82,8 +88,8 @@
         <div class="upload-area" @click="triggerFileInput">
           <icon-upload style="font-size: 32px" />
           <div class="upload-text">
-            <div>点击选择 zip 文件</div>
-            <div class="upload-tip">支持 zip 内包含一个或多个 Skill</div>
+            <div>{{ text.selectZipFile }}</div>
+            <div class="upload-tip">{{ text.uploadTip }}</div>
           </div>
         </div>
         <div v-if="selectedFile" class="selected-file">
@@ -99,7 +105,7 @@
     <!-- 内容查看弹窗 -->
     <a-modal
       v-model:visible="showContentModal"
-      :title="currentSkillContent?.name || 'Skill 内容'"
+      :title="currentSkillContent?.name || text.skillContent"
       :width="700"
       :footer="false"
     >
@@ -113,41 +119,121 @@
     <!-- Git 导入弹窗 -->
     <a-modal
       v-model:visible="showGitImportModal"
-      title="从 Git 导入 Skill"
+      :title="text.importSkillFromGit"
       :width="500"
       @ok="handleGitImport"
+      :ok-text="text.confirm"
+      :cancel-text="text.cancel"
       :confirm-loading="importing"
     >
       <a-form :model="{ gitUrl, gitBranch }" layout="vertical">
-        <a-form-item label="Git 仓库地址" required>
+        <a-form-item :label="text.gitRepoUrl" required>
           <a-input
             v-model="gitUrl"
-            placeholder="https://github.com/username/repo"
+            :placeholder="text.gitRepoUrlPlaceholder"
           />
           <template #extra>
-            <span class="form-tip">支持任何可公开访问的 Git 仓库</span>
+            <span class="form-tip">{{ text.gitRepoTip }}</span>
           </template>
         </a-form-item>
-        <a-form-item label="分支">
+        <a-form-item :label="text.branch">
           <a-input
             v-model="gitBranch"
-            placeholder="main（默认）"
+            :placeholder="text.branchPlaceholder"
           />
         </a-form-item>
       </a-form>
     </a-modal>
+
+    <!-- Skill 商店弹窗 -->
+    <SkillStoreModal
+      v-model:visible="showStoreModal"
+      :project-id="props.projectId"
+      :installed-skills="skills"
+      @skills-changed="fetchSkills"
+    />
   </div>
 </template>
 
 <script setup lang="ts">
-import { ref, onMounted } from 'vue'
+import { ref, onMounted, computed } from 'vue'
 import { Message } from '@arco-design/web-vue'
 import { SkillService } from '../services/skillService'
+import SkillStoreModal from './SkillStoreModal.vue'
 import type { SkillListItem } from '../types'
+import { useAppI18n } from '@/composables/useAppI18n'
 
 const props = defineProps<{
   projectId: number
 }>()
+const { isEnglish } = useAppI18n()
+const text = computed(() => (
+  isEnglish.value
+    ? {
+        title: 'Skills Management',
+        skillStore: 'Skill Hub',
+        importFromGit: 'Import from Git',
+        uploadSkill: 'Upload Skill',
+        emptyState: 'No Skills yet. Click the button above to upload',
+        deleteConfirm: 'Delete this Skill?',
+        confirm: 'Confirm',
+        cancel: 'Cancel',
+        selectZipFile: 'Click to select a zip file',
+        uploadTip: 'The zip can contain one or more Skills',
+        skillContent: 'Skill Content',
+        importSkillFromGit: 'Import Skill from Git',
+        gitRepoUrl: 'Git repository URL',
+        gitRepoUrlPlaceholder: 'https://github.com/username/repo',
+        gitRepoTip: 'Any publicly accessible Git repository is supported',
+        branch: 'Branch',
+        branchPlaceholder: 'main (default)',
+        fetchSkillsFailed: 'Failed to fetch Skills',
+        selectFile: 'Select a file',
+        uploadSuccess: (count: number, names: string) => `Uploaded ${count} Skill(s) successfully: ${names}`,
+        uploadFailed: 'Upload failed',
+        enabled: 'Enabled',
+        disabled: 'Disabled',
+        operationFailed: 'Operation failed',
+        deleteSuccess: 'Deleted successfully',
+        deleteFailed: 'Delete failed',
+        fetchContentFailed: 'Failed to fetch content',
+        gitRepoRequired: 'Enter a Git repository URL',
+        importSuccess: (count: number, names: string) => `Imported ${count} Skill(s) successfully: ${names}`,
+        importFailed: 'Import failed',
+      }
+    : {
+        title: 'Skills 管理',
+        skillStore: 'Skill 中心',
+        importFromGit: '从 Git 导入',
+        uploadSkill: '上传 Skill',
+        emptyState: '暂无 Skills，点击上方按钮上传',
+        deleteConfirm: '确定删除此 Skill 吗？',
+        confirm: '确认',
+        cancel: '取消',
+        selectZipFile: '点击选择 zip 文件',
+        uploadTip: '支持 zip 内包含一个或多个 Skill',
+        skillContent: 'Skill 内容',
+        importSkillFromGit: '从 Git 导入 Skill',
+        gitRepoUrl: 'Git 仓库地址',
+        gitRepoUrlPlaceholder: 'https://github.com/username/repo',
+        gitRepoTip: '支持任何可公开访问的 Git 仓库',
+        branch: '分支',
+        branchPlaceholder: 'main（默认）',
+        fetchSkillsFailed: '获取 Skills 失败',
+        selectFile: '请选择文件',
+        uploadSuccess: (count: number, names: string) => `成功上传 ${count} 个 Skill: ${names}`,
+        uploadFailed: '上传失败',
+        enabled: '已启用',
+        disabled: '已禁用',
+        operationFailed: '操作失败',
+        deleteSuccess: '删除成功',
+        deleteFailed: '删除失败',
+        fetchContentFailed: '获取内容失败',
+        gitRepoRequired: '请输入 Git 仓库地址',
+        importSuccess: (count: number, names: string) => `成功导入 ${count} 个 Skill: ${names}`,
+        importFailed: '导入失败',
+      }
+))
 
 const loading = ref(false)
 const uploading = ref(false)
@@ -158,6 +244,7 @@ const selectedFile = ref<File | null>(null)
 const fileInputRef = ref<HTMLInputElement | null>(null)
 const currentSkillContent = ref<{ name: string; description: string; content: string } | null>(null)
 const showGitImportModal = ref(false)
+const showStoreModal = ref(false)
 const gitUrl = ref('')
 const gitBranch = ref('')
 const importing = ref(false)
@@ -167,7 +254,7 @@ const fetchSkills = async () => {
   try {
     skills.value = await SkillService.getSkills(props.projectId)
   } catch (e: any) {
-    Message.error(e.message || '获取 Skills 失败')
+    Message.error(e.message || text.value.fetchSkillsFailed)
   } finally {
     loading.value = false
   }
@@ -186,7 +273,7 @@ const handleFileChange = (e: Event) => {
 
 const handleUpload = async () => {
   if (!selectedFile.value) {
-    Message.warning('请选择文件')
+    Message.warning(text.value.selectFile)
     return
   }
 
@@ -195,12 +282,12 @@ const handleUpload = async () => {
     const skills = await SkillService.uploadSkill(props.projectId, selectedFile.value)
     const count = skills.length
     const names = skills.map(s => s.name).join(', ')
-    Message.success(`成功上传 ${count} 个 Skill: ${names}`)
+    Message.success(text.value.uploadSuccess(count, names))
     showUploadModal.value = false
     selectedFile.value = null
     await fetchSkills()
   } catch (e: any) {
-    Message.error(e.message || '上传失败')
+    Message.error(e.message || text.value.uploadFailed)
   } finally {
     uploading.value = false
   }
@@ -209,20 +296,20 @@ const handleUpload = async () => {
 const handleToggle = async (skill: SkillListItem, isActive: boolean) => {
   try {
     await SkillService.toggleSkill(props.projectId, skill.id, isActive)
-    Message.success(isActive ? '已启用' : '已禁用')
+    Message.success(isActive ? text.value.enabled : text.value.disabled)
   } catch (e: any) {
     skill.is_active = !isActive
-    Message.error(e.message || '操作失败')
+    Message.error(e.message || text.value.operationFailed)
   }
 }
 
 const handleDelete = async (skill: SkillListItem) => {
   try {
     await SkillService.deleteSkill(props.projectId, skill.id)
-    Message.success('删除成功')
+    Message.success(text.value.deleteSuccess)
     await fetchSkills()
   } catch (e: any) {
-    Message.error(e.message || '删除失败')
+    Message.error(e.message || text.value.deleteFailed)
   }
 }
 
@@ -231,17 +318,17 @@ const handleViewContent = async (skill: SkillListItem) => {
     currentSkillContent.value = await SkillService.getSkillContent(props.projectId, skill.id)
     showContentModal.value = true
   } catch (e: any) {
-    Message.error(e.message || '获取内容失败')
+    Message.error(e.message || text.value.fetchContentFailed)
   }
 }
 
 const formatDate = (dateStr: string) => {
-  return new Date(dateStr).toLocaleDateString('zh-CN')
+  return new Date(dateStr).toLocaleDateString(isEnglish.value ? 'en-US' : 'zh-CN')
 }
 
 const handleGitImport = async () => {
   if (!gitUrl.value.trim()) {
-    Message.warning('请输入 Git 仓库地址')
+    Message.warning(text.value.gitRepoRequired)
     return
   }
 
@@ -254,13 +341,13 @@ const handleGitImport = async () => {
     )
     const count = skills.length
     const names = skills.map(s => s.name).join(', ')
-    Message.success(`成功导入 ${count} 个 Skill: ${names}`)
+    Message.success(text.value.importSuccess(count, names))
     showGitImportModal.value = false
     gitUrl.value = ''
     gitBranch.value = ''
     await fetchSkills()
   } catch (e: any) {
-    Message.error(e.message || '导入失败')
+    Message.error(e.message || text.value.importFailed)
   } finally {
     importing.value = false
   }

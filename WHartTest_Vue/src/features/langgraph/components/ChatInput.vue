@@ -10,20 +10,20 @@
       </div>
     </div>
 
-    <div v-if="imagePreviews.length > 0" class="image-preview-wrapper">
-      <div class="image-preview-header">
-        <span class="image-preview-count">已选择 {{ imagePreviews.length }} 张图片</span>
-        <a-button type="text" size="mini" class="clear-images-btn" @click="clearImages">
-          清空
-        </a-button>
-      </div>
+      <div v-if="imagePreviews.length > 0" class="image-preview-wrapper">
+        <div class="image-preview-header">
+          <span class="image-preview-count">{{ text.selectedImages(imagePreviews.length) }}</span>
+          <a-button type="text" size="mini" class="clear-images-btn" @click="clearImages">
+            {{ text.clear }}
+          </a-button>
+        </div>
       <div class="image-preview-list">
         <div
           v-for="(preview, index) in imagePreviews"
           :key="`${preview}-${index}`"
           class="image-preview"
         >
-          <img :src="preview" :alt="`预览图片 ${index + 1}`" />
+          <img :src="preview" :alt="text.previewImageAlt(index + 1)" />
           <span class="image-order-badge">{{ index + 1 }}</span>
           <a-button
             class="remove-image-btn"
@@ -47,7 +47,7 @@
       <div class="textarea-wrapper">
         <a-textarea
           v-model="inputMessage"
-          :placeholder="supportsVision ? '输入消息、拖拽、粘贴或选择图片... (Shift+Enter换行，Enter发送)' : '请输入你的消息... (Shift+Enter换行，Enter发送)'"
+          :placeholder="supportsVision ? text.visionPlaceholder : text.textPlaceholder"
           :disabled="isLoading"
           class="chat-input"
           :auto-size="{ minRows: 1, maxRows: 6 }"
@@ -57,7 +57,7 @@
 
         <div v-if="isDragOver && supportsVision" class="drag-overlay">
           <icon-image class="drag-icon" />
-          <span>释放以上传图片</span>
+          <span>{{ text.dropToUpload }}</span>
         </div>
       </div>
 
@@ -84,7 +84,7 @@
           @click="openFilePicker"
         >
           <template #icon><icon-image /></template>
-          <span>图片</span>
+          <span>{{ text.image }}</span>
         </a-button>
 
         <a-button
@@ -94,7 +94,7 @@
           @click="handleSendMessage"
         >
           <template #icon><icon-send /></template>
-          <span>发送</span>
+          <span>{{ text.send }}</span>
         </a-button>
         <a-button
           v-else
@@ -104,7 +104,7 @@
           @click="handleStopGeneration"
         >
           <template #icon><icon-record-stop /></template>
-          <span>停止</span>
+          <span>{{ text.stop }}</span>
         </a-button>
       </div>
     </div>
@@ -112,7 +112,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref } from 'vue';
+import { ref, computed } from 'vue';
 import {
   Textarea as ATextarea,
   Button as AButton,
@@ -120,6 +120,7 @@ import {
 } from '@arco-design/web-vue';
 import { IconImage, IconClose, IconReply, IconSend, IconRecordStop } from '@arco-design/web-vue/es/icon';
 import TokenUsageIndicator from './TokenUsageIndicator.vue';
+import { useAppI18n } from '@/composables/useAppI18n';
 
 interface ChatMessage {
   content: string;
@@ -146,6 +147,56 @@ const props = withDefaults(defineProps<Props>(), {
   contextLimit: 128000,
   quotedMessage: null
 });
+const { isEnglish } = useAppI18n();
+const text = computed(() => (
+  isEnglish.value
+    ? {
+        selectedImages: (count: number) => `${count} image(s) selected`,
+        clear: 'Clear',
+        previewImageAlt: (index: number) => `Preview image ${index}`,
+        visionPlaceholder: 'Type a message, drag, paste, or select images... (Shift+Enter newline, Enter send)',
+        textPlaceholder: 'Type your message... (Shift+Enter newline, Enter send)',
+        dropToUpload: 'Release to upload images',
+        image: 'Image',
+        send: 'Send',
+        stop: 'Stop',
+        emptyMessageOrImage: 'Enter a message or upload images',
+        modelNoVision: 'Current AI model does not support image input.\nRemove images or switch to a multimodal model.\n(Recommended: GPT-4V, Claude 3, Gemini Vision, Qwen-VL)',
+        imageProcessFailed: 'Image processing failed, please retry',
+        viewImagePrompt: 'Please check the image',
+        onlyImageAllowed: 'Only image files are allowed',
+        imageTooLarge: 'Image size cannot exceed 10MB',
+        imageFormatInvalid: 'Only JPG, PNG, and GIF images are supported',
+        duplicateImage: (name: string) => `${name} already exists, no need to upload again`,
+        previewFailed: 'Failed to generate image preview, please retry',
+        modelNoVisionShort: 'Current AI model does not support image input.\nSelect a multimodal model in model management (such as GPT-4V, Claude 3, Qwen-VL).',
+        modelNoVisionPaste: 'Current AI model does not support image input.\nSelect a multimodal model in model management.\n(Recommended: GPT-4V, Claude 3, Gemini Vision, Qwen-VL)',
+        imagePasted: (count: number) => (count === 1 ? 'Image pasted' : `${count} images pasted`),
+      }
+    : {
+        selectedImages: (count: number) => `已选择 ${count} 张图片`,
+        clear: '清空',
+        previewImageAlt: (index: number) => `预览图片 ${index}`,
+        visionPlaceholder: '输入消息、拖拽、粘贴或选择图片... (Shift+Enter换行，Enter发送)',
+        textPlaceholder: '请输入你的消息... (Shift+Enter换行，Enter发送)',
+        dropToUpload: '释放以上传图片',
+        image: '图片',
+        send: '发送',
+        stop: '停止',
+        emptyMessageOrImage: '请输入消息或上传图片！',
+        modelNoVision: '❌ 当前AI模型不支持图片输入\n请先移除图片或切换到支持多模态的模型\n（推荐：GPT-4V、Claude 3、Gemini Vision、Qwen-VL）',
+        imageProcessFailed: '图片处理失败，请重试',
+        viewImagePrompt: '请查看图片',
+        onlyImageAllowed: '只能上传图片文件',
+        imageTooLarge: '图片大小不能超过10MB',
+        imageFormatInvalid: '仅支持JPG、PNG、GIF格式的图片',
+        duplicateImage: (name: string) => `${name} 已存在，无需重复上传`,
+        previewFailed: '图片预览生成失败，请重试',
+        modelNoVisionShort: '💡 当前AI模型不支持图片输入\n请在模型管理中选择支持多模态的模型（如GPT-4V、Claude 3、Qwen-VL等）',
+        modelNoVisionPaste: '💡 当前AI模型不支持图片输入\n请在模型管理中选择支持多模态的模型\n（推荐：GPT-4V、Claude 3、Gemini Vision、Qwen-VL）',
+        imagePasted: (count: number) => (count === 1 ? '图片已粘贴' : `已粘贴 ${count} 张图片`),
+      }
+));
 
 const emit = defineEmits<{
   'send-message': [data: {
@@ -193,15 +244,13 @@ const handleSendMessage = async () => {
   const message = inputMessage.value.trim();
 
   if (!message && imageFiles.value.length === 0) {
-    Message.warning('请输入消息或上传图片！');
+    Message.warning(text.value.emptyMessageOrImage);
     return;
   }
 
   if (imageFiles.value.length > 0 && !props.supportsVision) {
     Message.error({
-      content: '❌ 当前AI模型不支持图片输入\n' +
-               '请先移除图片或切换到支持多模态的模型\n' +
-               '（推荐：GPT-4V、Claude 3、Gemini Vision、Qwen-VL）',
+      content: text.value.modelNoVision,
       duration: 5000
     });
     return;
@@ -216,13 +265,13 @@ const handleSendMessage = async () => {
       imageBase64List = results.map((result) => result.base64);
       imageDataUrlList = results.map((result) => result.dataUrl);
     } catch {
-      Message.error('图片处理失败，请重试');
+      Message.error(text.value.imageProcessFailed);
       return;
     }
   }
 
   emit('send-message', {
-    message: message || '请查看图片',
+    message: message || text.value.viewImagePrompt,
     image: imageBase64List[0],
     imageDataUrl: imageDataUrlList[0],
     images: imageBase64List,
@@ -273,24 +322,24 @@ const handleKeyDown = (event: KeyboardEvent) => {
 
 const validateImageFile = (file: File) => {
   if (!file.type.startsWith('image/')) {
-    Message.error('只能上传图片文件');
+    Message.error(text.value.onlyImageAllowed);
     return false;
   }
 
   const maxSize = 10 * 1024 * 1024;
   if (file.size > maxSize) {
-    Message.error('图片大小不能超过10MB');
+    Message.error(text.value.imageTooLarge);
     return false;
   }
 
   const validTypes = ['image/jpeg', 'image/png', 'image/gif'];
   if (!validTypes.includes(file.type)) {
-    Message.error('仅支持JPG、PNG、GIF格式的图片');
+    Message.error(text.value.imageFormatInvalid);
     return false;
   }
 
   if (isDuplicateImageFile(file)) {
-    Message.warning(`${file.name} 已存在，无需重复上传`);
+    Message.warning(text.value.duplicateImage(file.name));
     return false;
   }
 
@@ -308,7 +357,7 @@ const appendImageFiles = async (files: File[]) => {
     imageFiles.value = [...imageFiles.value, ...validFiles];
     imagePreviews.value = [...imagePreviews.value, ...previews];
   } catch {
-    Message.error('图片预览生成失败，请重试');
+    Message.error(text.value.previewFailed);
   }
 };
 
@@ -341,7 +390,7 @@ const handleDrop = (e: DragEvent) => {
 
   if (!props.supportsVision) {
     Message.warning({
-      content: '💡 当前AI模型不支持图片输入\n请在模型管理中选择支持多模态的模型（如GPT-4V、Claude 3、Qwen-VL等）',
+      content: text.value.modelNoVisionShort,
       duration: 4000
     });
     return;
@@ -382,14 +431,14 @@ const handlePaste = (e: ClipboardEvent) => {
 
   if (!props.supportsVision) {
     Message.warning({
-      content: '💡 当前AI模型不支持图片输入\n请在模型管理中选择支持多模态的模型\n（推荐：GPT-4V、Claude 3、Gemini Vision、Qwen-VL）',
+      content: text.value.modelNoVisionPaste,
       duration: 4000
     });
     return;
   }
 
   void appendImageFiles(imageFilesFromClipboard);
-  Message.success(imageFilesFromClipboard.length === 1 ? '图片已粘贴' : `已粘贴 ${imageFilesFromClipboard.length} 张图片`);
+  Message.success(text.value.imagePasted(imageFilesFromClipboard.length));
 };
 </script>
 

@@ -130,6 +130,7 @@ def create_llm_instance(active_config, temperature=0.7):
     根据配置创建LLM实例
     支持多供应商：
     - openai_compatible: ChatOpenAI（OpenAI兼容协议）
+    - deepseek: ChatDeepSeek（DeepSeek 原生适配）
     - qwen: ChatQwen（阿里云百炼通义千问）
 
     关键参数说明：
@@ -145,10 +146,32 @@ def create_llm_instance(active_config, temperature=0.7):
     max_retries = getattr(active_config, "max_retries", None) or 3
 
     base_url = (active_config.api_url or "").strip() or None
+    if provider == "deepseek" and base_url and base_url.rstrip("/") == "https://api.deepseek.com":
+        base_url = "https://api.deepseek.com/v1"
     api_key = (active_config.api_key or "").strip()
 
     try:
-        if provider == "qwen":
+        if provider == "deepseek":
+            try:
+                from .deepseek_chat_model import ReasoningCompatibleChatDeepSeek
+            except ImportError as e:
+                raise ImportError(
+                    "DeepSeek provider requires langchain-deepseek. Please install dependencies from requirements.txt."
+                ) from e
+
+            llm_kwargs = {
+                "model": model_identifier,
+                "temperature": temperature,
+                "timeout": request_timeout,
+                "max_retries": max_retries,
+            }
+            if api_key:
+                llm_kwargs["api_key"] = api_key
+            if base_url:
+                llm_kwargs["api_base"] = base_url
+
+            llm = ReasoningCompatibleChatDeepSeek(**llm_kwargs)
+        elif provider == "qwen":
             try:
                 from langchain_qwq import ChatQwen
             except ImportError as e:

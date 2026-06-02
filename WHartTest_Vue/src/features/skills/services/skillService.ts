@@ -6,7 +6,8 @@ import type {
   SkillGitImportResponse,
   SkillListResponse,
   SkillDetailResponse,
-  SkillContentResponse
+  SkillContentResponse,
+  SkillStoreConfig
 } from '../types'
 
 export class SkillService {
@@ -87,6 +88,48 @@ export class SkillService {
       return Array.isArray(api.data) ? api.data : [api.data]
     }
     throw new Error(api?.message || response.error || '从 Git 导入 Skill 失败')
+  }
+
+  /**
+   * 从远程 zip URL 导入 Skill（用于 Skill 商店）
+   */
+  static async importFromZipUrl(
+    projectId: number,
+    zipUrl: string,
+    sha256?: string
+  ): Promise<Skill[]> {
+    const payload: { zip_url: string; sha256?: string } = { zip_url: zipUrl }
+    if (sha256) {
+      payload.sha256 = sha256
+    }
+
+    const response = await request<SkillGitImportResponse>({
+      url: `/projects/${projectId}/skills/import-zip-url/`,
+      method: 'POST',
+      data: payload
+    })
+
+    const api = response.data as any
+    if (response.success && api?.data) {
+      return Array.isArray(api.data) ? api.data : [api.data]
+    }
+    throw new Error(api?.message || response.error || '从 zip URL 导入 Skill 失败')
+  }
+
+  /**
+   * 获取 Skill 商店配置（默认源等）
+   */
+  static async getStoreConfig(projectId: number): Promise<SkillStoreConfig> {
+    const response = await request<{ code: number; message: string; data: SkillStoreConfig }>({
+      url: `/projects/${projectId}/skills/store-config/`,
+      method: 'GET'
+    })
+
+    const api = response.data as any
+    if (response.success && api?.data) {
+      return api.data
+    }
+    throw new Error(api?.message || response.error || '获取 Skill 中心配置失败')
   }
 
   /**

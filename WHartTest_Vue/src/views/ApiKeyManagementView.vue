@@ -3,14 +3,14 @@
     <div class="page-header">
       <div class="search-box">
         <a-input-search
-          placeholder="搜索Key名称"
+          :placeholder="pageText.searchPlaceholder"
           allow-clear
           style="width: 300px"
           @search="onSearch"
         />
       </div>
       <div class="action-buttons">
-        <a-button type="primary" @click="showAddApiKeyModal">创建Key</a-button>
+        <a-button type="primary" @click="showAddApiKeyModal">{{ pageText.createKey }}</a-button>
       </div>
     </div>
 
@@ -30,7 +30,7 @@
             <span v-else>{{ maskApiKey(record.key) }}</span>
           </div>
           <div class="key-actions">
-            <a-tooltip content="显示/隐藏">
+            <a-tooltip :content="pageText.showOrHide">
               <a-button
                 type="text"
                 size="mini"
@@ -42,7 +42,7 @@
                 </template>
               </a-button>
             </a-tooltip>
-            <a-tooltip content="复制">
+            <a-tooltip :content="pageText.copy">
               <a-button
                 type="text"
                 size="mini"
@@ -55,17 +55,17 @@
         </div>
       </template>
       <template #expires_at="{ record }">
-        <span>{{ record.expires_at ? formatDate(record.expires_at) : '永不过期' }}</span>
+        <span>{{ record.expires_at ? formatDate(record.expires_at) : pageText.neverExpires }}</span>
       </template>
       <template #is_active="{ record }">
         <a-tag :color="record.is_active ? 'green' : 'gray'">
-          {{ record.is_active ? '启用' : '禁用' }}
+          {{ record.is_active ? pageText.enabled : pageText.disabled }}
         </a-tag>
       </template>
       <template #operations="{ record }">
         <a-space>
-          <a-button type="primary" size="small" @click="editApiKey(record)">编辑</a-button>
-          <a-button type="primary" status="danger" size="small" @click="handleDelete(record)">删除</a-button>
+          <a-button type="primary" size="small" @click="editApiKey(record)">{{ pageText.edit }}</a-button>
+          <a-button type="primary" status="danger" size="small" @click="handleDelete(record)">{{ pageText.delete }}</a-button>
         </a-space>
       </template>
     </a-table>
@@ -73,7 +73,9 @@
     <!-- 添加/编辑 API Key 的模态框 -->
     <a-modal
       v-model:visible="apiKeyModalVisible"
-      :title="isEditMode ? '编辑 Key' : '创建 Key'"
+      :title="isEditMode ? pageText.editKeyTitle : pageText.createKeyTitle"
+      :ok-text="pageText.confirm"
+      :cancel-text="pageText.cancel"
       @cancel="resetForm"
       @before-ok="handleSubmit"
     >
@@ -86,26 +88,26 @@
         :label-col-props="{ span: 6 }"
         :wrapper-col-props="{ span: 18 }"
       >
-        <a-form-item field="name" label="名称" validate-trigger="blur">
-          <a-input v-model="formData.name" placeholder="请输入Key名称" />
+        <a-form-item field="name" :label="pageText.name" validate-trigger="blur">
+          <a-input v-model="formData.name" :placeholder="pageText.enterKeyName" />
         </a-form-item>
-        <a-form-item field="expires_at" label="过期时间">
+        <a-form-item field="expires_at" :label="pageText.expiresAt">
           <a-date-picker
             v-model="formData.expires_at"
             show-time
             format="YYYY-MM-DD HH:mm:ss"
-            placeholder="选择过期时间 (留空为永不过期)"
+            :placeholder="pageText.expiresAtPlaceholder"
             :show-confirm-btn="false"
             style="width: 100%"
           />
         </a-form-item>
-        <a-form-item field="is_active" label="状态">
+        <a-form-item field="is_active" :label="pageText.status">
           <a-switch v-model="formData.is_active" />
         </a-form-item>
       </a-form>
 
       <div v-if="newApiKey" class="new-apikey-box">
-        <div class="new-apikey-title">您的新Key已创建（仅显示一次）</div>
+        <div class="new-apikey-title">{{ pageText.newKeyCreated }}</div>
         <div class="new-apikey-content">
           <a-input-password
             v-model="newApiKey"
@@ -117,7 +119,7 @@
         <div class="new-apikey-actions">
           <a-button type="primary" size="small" @click="copyApiKey(newApiKey)">
             <template #icon><icon-copy /></template>
-            复制
+            {{ pageText.copy }}
           </a-button>
         </div>
       </div>
@@ -126,11 +128,13 @@
     <!-- 删除确认对话框 -->
     <a-modal
       v-model:visible="deleteModalVisible"
-      title="删除确认"
+      :title="pageText.deleteConfirmTitle"
+      :ok-text="pageText.confirm"
+      :cancel-text="pageText.cancel"
       @ok="confirmDelete"
       simple
     >
-      <p>确定要删除Key "{{ selectedApiKey?.name }}" 吗？此操作不可恢复。</p>
+      <p>{{ pageText.deleteConfirmContent(selectedApiKey?.name || '') }}</p>
     </a-modal>
   </div>
 </template>
@@ -161,8 +165,103 @@ import {
   type ApiKey
 } from '@/services/apiKeyService';
 import { useProjectStore } from '@/store/projectStore';
+import { useAppI18n } from '@/composables/useAppI18n';
 
 const projectStore = useProjectStore();
+const { isEnglish } = useAppI18n();
+const pageText = computed(() => (
+  isEnglish.value
+    ? {
+        searchPlaceholder: 'Search key name',
+        createKey: 'Create key',
+        showOrHide: 'Show/Hide',
+        copy: 'Copy',
+        neverExpires: 'Never expires',
+        enabled: 'Enabled',
+        disabled: 'Disabled',
+        edit: 'Edit',
+        delete: 'Delete',
+        editKeyTitle: 'Edit key',
+        createKeyTitle: 'Create key',
+        confirm: 'Confirm',
+        cancel: 'Cancel',
+        name: 'Name',
+        enterKeyName: 'Enter key name',
+        expiresAt: 'Expires at',
+        expiresAtPlaceholder: 'Select expiration time (leave empty for no expiration)',
+        status: 'Status',
+        newKeyCreated: 'Your new key has been created and will only be shown once',
+        keyId: 'Key ID',
+        keyName: 'Name',
+        keyValue: 'Key',
+        createdAt: 'Created at',
+        actions: 'Actions',
+        keyNameRequired: 'Key name is required',
+        keyNameTooLong: 'Key name cannot exceed 100 characters',
+        deleteSuccess: 'Deleted successfully',
+        deleteFailed: 'Failed to delete',
+        unknownError: 'Unknown error',
+        keyCopied: 'Key copied to clipboard',
+        copyFailed: 'Copy failed, please copy it manually',
+        deleteConfirmTitle: 'Confirm deletion',
+        deleteConfirmContent: (name: string) => `Delete key "${name}"? This action cannot be undone.`,
+        confirmDeleteContent: (name: string) => `Delete key: ${name}?`,
+        updateSuccess: 'Updated successfully',
+        updateFailed: 'Failed to update',
+        createSuccess: 'Created successfully',
+        createFailed: 'Failed to create',
+        createdButMissingFullKey: 'Key was created, but the full key could not be displayed',
+        operationFailed: 'Operation failed',
+        noKeyData: 'No key data',
+        fetchKeyListFailed: 'Failed to fetch key list',
+        keyVisibleWarning: 'Key is visible. Please keep it secure',
+      }
+    : {
+        searchPlaceholder: '搜索Key名称',
+        createKey: '创建Key',
+        showOrHide: '显示/隐藏',
+        copy: '复制',
+        neverExpires: '永不过期',
+        enabled: '启用',
+        disabled: '禁用',
+        edit: '编辑',
+        delete: '删除',
+        editKeyTitle: '编辑 Key',
+        createKeyTitle: '创建 Key',
+        confirm: '确认',
+        cancel: '取消',
+        name: '名称',
+        enterKeyName: '请输入Key名称',
+        expiresAt: '过期时间',
+        expiresAtPlaceholder: '选择过期时间 (留空为永不过期)',
+        status: '状态',
+        newKeyCreated: '您的新Key已创建（仅显示一次）',
+        keyId: 'Key ID',
+        keyName: '名称',
+        keyValue: 'Key',
+        createdAt: '创建时间',
+        actions: '操作',
+        keyNameRequired: 'Key名称不能为空',
+        keyNameTooLong: 'Key名称不能超过100个字符',
+        deleteSuccess: '删除成功',
+        deleteFailed: '删除失败',
+        unknownError: '未知错误',
+        keyCopied: 'Key已复制到剪贴板',
+        copyFailed: '复制失败，请手动复制',
+        deleteConfirmTitle: '删除确认',
+        deleteConfirmContent: (name: string) => `确定要删除Key "${name}" 吗？此操作不可恢复。`,
+        confirmDeleteContent: (name: string) => `确定要删除Key: ${name} 吗？`,
+        updateSuccess: '更新成功',
+        updateFailed: '更新失败',
+        createSuccess: '创建成功',
+        createFailed: '创建失败',
+        createdButMissingFullKey: 'Key已创建，但无法显示完整的Key',
+        operationFailed: '操作失败',
+        noKeyData: '暂无Key数据',
+        fetchKeyListFailed: '获取Key列表失败',
+        keyVisibleWarning: 'Key已显示，请注意保护密钥安全',
+      }
+));
 
 // API Key类型定义
 interface ApiKeyItem {
@@ -182,55 +281,55 @@ const loading = ref(false);
 const searchKeyword = ref('');
 
 // 表格列定义
-const columns = [
+const columns = computed(() => [
   {
-    title: 'Key ID',
+    title: pageText.value.keyId,
     dataIndex: 'id',
     width: 80,
     align: 'center',
   },
   {
-    title: '名称',
+    title: pageText.value.keyName,
     dataIndex: 'name',
     width: 150,
     align: 'center',
   },
   {
-    title: 'Key',
+    title: pageText.value.keyValue,
     dataIndex: 'key',
     slotName: 'key',
     width: 200,
     align: 'center',
   },
   {
-    title: '创建时间',
+    title: pageText.value.createdAt,
     dataIndex: 'created_at',
     render: ({ record }: { record: ApiKeyItem }) => formatDate(record.created_at),
     width: 180,
     align: 'center',
   },
   {
-    title: '过期时间',
+    title: pageText.value.expiresAt,
     dataIndex: 'expires_at',
     slotName: 'expires_at',
     width: 180,
     align: 'center',
   },
   {
-    title: '状态',
+    title: pageText.value.status,
     dataIndex: 'is_active',
     slotName: 'is_active',
     width: 100,
     align: 'center',
   },
   {
-    title: '操作',
+    title: pageText.value.actions,
     slotName: 'operations',
-    width: 150,
+    width: isEnglish.value ? 180 : 150,
     fixed: 'right',
     align: 'center',
   },
-];
+]);
 
 // API Key 数据
 const apiKeyData = ref<ApiKeyItem[]>([]);
@@ -258,12 +357,12 @@ const formData = reactive({
 });
 
 // 表单验证规则
-const rules = {
+const rules = computed(() => ({
   name: [
-    { required: true, message: 'Key名称不能为空' },
-    { maxLength: 100, message: 'Key名称不能超过100个字符' },
+    { required: true, message: pageText.value.keyNameRequired },
+    { maxLength: 100, message: pageText.value.keyNameTooLong },
   ],
-};
+}));
 
 // 删除相关
 const deleteModalVisible = ref(false);
@@ -277,16 +376,16 @@ const confirmDelete = async () => {
   try {
     const deleteResponse = await deleteApiKeyRequest(selectedApiKey.value.id);
     if (deleteResponse.success) {
-      Message.success('删除成功');
+      Message.success(pageText.value.deleteSuccess);
       deleteModalVisible.value = false;
       selectedApiKey.value = null;
       fetchApiKeyList();
     } else {
-      Message.error(deleteResponse.error || '删除失败');
+      Message.error(deleteResponse.error || pageText.value.deleteFailed);
     }
   } catch (error: any) {
     console.error('删除Key错误:', error);
-    Message.error(`删除失败: ${error.message || '未知错误'}`);
+    Message.error(`${pageText.value.deleteFailed}: ${error.message || pageText.value.unknownError}`);
   } finally {
     loading.value = false;
   }
@@ -299,7 +398,7 @@ const newApiKey = ref<string>('');
 const formatDate = (dateString: string) => {
   if (!dateString) return '-';
   const date = new Date(dateString);
-  return date.toLocaleString('zh-CN', {
+  return date.toLocaleString(isEnglish.value ? 'en-US' : 'zh-CN', {
     year: 'numeric',
     month: '2-digit',
     day: '2-digit',
@@ -323,7 +422,7 @@ const copyApiKey = async (key: string) => {
     // 优先使用 Clipboard API（HTTPS或localhost可用）
     if (navigator.clipboard && window.isSecureContext) {
       await navigator.clipboard.writeText(key);
-      Message.success('Key已复制到剪贴板');
+      Message.success(pageText.value.keyCopied);
       return;
     }
     
@@ -341,12 +440,12 @@ const copyApiKey = async (key: string) => {
     document.body.removeChild(textArea);
     
     if (successful) {
-      Message.success('Key已复制到剪贴板');
+      Message.success(pageText.value.keyCopied);
     } else {
-      Message.error('复制失败，请手动复制');
+      Message.error(pageText.value.copyFailed);
     }
   } catch {
-    Message.error('复制失败，请手动复制');
+    Message.error(pageText.value.copyFailed);
   }
 };
 
@@ -389,8 +488,10 @@ const editApiKey = (apiKey: ApiKeyItem) => {
 // 删除Key
 const handleDelete = async (record: ApiKeyItem) => {
   Modal.confirm({
-    title: '确认删除',
-    content: `确定要删除Key: ${record.name} 吗？`,
+    title: pageText.value.deleteConfirmTitle,
+    content: pageText.value.confirmDeleteContent(record.name),
+    okText: pageText.value.delete,
+    cancelText: pageText.value.cancel,
     onOk: async () => {
       loading.value = true;
       try {
@@ -398,14 +499,14 @@ const handleDelete = async (record: ApiKeyItem) => {
         console.log('删除Key响应:', deleteResponse);
 
         if (deleteResponse.success) {
-          Message.success('删除成功');
+          Message.success(pageText.value.deleteSuccess);
           fetchApiKeyList();
         } else {
-          Message.error(deleteResponse.error || '删除失败');
+          Message.error(deleteResponse.error || pageText.value.deleteFailed);
         }
       } catch (error: any) {
         console.error('删除Key错误:', error);
-        Message.error(`删除失败: ${error.message || '未知错误'}`);
+        Message.error(`${pageText.value.deleteFailed}: ${error.message || pageText.value.unknownError}`);
       } finally {
         loading.value = false;
       }
@@ -445,11 +546,11 @@ const handleSubmit = async (done: (closed: boolean) => void) => {
         console.log('更新Key响应:', updateResponse);
 
         if (updateResponse.success) {
-          Message.success('更新成功');
+          Message.success(pageText.value.updateSuccess);
           done(true);
           fetchApiKeyList();
         } else {
-          Message.error(updateResponse.error || '更新失败');
+          Message.error(updateResponse.error || pageText.value.updateFailed);
           done(false);
         }
       } else {
@@ -465,23 +566,23 @@ const handleSubmit = async (done: (closed: boolean) => void) => {
           // 检查key是否存在于响应中
           if (createResponse.data.key) {
             newApiKey.value = createResponse.data.key;
-            Message.success('创建成功');
+            Message.success(pageText.value.createSuccess);
             done(true);
             fetchApiKeyList();
           } else {
             console.error('Key创建响应中缺少key字段:', createResponse.data);
-            Message.warning('Key已创建，但无法显示完整的Key');
+            Message.warning(pageText.value.createdButMissingFullKey);
             done(true);
             fetchApiKeyList();
           }
         } else {
-          Message.error(createResponse.error || '创建失败');
+          Message.error(createResponse.error || pageText.value.createFailed);
           done(false);
         }
       }
     } catch (error: any) {
       console.error('Key操作错误:', error);
-      Message.error(`操作失败: ${error.message || '未知错误'}`);
+      Message.error(`${pageText.value.operationFailed}: ${error.message || pageText.value.unknownError}`);
       done(false);
     } finally {
       loading.value = false;
@@ -518,19 +619,19 @@ const fetchApiKeyList = async () => {
 
       // 如果数组为空，显示友好提示
       if (dataList.length === 0) {
-        Message.info('暂无Key数据');
+        Message.info(pageText.value.noKeyData);
       }
     } else {
       console.error('API响应不成功:', response);
-      Message.error(response.error || '获取Key列表失败');
+      Message.error(response.error || pageText.value.fetchKeyListFailed);
       apiKeyData.value = [];
       pagination.total = 0;
     }
   } catch (error: any) {
     // 解析错误消息
-    const errorMessage = error.message || '未知错误';
+    const errorMessage = error.message || pageText.value.unknownError;
     console.error('Key列表获取错误:', error);
-    Message.error(`获取Key列表失败: ${errorMessage}`);
+    Message.error(`${pageText.value.fetchKeyListFailed}: ${errorMessage}`);
     apiKeyData.value = [];
     pagination.total = 0;
   } finally {
@@ -559,7 +660,7 @@ const toggleKeyVisibility = (record: ApiKeyItem) => {
 
   // 如果显示了Key，提示用户注意安全
   if (record.key_visible) {
-    Message.warning('Key已显示，请注意保护密钥安全');
+    Message.warning(pageText.value.keyVisibleWarning);
 
     // 10秒后自动隐藏
     setTimeout(() => {

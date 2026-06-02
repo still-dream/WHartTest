@@ -52,6 +52,10 @@ langchain==1.2.3
 # https://github.com/langchain-ai/langchain/blob/master/libs/partners/openai/LICENSE
 langchain-openai==1.1.7
 
+# LangChain DeepSeek集成 - MIT许可证
+# https://github.com/langchain-ai/langchain/tree/main/libs/partners/deepseek
+langchain-deepseek==1.0.1
+
 # LangChain Qwen集成 - MIT许可证
 # https://github.com/langchain-ai/langchain-qwq/blob/main/LICENSE
 langchain-qwq==0.3.4
@@ -214,10 +218,6 @@ olefile>=0.46
 # https://github.com/python-pillow/Pillow/blob/main/LICENSE
 Pillow==11.3.0
 
-# PDF图片提取 - AGPL许可证 (当前版本: 1.26.7)
-# https://github.com/pymupdf/PyMuPDF/blob/main/COPYING
-PyMuPDF==1.26.7
-
 # Markdown文档处理 - BSD许可证 (当前版本: 3.9)
 # https://github.com/Python-Markdown/markdown/blob/master/LICENSE.md
 markdown==3.9
@@ -294,3 +294,25 @@ nltk>=3.8.0
 # WebSocket客户端 - LGPL许可证 (用于WebSocket连接)
 # https://github.com/websocket-client/websocket-client/blob/master/LICENSE
 websocket-client>=1.6.0
+
+# 文件监控自动重启工具 - Apache 2.0许可证 (提供 watchmedo 命令)
+# https://github.com/gorakhargosh/watchdog/blob/master/LICENSE
+watchdog==6.0.0
+
+# === API 自动化测试 (TestRunner 集成) 依赖 ===
+
+# JSON Path 查询 - MIT许可证 (用于接口响应变量提取)
+jmespath>=1.0.0
+
+# SQL 数据库引擎 - MIT许可证 (httprunner SQL 接口执行)
+SQLAlchemy>=2.0
+
+# MySQL 驱动 - MIT许可证 (API 数据库配置连接 MySQL 测试目标)
+pymysql>=1.1.0
+
+# 日志库 - MIT许可证 (httprunner 运行时依赖)
+loguru>=0.4.1
+
+# Sentry Python SDK - MIT许可证 (httprunner 可选错误上报依赖)
+# https://github.com/getsentry/sentry-python/blob/master/LICENSE
+sentry-sdk==2.57.0

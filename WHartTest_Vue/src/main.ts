@@ -10,6 +10,8 @@ import App from './App.vue' // 导入根组件 App，作为整个前端应用挂
 import router from './router' // 导入路由实例，用于页面导航与守卫控制。
 import 'wired-elements' // 导入 wired-elements Web Components，完成其全局注册。
 import { useThemeStore } from './store/themeStore';
+import { useLocaleStore } from './store/localeStore';
+import { installLocaleAdapters } from './utils/installLocaleAdapters';
 
 // Monaco Editor 配置 - 使用本地资源，无需外网
 import * as monaco from 'monaco-editor' // 导入 monaco-editor 命名空间对象，供加载器注入编辑器实现。
@@ -24,4 +26,6 @@ app.use(router) // 安装路由插件，启用声明式路由和路由守卫。
 app.use(ArcoVue); // 安装 Arco UI 组件插件，实现组件按需/全局能力。
 app.use(ArcoVueIcon); // 安装 Arco 图标插件，支持在模板中直接使用图标组件。
 useThemeStore(pinia).initializeTheme();
+useLocaleStore(pinia).initializeLocale();
+installLocaleAdapters(pinia);
 app.mount('#app') // 将应用挂载到 index.html 中 id 为 app 的容器节点。

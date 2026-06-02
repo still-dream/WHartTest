@@ -10,6 +10,11 @@ from contextlib import asynccontextmanager, contextmanager
 from typing import Optional
 from django.conf import settings
 
+from wharttest_django.data_variant import (
+    get_checkpoint_sqlite_path,
+    get_postgres_db_name,
+)
+
 
 def get_database_type() -> str:
     """获取数据库类型配置（每次调用时读取，确保环境变量已加载）"""
@@ -24,15 +29,15 @@ def get_db_connection_string() -> str:
         password = os.environ.get('POSTGRES_PASSWORD', 'postgres')
         host = os.environ.get('POSTGRES_HOST', 'localhost')
         port = os.environ.get('POSTGRES_PORT', '5432')
-        db = os.environ.get('POSTGRES_DB', 'wharttest')
+        db = get_postgres_db_name(settings.BASE_DIR)
         return f"postgresql://{user}:{password}@{host}:{port}/{db}"
     else:
-        return os.path.join(str(settings.BASE_DIR), "chat_history.sqlite")
+        return get_checkpoint_sqlite_path(settings.BASE_DIR)
 
 
 def get_sqlite_path() -> str:
     """获取 SQLite 文件路径（仅用于 SQLite 模式的文件存在性检查）"""
-    return os.path.join(str(settings.BASE_DIR), "chat_history.sqlite")
+    return get_checkpoint_sqlite_path(settings.BASE_DIR)
 
 
 @asynccontextmanager

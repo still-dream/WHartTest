@@ -1,21 +1,21 @@
 <template>
   <a-modal
     :visible="visible"
-    title="系统状态检查"
+    :title="text.modalTitle"
     :width="800"
     @cancel="handleClose"
     :footer="false"
   >
     <div v-if="loading" class="loading-container">
       <a-spin size="large" />
-      <p>正在检查系统状态...</p>
+      <p>{{ text.loading }}</p>
     </div>
 
     <div v-else-if="error" class="error-container">
       <a-result status="error" :title="error" />
       <div class="retry-container">
         <a-button type="primary" @click="fetchSystemStatus">
-          重新检查
+          {{ text.retry }}
         </a-button>
       </div>
     </div>
@@ -27,45 +27,45 @@
           :color="systemStatus.overall_status === 'healthy' ? 'green' : 'red'"
           size="large"
         >
-          {{ systemStatus.overall_status === 'healthy' ? '系统正常' : '系统异常' }}
+          {{ systemStatus.overall_status === 'healthy' ? text.systemHealthy : text.systemUnhealthy }}
         </a-tag>
         <span class="timestamp">
-          检查时间: {{ formatTimestamp(systemStatus.timestamp) }}
+          {{ text.checkedAt }}{{ formatTimestamp(systemStatus.timestamp) }}
         </span>
       </div>
 
       <!-- 嵌入模型状态 -->
       <div class="status-section">
-        <h3>嵌入模型状态</h3>
+        <h3>{{ text.embeddingStatus }}</h3>
         <div class="model-info">
           <div class="info-item">
-            <span class="label">模型名称:</span>
+            <span class="label">{{ text.modelName }}</span>
             <span class="value">{{ systemStatus.embedding_model.model_name }}</span>
           </div>
           <div class="info-item">
-            <span class="label">状态:</span>
+            <span class="label">{{ text.status }}</span>
             <a-tag :color="systemStatus.embedding_model.status === 'working' ? 'green' : 'red'">
-              {{ systemStatus.embedding_model.status === 'working' ? '正常' : '异常' }}
+              {{ systemStatus.embedding_model.status === 'working' ? text.normal : text.abnormal }}
             </a-tag>
           </div>
           <div class="info-item">
-            <span class="label">模型存在:</span>
+            <span class="label">{{ text.modelExists }}</span>
             <a-tag :color="systemStatus.embedding_model.model_exists ? 'green' : 'red'">
-              {{ systemStatus.embedding_model.model_exists ? '是' : '否' }}
+              {{ systemStatus.embedding_model.model_exists ? text.yes : text.no }}
             </a-tag>
           </div>
           <div class="info-item">
-            <span class="label">加载测试:</span>
+            <span class="label">{{ text.loadTest }}</span>
             <a-tag :color="systemStatus.embedding_model.load_test ? 'green' : 'red'">
-              {{ systemStatus.embedding_model.load_test ? '通过' : '失败' }}
+              {{ systemStatus.embedding_model.load_test ? text.passed : text.failed }}
             </a-tag>
           </div>
           <div class="info-item">
-            <span class="label">向量维度:</span>
+            <span class="label">{{ text.vectorDimension }}</span>
             <span class="value">{{ systemStatus.embedding_model.dimension }}</span>
           </div>
           <div class="info-item">
-            <span class="label">缓存路径:</span>
+            <span class="label">{{ text.cachePath }}</span>
             <span class="value small">{{ systemStatus.embedding_model.cache_path }}</span>
           </div>
         </div>
@@ -73,7 +73,7 @@
 
       <!-- 依赖状态 -->
       <div class="status-section">
-        <h3>依赖库状态</h3>
+        <h3>{{ text.dependencies }}</h3>
         <div class="dependencies-grid">
           <div
             v-for="(status, name) in systemStatus.dependencies"
@@ -82,7 +82,7 @@
           >
             <span class="dep-name">{{ name }}</span>
             <a-tag :color="status ? 'green' : 'red'">
-              {{ status ? '正常' : '异常' }}
+              {{ status ? text.normal : text.abnormal }}
             </a-tag>
           </div>
         </div>
@@ -90,18 +90,18 @@
 
       <!-- 向量存储状态 -->
       <div class="status-section">
-        <h3>向量存储状态</h3>
+        <h3>{{ text.vectorStoreStatus }}</h3>
         <div class="vector-info">
           <div class="info-item">
-            <span class="label">总知识库数:</span>
+            <span class="label">{{ text.totalKnowledgeBases }}</span>
             <span class="value">{{ systemStatus.vector_stores.total_knowledge_bases }}</span>
           </div>
           <div class="info-item">
-            <span class="label">活跃知识库数:</span>
+            <span class="label">{{ text.activeKnowledgeBases }}</span>
             <span class="value">{{ systemStatus.vector_stores.active_knowledge_bases }}</span>
           </div>
           <div class="info-item">
-            <span class="label">缓存状态:</span>
+            <span class="label">{{ text.cacheStatus }}</span>
             <span class="value">{{ systemStatus.vector_stores.cache_status }}</span>
           </div>
         </div>
@@ -110,10 +110,10 @@
       <!-- 操作按钮 -->
       <div class="actions">
         <a-button @click="fetchSystemStatus" :loading="loading">
-          刷新状态
+          {{ text.refreshStatus }}
         </a-button>
         <a-button type="primary" @click="handleClose">
-          关闭
+          {{ text.close }}
         </a-button>
       </div>
     </div>
@@ -121,8 +121,9 @@
 </template>
 
 <script setup lang="ts">
-import { ref, watch } from 'vue';
+import { ref, watch, computed } from 'vue';
 import { Message } from '@arco-design/web-vue';
+import { useAppI18n } from '@/composables/useAppI18n';
 import { KnowledgeService } from '../services/knowledgeService';
 import type { SystemStatusResponse } from '../types/knowledge';
 
@@ -134,6 +135,71 @@ const props = defineProps<Props>();
 const emit = defineEmits<{
   close: [];
 }>();
+const { isEnglish } = useAppI18n();
+
+const text = computed(() => (
+  isEnglish.value
+    ? {
+        modalTitle: 'System status check',
+        loading: 'Checking system status...',
+        retry: 'Retry',
+        systemHealthy: 'System healthy',
+        systemUnhealthy: 'System unhealthy',
+        checkedAt: 'Checked at: ',
+        embeddingStatus: 'Embedding model status',
+        modelName: 'Model name:',
+        status: 'Status:',
+        normal: 'Normal',
+        abnormal: 'Abnormal',
+        modelExists: 'Model exists:',
+        yes: 'Yes',
+        no: 'No',
+        loadTest: 'Load test:',
+        passed: 'Passed',
+        failed: 'Failed',
+        vectorDimension: 'Vector dimension:',
+        cachePath: 'Cache path:',
+        dependencies: 'Dependencies',
+        vectorStoreStatus: 'Vector store status',
+        totalKnowledgeBases: 'Total knowledge bases:',
+        activeKnowledgeBases: 'Active knowledge bases:',
+        cacheStatus: 'Cache status:',
+        refreshStatus: 'Refresh status',
+        close: 'Close',
+        fetchFailed: 'Failed to fetch system status',
+        fetchFailedRetry: 'Failed to fetch system status. Please try again later.',
+      }
+    : {
+        modalTitle: '系统状态检查',
+        loading: '正在检查系统状态...',
+        retry: '重新检查',
+        systemHealthy: '系统正常',
+        systemUnhealthy: '系统异常',
+        checkedAt: '检查时间: ',
+        embeddingStatus: '嵌入模型状态',
+        modelName: '模型名称:',
+        status: '状态:',
+        normal: '正常',
+        abnormal: '异常',
+        modelExists: '模型存在:',
+        yes: '是',
+        no: '否',
+        loadTest: '加载测试:',
+        passed: '通过',
+        failed: '失败',
+        vectorDimension: '向量维度:',
+        cachePath: '缓存路径:',
+        dependencies: '依赖库状态',
+        vectorStoreStatus: '向量存储状态',
+        totalKnowledgeBases: '总知识库数:',
+        activeKnowledgeBases: '活跃知识库数:',
+        cacheStatus: '缓存状态:',
+        refreshStatus: '刷新状态',
+        close: '关闭',
+        fetchFailed: '获取系统状态失败',
+        fetchFailedRetry: '获取系统状态失败，请稍后重试',
+      }
+));
 
 // 响应式数据
 const loading = ref(false);
@@ -150,15 +216,15 @@ const fetchSystemStatus = async () => {
     systemStatus.value = status;
   } catch (err) {
     console.error('获取系统状态失败:', err);
-    error.value = '获取系统状态失败，请稍后重试';
-    Message.error('获取系统状态失败');
+    error.value = text.value.fetchFailedRetry;
+    Message.error(text.value.fetchFailed);
   } finally {
     loading.value = false;
   }
 };
 
 const formatTimestamp = (timestamp: number) => {
-  return new Date(timestamp * 1000).toLocaleString();
+  return new Date(timestamp * 1000).toLocaleString(isEnglish.value ? 'en-US' : 'zh-CN');
 };
 
 const handleClose = () => {

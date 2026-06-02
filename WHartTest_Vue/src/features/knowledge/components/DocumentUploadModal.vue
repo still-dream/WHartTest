@@ -1,7 +1,7 @@
 <template>
   <a-modal
     :visible="visible"
-    title="上传文档"
+    :title="text.uploadDocument"
     :width="600"
     @ok="handleSubmit"
     @cancel="handleCancel"
@@ -13,25 +13,25 @@
       :rules="rules"
       layout="vertical"
     >
-      <a-form-item label="上传方式" field="uploadType">
+      <a-form-item :label="text.uploadMethod" field="uploadType">
         <a-radio-group v-model="formData.uploadType" @change="handleUploadTypeChange">
-          <a-radio value="file">文件上传</a-radio>
-          <a-radio value="text">文本内容</a-radio>
-          <a-radio value="url">网页链接</a-radio>
+          <a-radio value="file">{{ text.fileUpload }}</a-radio>
+          <a-radio value="text">{{ text.textContent }}</a-radio>
+          <a-radio value="url">{{ text.webLink }}</a-radio>
         </a-radio-group>
       </a-form-item>
 
-      <a-form-item label="文档标题" field="title">
+      <a-form-item :label="text.documentTitle" field="title">
         <a-input
           v-model="formData.title"
-          placeholder="请输入文档标题"
+          :placeholder="text.documentTitlePlaceholder"
           :max-length="200"
         />
       </a-form-item>
 
       <!-- 文件上传 -->
       <template v-if="formData.uploadType === 'file'">
-        <a-form-item label="选择文件" field="file">
+        <a-form-item :label="text.selectFile" field="file">
           <div class="file-upload-container">
             <input
               ref="fileInputRef"
@@ -43,9 +43,9 @@
             <div class="upload-area" @click="triggerFileInput">
               <icon-upload />
               <div class="upload-text">
-                <div>点击选择文件</div>
+                <div>{{ text.clickToSelectFile }}</div>
                 <div class="upload-tip">
-                  支持 PDF、Word、Excel、PPT、文本、Markdown、HTML 格式
+                  {{ text.supportedFormats }}
                 </div>
               </div>
             </div>
@@ -65,10 +65,10 @@
 
       <!-- 文本内容 -->
       <template v-if="formData.uploadType === 'text'">
-        <a-form-item label="文本内容" field="content">
+        <a-form-item :label="text.textContent" field="content">
           <a-textarea
             v-model="formData.content"
-            placeholder="请输入或粘贴文本内容..."
+            :placeholder="text.textContentPlaceholder"
             :rows="10"
             :max-length="50000"
             show-word-limit
@@ -78,10 +78,10 @@
 
       <!-- 网页链接 -->
       <template v-if="formData.uploadType === 'url'">
-        <a-form-item label="网页链接" field="url">
+        <a-form-item :label="text.webLink" field="url">
           <a-input
             v-model="formData.url"
-            placeholder="请输入网页链接，如：https://example.com"
+            :placeholder="text.webLinkPlaceholder"
           />
         </a-form-item>
       </template>
@@ -89,7 +89,7 @@
 
     <div v-if="uploadProgress > 0 && uploadProgress < 100" class="upload-progress">
       <a-progress :percent="uploadProgress" />
-      <div class="progress-text">正在上传文档...</div>
+      <div class="progress-text">{{ text.uploadingDocument }}</div>
     </div>
   </a-modal>
 </template>
@@ -100,6 +100,7 @@ import { Message } from '@arco-design/web-vue';
 import { IconUpload, IconFile, IconClose } from '@arco-design/web-vue/es/icon';
 import { KnowledgeService } from '../services/knowledgeService';
 import type { UploadDocumentRequest, DocumentType } from '../types/knowledge';
+import { useAppI18n } from '@/composables/useAppI18n';
 
 interface Props {
   visible: boolean;
@@ -111,6 +112,65 @@ const emit = defineEmits<{
   submit: [];
   cancel: [];
 }>();
+const { isEnglish } = useAppI18n();
+
+const text = computed(() => (
+  isEnglish.value
+    ? {
+        uploadDocument: 'Upload document',
+        uploadMethod: 'Upload method',
+        fileUpload: 'File upload',
+        textContent: 'Text content',
+        webLink: 'Web link',
+        documentTitle: 'Document title',
+        documentTitlePlaceholder: 'Enter document title',
+        selectFile: 'Select file',
+        clickToSelectFile: 'Click to select a file',
+        supportedFormats: 'Supports PDF, Word, Excel, PPT, Text, Markdown, and HTML',
+        textContentPlaceholder: 'Enter or paste text content...',
+        webLinkPlaceholder: 'Enter URL, e.g. https://example.com',
+        uploadingDocument: 'Uploading document...',
+        validateTitleRequired: 'Please enter document title',
+        validateTitleMin: 'Document title cannot be empty',
+        validateTitleMax: 'Document title must be at most 200 characters',
+        validateFileRequired: 'Please select a file to upload',
+        validateContentRequired: 'Please enter text content',
+        validateContentMin: 'Text content must be at least 10 characters',
+        validateContentMax: 'Text content must be at most 50000 characters',
+        validateUrlRequired: 'Please enter a URL',
+        validateUrlInvalid: 'Please enter a valid URL',
+        unsupportedFileType: (extensions: string[]) => `Unsupported file format. Supported: ${extensions.join(', ')}`,
+        formInvalid: 'Please check the form fields',
+        uploadFailed: 'Failed to upload document',
+      }
+    : {
+        uploadDocument: '上传文档',
+        uploadMethod: '上传方式',
+        fileUpload: '文件上传',
+        textContent: '文本内容',
+        webLink: '网页链接',
+        documentTitle: '文档标题',
+        documentTitlePlaceholder: '请输入文档标题',
+        selectFile: '选择文件',
+        clickToSelectFile: '点击选择文件',
+        supportedFormats: '支持 PDF、Word、Excel、PPT、文本、Markdown、HTML 格式',
+        textContentPlaceholder: '请输入或粘贴文本内容...',
+        webLinkPlaceholder: '请输入网页链接，如：https://example.com',
+        uploadingDocument: '正在上传文档...',
+        validateTitleRequired: '请输入文档标题',
+        validateTitleMin: '文档标题不能为空',
+        validateTitleMax: '文档标题不能超过200个字符',
+        validateFileRequired: '请选择要上传的文件',
+        validateContentRequired: '请输入文本内容',
+        validateContentMin: '文本内容至少10个字符',
+        validateContentMax: '文本内容不能超过50000个字符',
+        validateUrlRequired: '请输入网页链接',
+        validateUrlInvalid: '请输入有效的网页链接',
+        unsupportedFileType: (extensions: string[]) => `不支持的文件格式，仅支持：${extensions.join(', ')}`,
+        formInvalid: '请检查表单填写是否正确',
+        uploadFailed: '上传文档失败',
+      }
+));
 
 const formRef = ref();
 const fileInputRef = ref<HTMLInputElement>();
@@ -130,9 +190,9 @@ const formData = reactive({
 const rules = computed(() => {
   const baseRules = {
     title: [
-      { required: true, message: '请输入文档标题' },
-      { minLength: 1, message: '文档标题不能为空' },
-      { maxLength: 200, message: '文档标题不能超过200个字符' },
+      { required: true, message: text.value.validateTitleRequired },
+      { minLength: 1, message: text.value.validateTitleMin },
+      { maxLength: 200, message: text.value.validateTitleMax },
     ],
   };
 
@@ -140,26 +200,26 @@ const rules = computed(() => {
     return {
       ...baseRules,
       file: [
-        { required: true, message: '请选择要上传的文件' },
+        { required: true, message: text.value.validateFileRequired },
       ],
     };
   } else if (formData.uploadType === 'text') {
     return {
       ...baseRules,
       content: [
-        { required: true, message: '请输入文本内容' },
-        { minLength: 10, message: '文本内容至少10个字符' },
-        { maxLength: 50000, message: '文本内容不能超过50000个字符' },
+        { required: true, message: text.value.validateContentRequired },
+        { minLength: 10, message: text.value.validateContentMin },
+        { maxLength: 50000, message: text.value.validateContentMax },
       ],
     };
   } else if (formData.uploadType === 'url') {
     return {
       ...baseRules,
       url: [
-        { required: true, message: '请输入网页链接' },
+        { required: true, message: text.value.validateUrlRequired },
         {
           type: 'url',
-          message: '请输入有效的网页链接',
+          message: text.value.validateUrlInvalid,
           validator: (value: string) => {
             try {
               new URL(value);
@@ -229,7 +289,7 @@ const handleFileInputChange = (event: Event) => {
   if (file) {
     // 验证文件扩展名
     if (!validateFileExtension(file)) {
-      Message.error(`不支持的文件格式，仅支持：${ALLOWED_EXTENSIONS.join(', ')}`);
+      Message.error(text.value.unsupportedFileType(ALLOWED_EXTENSIONS));
       target.value = '';
       return;
     }
@@ -291,7 +351,7 @@ const handleSubmit = async () => {
 
     // 验证文件上传模式下是否选择了文件
     if (formData.uploadType === 'file' && !formData.file) {
-      Message.error('请选择要上传的文件');
+      Message.error(text.value.validateFileRequired);
       return;
     }
 
@@ -332,10 +392,10 @@ const handleSubmit = async () => {
     console.error('上传文档失败:', error);
     // 检查是否是表单验证错误
     if (error && typeof error === 'object' && 'errorFields' in error) {
-      Message.error('请检查表单填写是否正确');
+      Message.error(text.value.formInvalid);
     } else {
       // 显示具体的错误消息
-      const errorMessage = error?.message || '上传文档失败';
+      const errorMessage = error?.message || text.value.uploadFailed;
       Message.error(errorMessage);
     }
     uploadProgress.value = 0;

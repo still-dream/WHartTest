@@ -2,7 +2,7 @@
   <div class="dashboard-view">
     <!-- 无项目选择提示 -->
     <div v-if="!currentProjectId" class="no-project-selected">
-      <a-empty description="请在顶部选择一个项目查看统计数据">
+      <a-empty :description="dashboardText.noProjectDescription">
         <template #image>
           <icon-bar-chart style="font-size: 48px; color: #c2c7d0;" />
         </template>
@@ -11,45 +11,58 @@
 
     <!-- 仪表盘内容 -->
     <div v-else class="dashboard-content">
-      <a-spin :loading="loading" tip="加载中..." class="dashboard-spin">
+      <a-spin :loading="loading" :tip="dashboardText.loading" class="dashboard-spin">
         <!-- 顶部数据概览 -->
         <div class="overview-section">
           <div class="overview-card">
             <div class="overview-header">
               <icon-file class="overview-icon" />
-              <span class="overview-title">功能用例</span>
+              <span class="overview-title">{{ dashboardText.testCasesTitle }}</span>
             </div>
             <div class="overview-value">{{ statistics?.testcases?.total || 0 }}</div>
             <div class="overview-sub">
-              <span class="sub-item approved">通过 {{ statistics?.testcases?.by_review_status?.approved || 0 }}</span>
-              <span class="sub-item pending">待审 {{ statistics?.testcases?.by_review_status?.pending_review || 0 }}</span>
-              <span class="sub-item optimization">待优化 {{ statistics?.testcases?.by_review_status?.needs_optimization || 0 }}</span>
-              <span class="sub-item opt-pending">优化待审 {{ statistics?.testcases?.by_review_status?.optimization_pending_review || 0 }}</span>
+              <span class="sub-item approved">{{ dashboardText.passed }} {{ statistics?.testcases?.by_review_status?.approved || 0 }}</span>
+              <span class="sub-item pending">{{ dashboardText.pendingShort }} {{ statistics?.testcases?.by_review_status?.pending_review || 0 }}</span>
+              <span class="sub-item optimization">{{ dashboardText.needsOptimization }} {{ statistics?.testcases?.by_review_status?.needs_optimization || 0 }}</span>
+              <span class="sub-item opt-pending">{{ dashboardText.optimizationPending }} {{ statistics?.testcases?.by_review_status?.optimization_pending_review || 0 }}</span>
             </div>
           </div>
 
           <div class="overview-card">
             <div class="overview-header">
               <icon-desktop class="overview-icon" />
-              <span class="overview-title">UI自动化</span>
+              <span class="overview-title">{{ dashboardText.uiAutomationTitle }}</span>
             </div>
             <div class="overview-value">{{ statistics?.ui_automation?.total_cases || 0 }}</div>
             <div class="overview-sub">
-              <span class="sub-item">执行 {{ statistics?.ui_automation?.total_executions || 0 }}</span>
-              <span class="sub-item passed">成功 {{ statistics?.ui_automation?.by_status?.success || 0 }}</span>
-              <span class="sub-item failed">失败 {{ statistics?.ui_automation?.by_status?.failed || 0 }}</span>
+              <span class="sub-item">{{ dashboardText.executions }} {{ statistics?.ui_automation?.total_executions || 0 }}</span>
+              <span class="sub-item passed">{{ dashboardText.success }} {{ statistics?.ui_automation?.by_status?.success || 0 }}</span>
+              <span class="sub-item failed">{{ dashboardText.failed }} {{ statistics?.ui_automation?.by_status?.failed || 0 }}</span>
+            </div>
+          </div>
+
+          <div class="overview-card">
+            <div class="overview-header">
+              <icon-code class="overview-icon" />
+              <span class="overview-title">{{ dashboardText.apiTestingTitle }}</span>
+            </div>
+            <div class="overview-value">{{ statistics?.api_testing?.total_cases || 0 }}</div>
+            <div class="overview-sub">
+              <span class="sub-item">{{ dashboardText.interfaces }} {{ statistics?.api_testing?.total_interfaces || 0 }}</span>
+              <span class="sub-item passed">{{ dashboardText.completed }} {{ statistics?.api_testing?.execution_by_status?.completed || 0 }}</span>
+              <span class="sub-item failed">{{ dashboardText.failed }} {{ statistics?.api_testing?.execution_by_status?.failed || 0 }}</span>
             </div>
           </div>
 
           <div class="overview-card">
             <div class="overview-header">
               <icon-thunderbolt class="overview-icon" />
-              <span class="overview-title">执行统计</span>
+              <span class="overview-title">{{ dashboardText.executionStatsTitle }}</span>
             </div>
             <div class="overview-value">{{ statistics?.executions?.total_executions || 0 }}</div>
             <div class="overview-sub">
-              <span class="sub-item passed">通过 {{ statistics?.executions?.case_results?.passed || 0 }}</span>
-              <span class="sub-item failed">失败 {{ statistics?.executions?.case_results?.failed || 0 }}</span>
+              <span class="sub-item passed">{{ dashboardText.passed }} {{ statistics?.executions?.case_results?.passed || 0 }}</span>
+              <span class="sub-item failed">{{ dashboardText.failed }} {{ statistics?.executions?.case_results?.failed || 0 }}</span>
             </div>
           </div>
 
@@ -71,8 +84,8 @@
           <!-- 左侧：用例状态分布 -->
           <div class="panel status-panel">
             <div class="panel-header">
-              <span class="panel-title">用例审核状态</span>
-              <span class="panel-badge">{{ statistics?.testcases?.total || 0 }} 个</span>
+              <span class="panel-title">{{ dashboardText.caseReviewStatusTitle }}</span>
+              <span class="panel-badge">{{ formatCaseCount(statistics?.testcases?.total || 0) }}</span>
             </div>
             <div class="panel-body">
               <div class="status-bars">
@@ -92,7 +105,7 @@
           <!-- 中间：通过率环形图 -->
           <div class="panel rate-panel">
             <div class="panel-header">
-              <span class="panel-title">执行通过率</span>
+              <span class="panel-title">{{ dashboardText.passRateTitle }}</span>
             </div>
             <div class="panel-body rate-body">
               <div class="rate-circle">
@@ -112,22 +125,22 @@
               <div class="rate-legend">
                 <div class="legend-item">
                   <span class="legend-dot passed"></span>
-                  <span class="legend-label">通过</span>
+                  <span class="legend-label">{{ dashboardText.passed }}</span>
                   <span class="legend-value">{{ statistics?.executions?.case_results?.passed || 0 }}</span>
                 </div>
                 <div class="legend-item">
                   <span class="legend-dot failed"></span>
-                  <span class="legend-label">失败</span>
+                  <span class="legend-label">{{ dashboardText.failed }}</span>
                   <span class="legend-value">{{ statistics?.executions?.case_results?.failed || 0 }}</span>
                 </div>
                 <div class="legend-item">
                   <span class="legend-dot skipped"></span>
-                  <span class="legend-label">跳过</span>
+                  <span class="legend-label">{{ dashboardText.skipped }}</span>
                   <span class="legend-value">{{ statistics?.executions?.case_results?.skipped || 0 }}</span>
                 </div>
                 <div class="legend-item">
                   <span class="legend-dot error"></span>
-                  <span class="legend-label">错误</span>
+                  <span class="legend-label">{{ dashboardText.error }}</span>
                   <span class="legend-value">{{ statistics?.executions?.case_results?.error || 0 }}</span>
                 </div>
               </div>
@@ -137,7 +150,7 @@
           <!-- 右侧：Token 使用统计 -->
           <div class="panel resource-panel">
             <div class="panel-header">
-              <span class="panel-title">Token 统计</span>
+              <span class="panel-title">{{ dashboardText.tokenStatsTitle }}</span>
               <div class="token-period-selector">
                 <span
                   v-for="opt in periodOptions"
@@ -150,33 +163,33 @@
             <div class="panel-body">
               <div class="resource-grid">
                 <div class="resource-block token-total">
-                  <div class="resource-label">总消耗</div>
+                  <div class="resource-label">{{ dashboardText.totalConsumption }}</div>
                   <div class="token-value">{{ formatTokenCount(tokenStats?.total?.total_tokens || 0) }}</div>
                   <div class="token-sub">
-                    <span class="token-detail">入 {{ formatTokenCount(tokenStats?.total?.input_tokens || 0) }}</span>
-                    <span class="token-detail">出 {{ formatTokenCount(tokenStats?.total?.output_tokens || 0) }}</span>
-                    <span class="token-detail">缓存 {{ formatTokenCount(tokenStats?.total?.cache_read_tokens || 0) }}</span>
+                    <span class="token-detail">{{ dashboardText.input }} {{ formatTokenCount(tokenStats?.total?.input_tokens || 0) }}</span>
+                    <span class="token-detail">{{ dashboardText.output }} {{ formatTokenCount(tokenStats?.total?.output_tokens || 0) }}</span>
+                    <span class="token-detail">{{ dashboardText.cache }} {{ formatTokenCount(tokenStats?.total?.cache_read_tokens || 0) }}</span>
                   </div>
                 </div>
                 <div class="resource-block">
-                  <div class="resource-label">使用情况</div>
+                  <div class="resource-label">{{ dashboardText.usage }}</div>
                   <div class="resource-stats">
                     <div class="stat-row">
-                      <span>请求次数</span>
+                      <span>{{ dashboardText.requestCount }}</span>
                       <span class="stat-num">{{ tokenStats?.total?.request_count || 0 }}</span>
                     </div>
                     <div class="stat-row">
-                      <span>会话数</span>
+                      <span>{{ dashboardText.sessionCount }}</span>
                       <span class="stat-num">{{ tokenStats?.total?.session_count || 0 }}</span>
                     </div>
                     <div class="stat-row">
-                      <span>平均/请求</span>
+                      <span>{{ dashboardText.averagePerRequest }}</span>
                       <span class="stat-num active">{{ avgTokensPerRequest }}</span>
                     </div>
                   </div>
                 </div>
                 <div class="resource-block" v-if="tokenStats?.by_user?.length">
-                  <div class="resource-label">用户排行</div>
+                  <div class="resource-label">{{ dashboardText.userRanking }}</div>
                   <div class="resource-stats">
                     <div class="stat-row" v-for="(user, index) in tokenStats.by_user.slice(0, 3)" :key="user.user_id">
                       <span>{{ index + 1 }}. {{ user.username }}</span>
@@ -193,16 +206,16 @@
         <div class="trend-section">
           <div class="panel trend-panel">
             <div class="panel-header">
-              <span class="panel-title">近7天执行趋势</span>
+              <span class="panel-title">{{ dashboardText.trendTitle }}</span>
               <div class="trend-summary">
                 <span class="summary-item">
-                  近30天: <strong>{{ statistics?.execution_trend?.summary_30d?.execution_count || 0 }}</strong> 次
+                  {{ dashboardText.last30Days }} <strong>{{ statistics?.execution_trend?.summary_30d?.execution_count || 0 }}</strong> {{ dashboardText.runsUnit }}
                 </span>
                 <span class="summary-item passed">
-                  通过 <strong>{{ statistics?.execution_trend?.summary_30d?.passed || 0 }}</strong>
+                  {{ dashboardText.passed }} <strong>{{ statistics?.execution_trend?.summary_30d?.passed || 0 }}</strong>
                 </span>
                 <span class="summary-item failed">
-                  失败 <strong>{{ statistics?.execution_trend?.summary_30d?.failed || 0 }}</strong>
+                  {{ dashboardText.failed }} <strong>{{ statistics?.execution_trend?.summary_30d?.failed || 0 }}</strong>
                 </span>
               </div>
             </div>
@@ -217,20 +230,20 @@
                     <div
                       class="column-bar passed"
                       :style="{ height: getBarHeight(day.passed) }"
-                      :title="`通过: ${day.passed}`"
+                      :title="formatTrendBarTitle(dashboardText.passed, day.passed)"
                     ></div>
                     <div
                       class="column-bar failed"
                       :style="{ height: getBarHeight(day.failed) }"
-                      :title="`失败: ${day.failed}`"
+                      :title="formatTrendBarTitle(dashboardText.failed, day.failed)"
                     ></div>
                   </div>
                   <div class="column-label">{{ formatDate(day.date) }}</div>
                 </div>
               </div>
               <div class="trend-legend">
-                <span class="legend-tag passed">通过</span>
-                <span class="legend-tag failed">失败</span>
+                <span class="legend-tag passed">{{ dashboardText.passed }}</span>
+                <span class="legend-tag failed">{{ dashboardText.failed }}</span>
               </div>
             </div>
           </div>
@@ -247,19 +260,111 @@ import {
   IconBarChart, IconFile, IconThunderbolt, IconApps, IconDesktop
 } from '@arco-design/web-vue/es/icon';
 import { getProjectStatistics, getTokenUsageStats, type ProjectStatistics, type TokenUsageStats } from '@/services/projectService';
+import { useAppI18n } from '@/composables/useAppI18n';
 import { useProjectStore } from '@/store/projectStore';
 
 const projectStore = useProjectStore();
+const { isEnglish } = useAppI18n();
 const loading = ref(false);
 const statistics = ref<ProjectStatistics | null>(null);
 const tokenStats = ref<TokenUsageStats | null>(null);
 const tokenPeriod = ref<'day' | 'week' | 'month'>('day');
 
-const periodOptions = [
-  { label: '日', value: 'day' as const },
-  { label: '周', value: 'week' as const },
-  { label: '月', value: 'month' as const },
-];
+const dashboardText = computed(() => (
+  isEnglish.value
+    ? {
+        noProjectDescription: 'Select a project from the top bar to view statistics',
+        loading: 'Loading...',
+        testCasesTitle: 'Functional Cases',
+        pendingShort: 'Pending',
+        needsOptimization: 'Optimize',
+        optimizationPending: 'Opt review',
+        uiAutomationTitle: 'UI Automation',
+        executions: 'Runs',
+        success: 'Succeeded',
+        executionStatsTitle: 'Execution Stats',
+        passed: 'Passed',
+        failed: 'Failed',
+        caseReviewStatusTitle: 'Case Review Status',
+        passRateTitle: 'Pass Rate',
+        skipped: 'Skipped',
+        error: 'Error',
+        tokenStatsTitle: 'Token Statistics',
+        totalConsumption: 'Total usage',
+        input: 'In',
+        output: 'Out',
+        cache: 'Cache',
+        usage: 'Usage',
+        requestCount: 'Requests',
+        sessionCount: 'Sessions',
+        averagePerRequest: 'Avg / request',
+        userRanking: 'Top users',
+        trendTitle: 'Execution Trend (Last 7 Days)',
+        last30Days: 'Last 30 days:',
+        runsUnit: 'runs',
+        approved: 'Approved',
+        pendingReview: 'Pending',
+        unavailable: 'N/A',
+        periodDay: 'Day',
+        periodWeek: 'Week',
+        periodMonth: 'Month',
+        fetchStatisticsFailed: 'Failed to load statistics',
+        fetchStatisticsError: 'An error occurred while loading statistics',
+        apiTestingTitle: 'API Testing',
+        interfaces: 'Interfaces',
+        cases: 'Cases',
+        completed: 'Completed',
+      }
+    : {
+        noProjectDescription: '请在顶部选择一个项目查看统计数据',
+        loading: '加载中...',
+        testCasesTitle: '功能用例',
+        pendingShort: '待审',
+        needsOptimization: '待优化',
+        optimizationPending: '优化待审',
+        uiAutomationTitle: 'UI自动化',
+        executions: '执行',
+        success: '成功',
+        executionStatsTitle: '执行统计',
+        passed: '通过',
+        failed: '失败',
+        caseReviewStatusTitle: '用例审核状态',
+        passRateTitle: '执行通过率',
+        skipped: '跳过',
+        error: '错误',
+        tokenStatsTitle: 'Token 统计',
+        totalConsumption: '总消耗',
+        input: '入',
+        output: '出',
+        cache: '缓存',
+        usage: '使用情况',
+        requestCount: '请求次数',
+        sessionCount: '会话数',
+        averagePerRequest: '平均/请求',
+        userRanking: '用户排行',
+        trendTitle: '近7天执行趋势',
+        last30Days: '近30天:',
+        runsUnit: '次',
+        approved: '已通过',
+        pendingReview: '待审核',
+        unavailable: '不可用',
+        periodDay: '日',
+        periodWeek: '周',
+        periodMonth: '月',
+        fetchStatisticsFailed: '获取统计数据失败',
+        fetchStatisticsError: '获取统计数据时发生错误',
+        apiTestingTitle: 'API 自动化测试',
+        interfaces: '接口',
+        cases: '用例',
+        completed: '完成',
+      }
+));
+
+const periodOptions = computed(() => ([
+  { label: dashboardText.value.periodDay, value: 'day' as const },
+  { label: dashboardText.value.periodWeek, value: 'week' as const },
+  { label: dashboardText.value.periodMonth, value: 'month' as const },
+]));
 
 const currentProjectId = computed(() => projectStore.currentProjectId);
 
@@ -282,13 +387,21 @@ const reviewStatusData = computed(() => {
   const statuses = statistics.value?.testcases?.by_review_status;
 
   return [
-    { key: 'approved', label: '已通过', value: statuses?.approved || 0, percent: getPercent(statuses?.approved || 0), color: '#52c41a' },
-    { key: 'pending', label: '待审核', value: statuses?.pending_review || 0, percent: getPercent(statuses?.pending_review || 0), color: '#faad14' },
-    { key: 'optimization', label: '待优化', value: statuses?.needs_optimization || 0, percent: getPercent(statuses?.needs_optimization || 0), color: '#1890ff' },
-    { key: 'opt_pending', label: '优化待审', value: statuses?.optimization_pending_review || 0, percent: getPercent(statuses?.optimization_pending_review || 0), color: '#722ed1' },
-    { key: 'unavailable', label: '不可用', value: statuses?.unavailable || 0, percent: getPercent(statuses?.unavailable || 0), color: '#ff4d4f' },
+    { key: 'approved', label: dashboardText.value.approved, value: statuses?.approved || 0, percent: getPercent(statuses?.approved || 0), color: '#52c41a' },
+    { key: 'pending', label: dashboardText.value.pendingReview, value: statuses?.pending_review || 0, percent: getPercent(statuses?.pending_review || 0), color: '#faad14' },
+    { key: 'optimization', label: dashboardText.value.needsOptimization, value: statuses?.needs_optimization || 0, percent: getPercent(statuses?.needs_optimization || 0), color: '#1890ff' },
+    { key: 'opt_pending', label: dashboardText.value.optimizationPending, value: statuses?.optimization_pending_review || 0, percent: getPercent(statuses?.optimization_pending_review || 0), color: '#722ed1' },
+    { key: 'unavailable', label: dashboardText.value.unavailable, value: statuses?.unavailable || 0, percent: getPercent(statuses?.unavailable || 0), color: '#ff4d4f' },
   ];
 });
+
+const pluralize = (count: number, singular: string, plural: string) => (
+  count === 1 ? singular : plural
+);
+
+const formatCaseCount = (count: number) => (
+  isEnglish.value ? `${count} ${pluralize(count, 'case', 'cases')}` : `${count} 个`
+);
 
 const getBarHeight = (value: number): string => {
   const maxValue = Math.max(
@@ -305,8 +418,10 @@ const formatDate = (dateStr: string): string => {
 };
 
 const formatTokenCount = (count: number): string => {
-  return count.toLocaleString('zh-CN');
+  return count.toLocaleString(isEnglish.value ? 'en-US' : 'zh-CN');
 };
+
+const formatTrendBarTitle = (label: string, value: number) => `${label}: ${value}`;
 
 const avgTokensPerRequest = computed(() => {
   const total = tokenStats.value?.total?.total_tokens || 0;
@@ -343,11 +458,11 @@ const fetchStatistics = async () => {
       console.log('Statistics data:', statistics.value);
     } else {
       console.error('Statistics API error:', response.error);
-      Message.error(response.error || '获取统计数据失败');
+      Message.error(response.error || dashboardText.value.fetchStatisticsFailed);
     }
   } catch (error) {
     console.error('获取统计数据出错:', error);
-    Message.error('获取统计数据时发生错误');
+    Message.error(dashboardText.value.fetchStatisticsError);
   } finally {
     loading.value = false;
   }
@@ -407,7 +522,7 @@ onMounted(() => {
 /* 顶部概览卡片 */
 .overview-section {
   display: grid;
-  grid-template-columns: repeat(4, 1fr);
+  grid-template-columns: repeat(5, 1fr);
   gap: 10px;
 }
 
@@ -848,6 +963,12 @@ onMounted(() => {
 .legend-tag.failed::before { background: #ff4d4f; }
 
 /* 响应式 */
+@media (max-width: 1400px) {
+  .overview-section {
+    grid-template-columns: repeat(3, 1fr);
+  }
+}
+
 @media (max-width: 1200px) {
   .overview-section {
     grid-template-columns: repeat(2, 1fr);

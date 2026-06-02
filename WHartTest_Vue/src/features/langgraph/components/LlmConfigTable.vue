@@ -13,7 +13,7 @@
         <span v-if="record.system_prompt" :title="record.system_prompt">
           {{ record.system_prompt.length > 50 ? record.system_prompt.substring(0, 50) + '...' : record.system_prompt }}
         </span>
-        <span v-else class="text-gray-400">未设置</span>
+        <span v-else class="text-gray-400">{{ text.notSet }}</span>
       </template>
       <template #isActive="{ record }">
         <a-switch
@@ -21,24 +21,24 @@
           :disabled="loading"
           @change="(value) => emit('toggle-active', record.id, !!value)"
         >
-          <template #checked>已激活</template>
-          <template #unchecked>未激活</template>
+          <template #checked>{{ text.active }}</template>
+          <template #unchecked>{{ text.inactive }}</template>
         </a-switch>
       </template>
       <template #actions="{ record }">
         <a-space>
           <a-button type="primary" size="small" @click="emit('edit', record)">
             <template #icon><icon-edit /></template>
-            编辑
+            {{ text.edit }}
           </a-button>
           <a-popconfirm
-            content="确定要删除此配置吗？此操作不可撤销。"
+            :content="text.deleteConfirm"
             type="warning"
             @ok="emit('delete', record.id)"
           >
             <a-button type="primary" status="danger" size="small">
               <template #icon><icon-delete /></template>
-              删除
+              {{ text.delete }}
             </a-button>
           </a-popconfirm>
         </a-space>
@@ -54,6 +54,7 @@
 </template>
 
 <script setup lang="ts">
+import { computed } from 'vue';
 import {
   Table as ATable,
   Button as AButton,
@@ -64,13 +65,14 @@ import {
   type PaginationProps,
 } from '@arco-design/web-vue';
 import { IconEdit, IconDelete } from '@arco-design/web-vue/es/icon';
+import { useAppI18n } from '@/composables/useAppI18n';
 import type { LlmConfig } from '@/features/langgraph/types/llmConfig';
 import { formatDateTime } from '@/utils/formatters';
 
 interface Props {
   configs: LlmConfig[];
   loading: boolean;
-  pagination?: PaginationProps; // 可选的分页配置
+  pagination?: PaginationProps;
 }
 
 withDefaults(defineProps<Props>(), {
@@ -93,20 +95,61 @@ const emit = defineEmits<{
   (e: 'page-size-change', pageSize: number): void;
 }>();
 
-const columns: TableColumnData[] = [
-  { title: 'ID', dataIndex: 'id', width: 80, sortable: { sortDirections: ['ascend', 'descend'] } },
-  { title: '配置名称', dataIndex: 'config_name', width: 150, ellipsis: true, tooltip: true },
-  { title: '模型名称', dataIndex: 'name', width: 150, ellipsis: true, tooltip: true },
-  { title: 'API URL', dataIndex: 'api_url', width: 200, ellipsis: true, tooltip: true },
-  { title: '系统提示词', dataIndex: 'system_prompt', slotName: 'systemPrompt', width: 200, ellipsis: true, tooltip: true },
-  { title: '状态', dataIndex: 'is_active', slotName: 'isActive', width: 100, align: 'center' },
-  { title: '创建时间', dataIndex: 'created_at', slotName: 'createdAt', width: 150, sortable: { sortDirections: ['ascend', 'descend'] } },
-  { title: '更新时间', dataIndex: 'updated_at', slotName: 'updatedAt', width: 150, sortable: { sortDirections: ['ascend', 'descend'] } },
-  { title: '操作', slotName: 'actions', width: 220, align: 'center', fixed: 'right' },
-];
+const { isEnglish } = useAppI18n();
 
+const text = computed(() => (
+  isEnglish.value
+    ? {
+        id: 'ID',
+        configName: 'Config Name',
+        modelName: 'Model Name',
+        apiUrl: 'API URL',
+        systemPrompt: 'System Prompt',
+        status: 'Status',
+        createdAt: 'Created At',
+        updatedAt: 'Updated At',
+        actions: 'Actions',
+        active: 'Active',
+        inactive: 'Inactive',
+        edit: 'Edit',
+        delete: 'Delete',
+        deleteConfirm: 'Delete this config? This action cannot be undone.',
+        notSet: 'Not set',
+      }
+    : {
+        id: 'ID',
+        configName: '配置名称',
+        modelName: '模型名称',
+        apiUrl: 'API URL',
+        systemPrompt: '系统提示词',
+        status: '状态',
+        createdAt: '创建时间',
+        updatedAt: '更新时间',
+        actions: '操作',
+        active: '已激活',
+        inactive: '未激活',
+        edit: '编辑',
+        delete: '删除',
+        deleteConfirm: '确定要删除此配置吗？此操作不可撤销。',
+        notSet: '未设置',
+      }
+));
+
+const columns = computed<TableColumnData[]>(() => [
+  { title: text.value.id, dataIndex: 'id', width: isEnglish.value ? 90 : 80, sortable: { sortDirections: ['ascend', 'descend'] } },
+  { title: text.value.configName, dataIndex: 'config_name', width: 170, ellipsis: true, tooltip: true },
+  { title: text.value.modelName, dataIndex: 'name', width: 170, ellipsis: true, tooltip: true },
+  { title: text.value.apiUrl, dataIndex: 'api_url', width: 220, ellipsis: true, tooltip: true },
+  { title: text.value.systemPrompt, dataIndex: 'system_prompt', slotName: 'systemPrompt', width: 220, ellipsis: true, tooltip: true },
+  { title: text.value.status, dataIndex: 'is_active', slotName: 'isActive', width: 110, align: 'center' as const },
+  { title: text.value.createdAt, dataIndex: 'created_at', slotName: 'createdAt', width: 170, sortable: { sortDirections: ['ascend', 'descend'] } },
+  { title: text.value.updatedAt, dataIndex: 'updated_at', slotName: 'updatedAt', width: 170, sortable: { sortDirections: ['ascend', 'descend'] } },
+  { title: text.value.actions, slotName: 'actions', width: isEnglish.value ? 250 : 220, align: 'center', fixed: 'right' as const },
+]);
 </script>
 
 <style scoped>
-/* 可以在这里添加特定于此组件的样式 */
+.text-gray-400 {
+  color: var(--color-text-3);
+}
 </style>

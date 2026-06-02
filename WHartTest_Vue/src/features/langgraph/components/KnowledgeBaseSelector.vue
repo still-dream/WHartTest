@@ -4,7 +4,7 @@
       <a-select
         :model-value="selectedKnowledgeBaseId"
         @update:model-value="handleSelectKnowledgeBase"
-        placeholder="选择知识库"
+        :placeholder="text.selectKnowledgeBase"
         :loading="loading"
         :disabled="!knowledgeBases.length"
         size="small"
@@ -18,12 +18,12 @@
         >
           <div class="kb-option">
             <span class="kb-name">{{ kb.name }}</span>
-            <span class="kb-stats">{{ kb.document_count }}文档 {{ kb.chunk_count }}分块</span>
+            <span class="kb-stats">{{ text.kbStats(kb.document_count, kb.chunk_count) }}</span>
           </div>
         </a-option>
       </a-select>
 
-      <a-tooltip content="高级设置">
+      <a-tooltip :content="text.advancedSettings">
         <a-button
           type="text"
           size="small"
@@ -40,7 +40,7 @@
     <!-- 高级设置面板 -->
     <div v-if="showAdvancedSettings" class="advanced-settings">
       <div class="setting-item">
-        <label>相似度阈值:</label>
+        <label>{{ text.similarityThreshold }}</label>
         <a-slider
           :model-value="similarityThreshold"
           @update:model-value="handleSimilarityChange"
@@ -54,7 +54,7 @@
       </div>
 
       <div class="setting-item">
-        <label>检索数量:</label>
+        <label>{{ text.retrievalCount }}</label>
         <a-input-number
           :model-value="topK"
           @update:model-value="handleTopKChange"
@@ -70,7 +70,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, onMounted, watch } from 'vue';
+import { ref, onMounted, watch, computed } from 'vue';
 import {
   Message,
   Select as ASelect,
@@ -82,6 +82,7 @@ import {
 } from '@arco-design/web-vue';
 import { KnowledgeService } from '@/features/knowledge/services/knowledgeService';
 import type { KnowledgeBase } from '@/features/knowledge/types/knowledge';
+import { useAppI18n } from '@/composables/useAppI18n';
 
 interface Props {
   projectId: number | null;
@@ -92,6 +93,27 @@ interface Props {
 }
 
 const props = defineProps<Props>();
+const { isEnglish } = useAppI18n();
+
+const text = computed(() => (
+  isEnglish.value
+    ? {
+        selectKnowledgeBase: 'Select knowledge base',
+        kbStats: (documentCount: number, chunkCount: number) => `${documentCount} docs ${chunkCount} chunks`,
+        advancedSettings: 'Advanced settings',
+        similarityThreshold: 'Similarity threshold:',
+        retrievalCount: 'Top K:',
+        fetchKnowledgeBasesFailed: 'Failed to load knowledge bases',
+      }
+    : {
+        selectKnowledgeBase: '选择知识库',
+        kbStats: (documentCount: number, chunkCount: number) => `${documentCount}文档 ${chunkCount}分块`,
+        advancedSettings: '高级设置',
+        similarityThreshold: '相似度阈值:',
+        retrievalCount: '检索数量:',
+        fetchKnowledgeBasesFailed: '获取知识库列表失败',
+      }
+));
 
 const emit = defineEmits<{
   'update:use-knowledge-base': [value: boolean];
@@ -138,7 +160,7 @@ const fetchKnowledgeBases = async () => {
     }
   } catch (error) {
     console.error('获取知识库列表失败:', error);
-    Message.error('获取知识库列表失败');
+    Message.error(text.value.fetchKnowledgeBasesFailed);
     knowledgeBases.value = [];
   } finally {
     loading.value = false;

@@ -4,11 +4,11 @@
       <!-- 左侧实体选择面板 -->
       <div class="entity-panel">
         <div class="panel-header">
-          <h3>选择实体</h3>
+          <h3>{{ pageText.selectEntity }}</h3>
           <div class="entity-type-selector">
             <a-radio-group v-model="activeEntityType" @change="handleEntityTypeChange" type="button">
-              <a-radio value="user">用户</a-radio>
-              <a-radio value="group">组织</a-radio>
+              <a-radio value="user">{{ pageText.user }}</a-radio>
+              <a-radio value="group">{{ pageText.group }}</a-radio>
             </a-radio-group>
           </div>
         </div>
@@ -16,7 +16,7 @@
         <div class="search-section">
           <a-input-search
             v-model="entitySearchKeyword"
-            :placeholder="activeEntityType === 'user' ? '搜索用户名/邮箱' : '搜索组织名称'"
+            :placeholder="activeEntityType === 'user' ? pageText.searchUserPlaceholder : pageText.searchGroupPlaceholder"
             allow-clear
             @search="handleEntitySearch"
           />
@@ -67,9 +67,9 @@
             <a-select
               v-model="entityPagination.pageSize"
               :options="[
-                { label: '5条/页', value: 5 },
-                { label: '10条/页', value: 10 },
-                { label: '20条/页', value: 20 }
+                { label: pageText.pageSizeOption(5), value: 5 },
+                { label: pageText.pageSizeOption(10), value: 10 },
+                { label: pageText.pageSizeOption(20), value: 20 }
               ]"
               size="small"
               @change="handleEntityPageSizeChange"
@@ -83,7 +83,7 @@
         <div v-if="!selectedEntity" class="no-selection">
           <div class="empty-state">
             <i class="arco-icon arco-icon-info-circle"></i>
-            <p>请从左侧选择用户或组织来管理权限</p>
+            <p>{{ pageText.selectEntityNotice }}</p>
           </div>
         </div>
         
@@ -92,8 +92,8 @@
             <div class="entity-info">
               <i :class="activeEntityType === 'user' ? 'arco-icon arco-icon-user' : 'arco-icon arco-icon-user-group'"></i>
               <div class="entity-details">
-                <h3>{{ activeEntityType === 'user' ? (selectedEntity as User).username : (selectedEntity as Organization).name }} 的权限</h3>
-                <p>{{ activeEntityType === 'user' ? (selectedEntity as User).email : `组织 ID: ${selectedEntity.id}` }}</p>
+                <h3>{{ pageText.entityPermissions(activeEntityType === 'user' ? (selectedEntity as User).username : (selectedEntity as Organization).name) }}</h3>
+                <p>{{ activeEntityType === 'user' ? (selectedEntity as User).email : pageText.groupId(selectedEntity.id) }}</p>
               </div>
             </div>
           </div>
@@ -118,10 +118,48 @@ import { Message } from '@arco-design/web-vue';
 import { getUserList, type User } from '@/services/userService';
 import { getOrganizationList, type Organization } from '@/services/organizationService';
 import PermissionTreeSelector from '@/components/permission/PermissionTreeSelector.vue';
+import { useAppI18n } from '@/composables/useAppI18n';
 
 // 实体类型
 type EntityType = 'user' | 'group';
 type Entity = User | Organization;
+
+const { isEnglish } = useAppI18n();
+const pageText = computed(() => (
+  isEnglish.value
+    ? {
+        selectEntity: 'Select entity',
+        user: 'User',
+        group: 'Group',
+        searchUserPlaceholder: 'Search username/email',
+        searchGroupPlaceholder: 'Search organization name',
+        pageSizeOption: (count: number) => `${count} / page`,
+        selectEntityNotice: 'Select a user or group from the left to manage permissions',
+        entityPermissions: (name: string) => `${name} permissions`,
+        groupId: (id: number) => `Group ID: ${id}`,
+        fetchUsersFailed: 'Failed to fetch user list',
+        fetchUsersError: 'An error occurred while fetching the user list',
+        fetchGroupsFailed: 'Failed to fetch organization list',
+        fetchGroupsError: 'An error occurred while fetching the organization list',
+        permissionUpdated: 'Permissions updated successfully',
+      }
+    : {
+        selectEntity: '选择实体',
+        user: '用户',
+        group: '组织',
+        searchUserPlaceholder: '搜索用户名/邮箱',
+        searchGroupPlaceholder: '搜索组织名称',
+        pageSizeOption: (count: number) => `${count}条/页`,
+        selectEntityNotice: '请从左侧选择用户或组织来管理权限',
+        entityPermissions: (name: string) => `${name} 的权限`,
+        groupId: (id: number) => `组织 ID: ${id}`,
+        fetchUsersFailed: '获取用户列表失败',
+        fetchUsersError: '获取用户列表时发生错误',
+        fetchGroupsFailed: '获取组织列表失败',
+        fetchGroupsError: '获取组织列表时发生错误',
+        permissionUpdated: '权限更新成功',
+      }
+));
 
 // 响应式数据
 const activeEntityType = ref<EntityType>('user');
@@ -172,13 +210,13 @@ const fetchUsers = async () => {
       users.value = response.data;
       entityPagination.total = response.total || response.data.length;
     } else {
-      Message.error(response.error || '获取用户列表失败');
+      Message.error(response.error || pageText.value.fetchUsersFailed);
       users.value = [];
       entityPagination.total = 0;
     }
   } catch (error) {
     console.error('获取用户列表出错:', error);
-    Message.error('获取用户列表时发生错误');
+    Message.error(pageText.value.fetchUsersError);
     users.value = [];
     entityPagination.total = 0;
   } finally {
@@ -200,13 +238,13 @@ const fetchOrganizations = async () => {
       organizations.value = response.data;
       entityPagination.total = response.total || response.data.length;
     } else {
-      Message.error(response.error || '获取组织列表失败');
+      Message.error(response.error || pageText.value.fetchGroupsFailed);
       organizations.value = [];
       entityPagination.total = 0;
     }
   } catch (error) {
     console.error('获取组织列表出错:', error);
-    Message.error('获取组织列表时发生错误');
+    Message.error(pageText.value.fetchGroupsError);
     organizations.value = [];
     entityPagination.total = 0;
   } finally {
@@ -257,7 +295,7 @@ const handleEntityPageSizeChange = (pageSize: number) => {
 
 // 处理权限刷新
 const handleRefresh = () => {
-  Message.success('权限更新成功');
+  Message.success(pageText.value.permissionUpdated);
 };
 
 // 组件挂载时加载数据

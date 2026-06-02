@@ -63,7 +63,7 @@ WHartTest 是 AI 驱动的智能测试用例生成平台，采用前后端分离
 
 ### 知识库核心服务（`knowledge/services.py`）
 - `CustomAPIEmbeddings`：OpenAI 兼容嵌入 API 封装，支持 `embed_image()` 多模态嵌入
-- `DocumentProcessor`：文档加载、分块（`RecursiveCharacterTextSplitter`）、图片提取（PDF 用 PyMuPDF，DOCX 用 python-docx）
+- `DocumentProcessor`：文档加载、分块（`RecursiveCharacterTextSplitter`）、图片提取（PDF 用 pypdf，DOCX 用 python-docx）
 - `VectorStoreManager`：Qdrant 向量管理，支持 Dense + BM25 Sparse 混合检索 + RRF 融合 + Reranker 精排
 - 集合命名：`kb_{knowledge_base_id}`
 

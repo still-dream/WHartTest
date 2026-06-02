@@ -1,6 +1,7 @@
 import axios from 'axios';
 import type { AxiosResponse, InternalAxiosRequestConfig } from 'axios';
 import { useAuthStore } from '@/store/authStore';
+import { getCurrentServerLanguage } from '@/utils/installLocaleAdapters';
 
 // 定义我们需要的请求配置类型
 type RequestConfig = {
@@ -47,6 +48,7 @@ service.interceptors.request.use(
     // 从authStore获取token
     const authStore = useAuthStore();
     const token = authStore.getAccessToken;
+    config.headers['Accept-Language'] = getCurrentServerLanguage();
 
     // 如果有token就添加到请求头
     if (token) {
@@ -96,6 +98,10 @@ async function refreshToken() {
     // 使用配置好的 baseURL 来刷新 token
     const response = await axios.post(`${getApiBaseUrl()}/token/refresh/`, {
       refresh: refreshToken
+    }, {
+      headers: {
+        'Accept-Language': getCurrentServerLanguage(),
+      },
     });
 
     if (response.data && response.data.access) {
@@ -129,7 +135,7 @@ service.interceptors.response.use(
         data: {
           success: res.status === 'success', // 根据后端状态判断是否成功
           data: res.data, // 直接传递data字段
-          total: response.headers['x-total-count'] ? parseInt(response.headers['x-total-count']) : undefined,
+          total: res.total ?? (response.headers['x-total-count'] ? parseInt(response.headers['x-total-count']) : undefined),
           message: res.message || 'success'
         }
       } as any;
@@ -141,7 +147,7 @@ service.interceptors.response.use(
       data: {
         success: true,
         data: res,
-        total: response.headers['x-total-count'] ? parseInt(response.headers['x-total-count']) : undefined,
+        total: res?.total ?? (response.headers['x-total-count'] ? parseInt(response.headers['x-total-count']) : undefined),
         message: 'success'
       }
     } as any;

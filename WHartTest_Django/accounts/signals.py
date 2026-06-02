@@ -59,25 +59,3 @@ def auto_assign_admin_permissions(sender, instance, created, **kwargs):
     # 清理临时缓存字段，避免污染后续业务逻辑。
     if hasattr(instance, '_old_is_staff'):
         delattr(instance, '_old_is_staff')
-
-
-@receiver(post_save, sender=User)
-def auto_initialize_user_prompts(sender, instance, created, **kwargs):
-    """
-    新用户创建后，自动初始化默认提示词
-    """
-    # 仅在新建用户时执行默认提示词初始化，避免每次保存都触发重建。
-    if created:
-        try:
-            from prompts.services import initialize_user_prompts
-
-            # 调用提示词初始化服务，确保新用户首次登录即可使用默认提示词集。
-            result = initialize_user_prompts(instance)
-            logger.info(
-                f"新用户 {instance.username} 的提示词已自动初始化: "
-                f"创建 {result['summary']['created_count']} 个, "
-                f"跳过 {result['summary']['skipped_count']} 个"
-            )
-        except Exception as e:
-            # 初始化失败不阻断用户创建流程，仅记录错误供后续补偿处理。
-            logger.error(f"初始化用户 {instance.username} 的提示词失败: {e}")

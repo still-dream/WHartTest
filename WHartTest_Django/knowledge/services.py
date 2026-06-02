@@ -443,39 +443,35 @@ class DocumentProcessor:
     ) -> List[LangChainDocument]:
         """解析 PDF 文件，按页加载文本"""
         try:
-            import fitz
+            from pypdf import PdfReader
         except ImportError:
             # 降级为 PyPDFLoader
             loader = PyPDFLoader(file_path)
             return loader.load()
 
-        pdf_doc = fitz.open(file_path)
-        try:
-            docs = []
+        reader = PdfReader(file_path)
+        docs = []
 
-            for page_num in range(len(pdf_doc)):
-                page = pdf_doc[page_num]
-                content = page.get_text().strip()
+        for page_num, page in enumerate(reader.pages):
+            content = (page.extract_text() or "").strip()
 
-                if content:
-                    docs.append(
-                        LangChainDocument(
-                            page_content=content,
-                            metadata={
-                                "source": document.title,
-                                "document_id": str(document.id),
-                                "document_type": document.document_type,
-                                "title": document.title,
-                                "file_path": file_path,
-                                "page": page_num,
-                            },
-                        )
+            if content:
+                docs.append(
+                    LangChainDocument(
+                        page_content=content,
+                        metadata={
+                            "source": document.title,
+                            "document_id": str(document.id),
+                            "document_type": document.document_type,
+                            "title": document.title,
+                            "file_path": file_path,
+                            "page": page_num,
+                        },
                     )
+                )
 
-            logger.info(f"PDF 结构化解析完成 - 页数: {len(docs)}")
-            return docs
-        finally:
-            pdf_doc.close()
+        logger.info(f"PDF 结构化解析完成 - 页数: {len(docs)}")
+        return docs
 
     def _load_docx_structured(
         self, file_path: str, document: Document

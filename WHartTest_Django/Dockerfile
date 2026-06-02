@@ -13,6 +13,8 @@ FROM ${PYTHON_BASE_IMAGE} AS builder
 ARG APT_BASE_URL=http://deb.debian.org
 ARG PIP_INDEX_URL=https://pypi.org/simple
 ARG PIP_INDEX_FALLBACKS=
+ARG HF_ENDPOINT=https://huggingface.co
+ARG HF_MIRROR=https://hf-mirror.com
 
 WORKDIR /build
 
@@ -22,7 +24,9 @@ ENV PYTHONUNBUFFERED=1 \
     PIP_NO_CACHE_DIR=1 \
     DEBIAN_FRONTEND=noninteractive \
     PIP_DISABLE_PIP_VERSION_CHECK=1 \
-    PIP_INDEX_FALLBACKS=${PIP_INDEX_FALLBACKS}
+    PIP_INDEX_FALLBACKS=${PIP_INDEX_FALLBACKS} \
+    FASTEMBED_CACHE_PATH=/root/.cache/fastembed \
+    HF_ENDPOINT=${HF_ENDPOINT}
 
 # 安装构建依赖（仅在构建阶段需要）
 RUN if [ "$APT_BASE_URL" != "http://deb.debian.org" ]; then \
@@ -68,6 +72,43 @@ RUN set -eux; \
     }; \
     install_requirements
 
+# 预下载 BM25 稀疏编码模型（用于混合检索）
+# 使用 FASTEMBED_CACHE_PATH 环境变量强制指定缓存路径
+# 支持国内镜像加速下载，添加重试机制确保成功
+ENV HOME=/root
+RUN mkdir -p /root/.cache/fastembed && \
+    set -eux; \
+    download_bm25() { \
+      endpoint="$1"; \
+      echo "Trying to download BM25 model from: $endpoint"; \
+      /opt/venv/bin/python -c "\
+import os; \
+import time; \
+os.environ['FASTEMBED_CACHE_PATH'] = '/root/.cache/fastembed'; \
+os.environ['HF_ENDPOINT'] = '$endpoint'; \
+from fastembed import SparseTextEmbedding; \
+m = SparseTextEmbedding('Qdrant/bm25'); \
+print('BM25 model downloaded successfully from: $endpoint'); \
+"; \
+    }; \
+    for i in 1 2 3; do \
+      echo "Attempt $i: Trying HF_MIRROR (${HF_MIRROR})..."; \
+      if download_bm25 "${HF_MIRROR}"; then \
+        echo "BM25 model downloaded from mirror successfully"; \
+        break; \
+      fi; \
+      echo "Mirror failed, attempt $i: Trying HF_ENDPOINT (${HF_ENDPOINT})..."; \
+      if download_bm25 "${HF_ENDPOINT}"; then \
+        echo "BM25 model downloaded from official source successfully"; \
+        break; \
+      fi; \
+      if [ "$i" -lt 3 ]; then \
+        echo "Both sources failed, waiting 10 seconds before retry..."; \
+        sleep 10; \
+      fi; \
+    done; \
+    ls -la /root/.cache/fastembed/
+
 # ============================================
 # 第二阶段：运行阶段（仅包含运行时依赖）
 # ============================================
@@ -77,32 +118,33 @@ ARG APT_BASE_URL=http://deb.debian.org
 ARG HF_ENDPOINT=https://huggingface.co
 ARG NPM_REGISTRY=https://registry.npmjs.org
 ARG PLAYWRIGHT_DOWNLOAD_HOST=
+ARG CHROME_FOR_TESTING_MIRROR=
 
 WORKDIR /app
 
 # 设置环境变量
 ENV PYTHONUNBUFFERED=1 \
     PYTHONDONTWRITEBYTECODE=1 \
-    PIP_NO_CACHE_DIR=1 \
     DEBIAN_FRONTEND=noninteractive \
-    PIP_DISABLE_PIP_VERSION_CHECK=1 \
+    PATH="/opt/venv/bin:$PATH" \
+    PYTHONPATH="/app" \
     FASTEMBED_CACHE_PATH=/root/.cache/fastembed \
     HF_ENDPOINT=${HF_ENDPOINT} \
     PLAYWRIGHT_DOWNLOAD_HOST=${PLAYWRIGHT_DOWNLOAD_HOST} \
-    HOME=/root \
-    PYTHONPATH="/app:$PYTHONPATH"
+    AGENT_BROWSER_CHROME_PATH=/opt/chrome-for-testing/chrome-linux64/chrome
 
-# 安装系统依赖
+# 仅安装运行时必需的系统依赖
 RUN if [ "$APT_BASE_URL" != "http://deb.debian.org" ]; then \
         sed -i "s|http://deb.debian.org/debian|${APT_BASE_URL}/debian|g; s|http://deb.debian.org/debian-security|${APT_BASE_URL}/debian-security|g" /etc/apt/sources.list.d/debian.sources; \
     fi && \
-    apt-get -o Acquire::Retries=10 update && \
-    apt-get -o Acquire::Retries=10 install -y --fix-missing --no-install-recommends \
+    apt-get -o Acquire::Retries=10 update && apt-get -o Acquire::Retries=10 install -y --fix-missing --no-install-recommends \
     supervisor \
     curl \
     git \
     nodejs \
     npm \
+    unzip \
+    # Playwright 所需的系统依赖
     libnss3 \
     libnspr4 \
     libatk1.0-0 \
@@ -121,54 +163,157 @@ RUN if [ "$APT_BASE_URL" != "http://deb.debian.org" ]; then \
     libpango-1.0-0 \
     libcairo2 \
     libasound2 \
+    # 中文字体支持（解决截图乱码问题）
     fonts-noto-cjk \
     fonts-wqy-zenhei \
+    # 旧版Word文档(.doc)解析支持
     antiword \
     catdoc \
     && rm -rf /var/lib/apt/lists/* \
     && apt-get clean \
     && fc-cache -fv
 
-# 复制虚拟环境
+# 从构建阶段复制虚拟环境（不包含构建工具）
 COPY --from=builder /opt/venv /opt/venv
 
-# 确保虚拟环境的可执行文件被使用
-ENV PATH="/opt/venv/bin:$PATH"
+# 复制第三方许可证声明文件（用于对外分发合规）
+COPY THIRD_PARTY_NOTICES.md /app/THIRD_PARTY_NOTICES.md
 
-# 安装 Playwright 浏览器（在构建镜像时安装）
-RUN npx playwright install chromium
+# 安装 Playwright 浏览器（Chromium）—— 镜像源失败时自动回退官方源
+RUN set -eux; \
+    if /opt/venv/bin/playwright install chromium; then \
+      echo "Playwright chromium installed successfully"; \
+    elif [ -n "${PLAYWRIGHT_DOWNLOAD_HOST:-}" ]; then \
+      echo "Mirror download failed, retrying with official source..."; \
+      PLAYWRIGHT_DOWNLOAD_HOST= /opt/venv/bin/playwright install chromium; \
+    else \
+      exit 1; \
+    fi
 
-# 复制 Python 项目文件（按顺序复制以优化缓存）
-COPY manage.py ./
-COPY wharttest_django/ /app/wharttest_django/
+# 收集第三方许可证文件（Playwright/Pillow/Chromium/FFmpeg）
+RUN set -eux; \
+    mkdir -p /app/third_party_licenses/python /app/third_party_licenses/playwright-browsers; \
+    cp /app/THIRD_PARTY_NOTICES.md /app/third_party_licenses/THIRD_PARTY_NOTICES.md; \
+    site_pkgs="$(/opt/venv/bin/python -c 'import site; print(next(p for p in site.getsitepackages() if p.endswith("site-packages")))')"; \
+    copy_python_licenses() { \
+      src="$1"; \
+      dst="$2"; \
+      depth="$3"; \
+      [ -d "$src" ] || return 0; \
+      mkdir -p "$dst"; \
+      find "$src" -maxdepth "$depth" -type f \( -name "LICENSE*" -o -name "COPYING*" -o -name "NOTICE*" \) -exec cp -f {} "$dst"/ \; ; \
+    }; \
+    for pattern in "playwright-*.dist-info" "pillow-*.dist-info" "Pillow-*.dist-info"; do \
+      for dir in "$site_pkgs"/$pattern; do \
+        [ -d "$dir" ] || continue; \
+        copy_python_licenses "$dir" "/app/third_party_licenses/python/$(basename "$dir")" 2; \
+      done; \
+    done; \
+    for dir in "$site_pkgs"/playwright "$site_pkgs"/PIL; do \
+      [ -d "$dir" ] || continue; \
+      copy_python_licenses "$dir" "/app/third_party_licenses/python/$(basename "$dir")" 2; \
+    done; \
+    browser_root="${PLAYWRIGHT_BROWSERS_PATH:-/root/.cache/ms-playwright}"; \
+    if [ -d "$browser_root" ]; then \
+      find "$browser_root" -maxdepth 4 -type f \( -name "LICENSE*" -o -name "COPYING*" -o -name "NOTICE*" -o -name "ABOUT" \) -exec cp --parents -f {} /app/third_party_licenses/playwright-browsers/ \; ; \
+    fi
+
+# 安装 agent-browser CLI 工具及其浏览器
+# agent-browser 是 AI Agent 专用的浏览器自动化工具
+# 支持通过 CHROME_FOR_TESTING_MIRROR 参数指定 Chrome for Testing 镜像地址
+# 如果镜像地址为空，则使用官方地址下载
+RUN set -eux; \
+    npm config set registry "${NPM_REGISTRY}"; \
+    npm install -g agent-browser; \
+    echo "agent-browser npm package installed successfully"; \
+    if [ -n "${CHROME_FOR_TESTING_MIRROR}" ]; then \
+      echo "Using Chrome for Testing mirror: ${CHROME_FOR_TESTING_MIRROR}"; \
+      mkdir -p /opt/chrome-for-testing; \
+      chrome_version="stable"; \
+      chrome_url="${CHROME_FOR_TESTING_MIRROR}/${chrome_version}/linux64/chrome-linux64.zip"; \
+      echo "Downloading Chrome from: $chrome_url"; \
+      for i in 1 2 3; do \
+        if curl -fsSL --retry 5 --retry-delay 10 --max-time 300 "$chrome_url" -o /tmp/chrome.zip; then \
+          echo "Chrome downloaded successfully on attempt $i"; \
+          break; \
+        fi; \
+        echo "Download failed on attempt $i, retrying..."; \
+        sleep 5; \
+      done; \
+      if [ -f /tmp/chrome.zip ]; then \
+        unzip -q /tmp/chrome.zip -d /opt/chrome-for-testing; \
+        rm /tmp/chrome.zip; \
+        export AGENT_BROWSER_CHROME_PATH="/opt/chrome-for-testing/chrome-linux64/chrome"; \
+        echo "AGENT_BROWSER_CHROME_PATH set to: $AGENT_BROWSER_CHROME_PATH"; \
+      else \
+        echo "Warning: Chrome download from mirror failed, falling back to agent-browser install"; \
+        agent-browser install || echo "Warning: agent-browser install also failed"; \
+      fi; \
+    else \
+      echo "No Chrome mirror specified, using agent-browser install"; \
+      for i in 1 2 3; do \
+        echo "Attempt $i: Running agent-browser install..."; \
+        if agent-browser install; then \
+          echo "agent-browser browsers installed successfully"; \
+          break; \
+        fi; \
+        echo "agent-browser install failed on attempt $i"; \
+        if [ "$i" -lt 3 ]; then \
+          sleep 10; \
+        fi; \
+      done; \
+    fi
+
+# 从构建阶段复制预下载的 BM25 模型缓存
+COPY --from=builder /root/.cache/fastembed /root/.cache/fastembed
+
+# 复制启动脚本和配置文件
+COPY entrypoint.sh /app/entrypoint.sh
+COPY supervisord.conf /app/supervisord.conf
+
+# 转换换行符并添加执行权限
+RUN sed -i 's/\r$//' /app/entrypoint.sh && chmod +x /app/entrypoint.sh
+
+# 复制Django项目代码（仅复制必要的Python代码）
+COPY manage.py /app/
 COPY accounts/ /app/accounts/
-COPY projects/ /app/projects/
-COPY testcases/ /app/testcases/
+COPY api_database_configs/ /app/api_database_configs/
+COPY api_environments/ /app/api_environments/
+COPY api_functions/ /app/api_functions/
+COPY api_interfaces/ /app/api_interfaces/
+COPY api_keys/ /app/api_keys/
+COPY api_modules/ /app/api_modules/
+COPY api_sync/ /app/api_sync/
+COPY api_testcases/ /app/api_testcases/
+COPY api_testtasks/ /app/api_testtasks/
+COPY httprunner/ /app/httprunner/
+COPY knowledge/ /app/knowledge/
 COPY langgraph_integration/ /app/langgraph_integration/
 COPY mcp_tools/ /app/mcp_tools/
-COPY api_keys/ /app/api_keys/
-COPY knowledge/ /app/knowledge/
+COPY orchestrator_integration/ /app/orchestrator_integration/
+COPY projects/ /app/projects/
 COPY prompts/ /app/prompts/
 COPY requirements/ /app/requirements/
-COPY orchestrator_integration/ /app/orchestrator_integration/
 COPY skills/ /app/skills/
-COPY testcase_templates/ /app/testcase_templates/
+COPY task_center/ /app/task_center/
 COPY ui_automation/ /app/ui_automation/
 COPY weixin_integration/ /app/weixin_integration/
-COPY task_center/ /app/task_center/
+COPY testcase_templates/ /app/testcase_templates/
+COPY testcases/ /app/testcases/
+COPY wharttest_django/ /app/wharttest_django/
 
-# 复制 Supervisor 配置
-COPY supervisord.conf /etc/supervisor/conf.d/supervisord.conf
-
-# 设置 Django 配置文件位置
-ENV DJANGO_SETTINGS_MODULE=wharttest_django.settings
+# 清理不必要的文件
+RUN find /app -type f \( -name "*.sqlite*" -o -name "*.db" -o -name "*.sql" \) -delete && \
+    find /app -type d \( -name ".venv" -o -name "venv" -o -name "__pycache__" -o -name ".git" -o -name "*.egg-info" \) -exec rm -rf {} + 2>/dev/null || true && \
+    find /opt/venv -type d -name "__pycache__" -exec rm -rf {} + 2>/dev/null || true && \
+    find /opt/venv -type f -name "*.pyc" -delete 2>/dev/null || true && \
+    find /opt/venv -type f -name "*.pyo" -delete 2>/dev/null || true
 
 # 创建必要的目录
-RUN mkdir -p /app/data /app/logs /app/bundled_skills /root/.cache/fastembed
+RUN mkdir -p media static nltk_data /var/log
 
-# 健康检查
-HEALTHCHECK --interval=30s --timeout=10s --start-period=5s --retries=3 \
-    CMD curl -f http://localhost:8000/health || exit 1
+# 暴露端口
+EXPOSE 8000
 
-# 使用 Supervisor 启动服务
-CMD ["supervisord", "-c", "/etc/supervisor/conf.d/supervisord.conf"]
+# 设置启动脚本为入口点
+ENTRYPOINT ["/app/entrypoint.sh"]

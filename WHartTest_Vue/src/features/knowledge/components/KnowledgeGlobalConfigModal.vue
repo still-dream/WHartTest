@@ -1,7 +1,7 @@
 <template>
   <a-modal
     :visible="visible"
-    title="知识库全局配置"
+    :title="text.modalTitle"
     :width="modalWidth"
     @ok="handleSubmit"
     @cancel="handleCancel"
@@ -16,17 +16,17 @@
         layout="vertical"
       >
         <a-alert type="info">
-          全局配置将应用于所有知识库向量生成，修改后新上传的文档将使用新配置。
+          {{ text.globalConfigTip }}
         </a-alert>
 
-        <a-divider>嵌入服务配置</a-divider>
+        <a-divider>{{ text.embeddingServiceConfig }}</a-divider>
 
         <a-row :gutter="16">
           <a-col :xs="24" :sm="12">
-            <a-form-item label="嵌入服务" field="embedding_service">
+            <a-form-item :label="text.embeddingService" field="embedding_service">
               <a-select
                 v-model="formData.embedding_service"
-                placeholder="请选择嵌入服务"
+                :placeholder="text.selectEmbeddingService"
                 @change="handleEmbeddingServiceChange"
               >
                 <a-option
@@ -39,7 +39,7 @@
             </a-form-item>
           </a-col>
           <a-col :xs="24" :sm="12">
-            <a-form-item label="模型名称" field="model_name">
+            <a-form-item :label="text.modelName" field="model_name">
               <a-input
                 v-model="formData.model_name"
                 placeholder="text-embedding-ada-002 / bge-m3"
@@ -48,7 +48,7 @@
           </a-col>
         </a-row>
 
-        <a-form-item label="API基础URL" field="api_base_url">
+        <a-form-item :label="text.apiBaseUrl" field="api_base_url">
           <a-input
             v-model="formData.api_base_url"
             placeholder="http://your-embedding-service.com/v1/embeddings"
@@ -57,7 +57,7 @@
 
         <a-row :gutter="16" align="end">
           <a-col :xs="24" :sm="16">
-            <a-form-item label="API密钥" field="api_key">
+            <a-form-item :label="text.apiKey" field="api_key">
               <a-input-password
                 v-model="formData.api_key"
                 :placeholder="apiKeyPlaceholder"
@@ -74,26 +74,26 @@
                 long
               >
                 <template #icon><icon-refresh /></template>
-                测试连接
+                {{ text.testConnection }}
               </a-button>
             </a-form-item>
           </a-col>
         </a-row>
 
-        <a-divider>Reranker 精排服务（可选）</a-divider>
+        <a-divider>{{ text.rerankerOptional }}</a-divider>
 
         <a-row :gutter="16">
           <a-col :xs="24" :sm="12">
             <a-form-item field="reranker_service">
               <template #label>
-                Reranker 服务
-                <a-tooltip content="Reranker用于对检索结果进行精排，可显著提升检索精度。可独立于嵌入服务配置。">
+                {{ text.rerankerService }}
+                <a-tooltip :content="text.rerankerServiceHint">
                   <icon-question-circle class="label-tip-icon" />
                 </a-tooltip>
               </template>
               <a-select
                 v-model="formData.reranker_service"
-                placeholder="请选择Reranker服务"
+                :placeholder="text.selectRerankerService"
                 @change="handleRerankerServiceChange"
               >
                 <a-option
@@ -106,7 +106,7 @@
             </a-form-item>
           </a-col>
           <a-col :xs="24" :sm="12">
-            <a-form-item label="Reranker 模型" field="reranker_model_name">
+            <a-form-item :label="text.rerankerModel" field="reranker_model_name">
               <a-input
                 v-model="formData.reranker_model_name"
                 placeholder="bge-reranker-v2-m3"
@@ -118,18 +118,18 @@
 
         <a-form-item
           v-if="formData.reranker_service !== 'none'"
-          label="Reranker API地址"
+          :label="text.rerankerApiUrl"
           field="reranker_api_url"
         >
           <a-input
             v-model="formData.reranker_api_url"
-            placeholder="http://xinference:9997（不填则使用嵌入服务地址）"
+            :placeholder="text.rerankerApiUrlPlaceholder"
           />
         </a-form-item>
 
         <a-row v-if="formData.reranker_service !== 'none'" :gutter="16" align="end">
           <a-col :xs="24" :sm="16">
-            <a-form-item label="Reranker API密钥" field="reranker_api_key">
+            <a-form-item :label="text.rerankerApiKey" field="reranker_api_key">
               <a-input-password
                 v-model="formData.reranker_api_key"
                 :placeholder="rerankerApiKeyPlaceholder"
@@ -146,26 +146,26 @@
                 long
               >
                 <template #icon><icon-refresh /></template>
-                测试
+                {{ text.test }}
               </a-button>
             </a-form-item>
           </a-col>
         </a-row>
 
-        <a-divider>默认分块配置</a-divider>
+        <a-divider>{{ text.defaultChunkConfig }}</a-divider>
 
         <a-row :gutter="16">
           <a-col :xs="24" :sm="12">
             <a-form-item field="chunk_size">
               <template #label>
-                分块大小
-                <a-tooltip content="每个文本块的最大字符数。建议值1000-2000，较小值提高检索精度，较大值保持上下文完整性。">
+                {{ text.chunkSize }}
+                <a-tooltip :content="text.chunkSizeHint">
                   <icon-question-circle class="label-tip-icon" />
                 </a-tooltip>
               </template>
               <a-input-number
                 v-model="formData.chunk_size"
-                placeholder="分块大小"
+                :placeholder="text.chunkSize"
                 :min="100"
                 :max="4000"
                 :step="100"
@@ -176,14 +176,14 @@
           <a-col :xs="24" :sm="12">
             <a-form-item field="chunk_overlap">
               <template #label>
-                分块重叠
-                <a-tooltip content="相邻文本块之间的重叠字符数。建议为分块大小的10-20%，可避免跨块信息丢失。">
+                {{ text.chunkOverlap }}
+                <a-tooltip :content="text.chunkOverlapHint">
                   <icon-question-circle class="label-tip-icon" />
                 </a-tooltip>
               </template>
               <a-input-number
                 v-model="formData.chunk_overlap"
-                placeholder="分块重叠"
+                :placeholder="text.chunkOverlap"
                 :min="0"
                 :max="500"
                 :step="50"
@@ -195,7 +195,7 @@
 
         <div v-if="formData.updated_by_name" class="config-meta">
           <a-space>
-            <span>最后更新：{{ formData.updated_by_name }}</span>
+            <span>{{ text.lastUpdatedBy }}{{ formData.updated_by_name }}</span>
             <span>{{ formatDate(formData.updated_at) }}</span>
           </a-space>
         </div>
@@ -217,6 +217,8 @@ import type {
   RerankerServiceOption
 } from '../types/knowledge';
 import { getRequiredFieldsForEmbeddingService } from '../types/knowledge';
+import { useAppI18n } from '@/composables/useAppI18n';
+import { translateLegacyText, type AppLocale } from '@/i18n';
 
 interface Props {
   visible: boolean;
@@ -227,6 +229,121 @@ const emit = defineEmits<{
   close: [];
   saved: [];
 }>();
+const { isEnglish } = useAppI18n();
+const currentLocale = computed<AppLocale>(() => (isEnglish.value ? 'en-US' : 'zh-CN'));
+
+const localizeBackendMessage = (message: unknown, fallback: string) => {
+  if (typeof message !== 'string' || !message.trim()) {
+    return fallback;
+  }
+  return translateLegacyText(message, currentLocale.value);
+};
+
+const text = computed(() => (
+  isEnglish.value
+    ? {
+        modalTitle: 'Global knowledge config',
+        globalConfigTip: 'Global config applies to all knowledge base vectors. New uploads use the updated config.',
+        embeddingServiceConfig: 'Embedding service',
+        embeddingService: 'Embedding service',
+        selectEmbeddingService: 'Select embedding service',
+        modelName: 'Model name',
+        apiBaseUrl: 'API base URL',
+        apiKey: 'API key',
+        testConnection: 'Test connection',
+        rerankerOptional: 'Reranker (optional)',
+        rerankerService: 'Reranker service',
+        rerankerServiceHint: 'Reranker re-ranks retrieval results to improve precision. It can be configured independently.',
+        selectRerankerService: 'Select reranker service',
+        rerankerModel: 'Reranker model',
+        rerankerApiUrl: 'Reranker API URL',
+        rerankerApiUrlPlaceholder: 'http://xinference:9997 (leave empty to reuse embedding URL)',
+        rerankerApiKey: 'Reranker API key',
+        test: 'Test',
+        defaultChunkConfig: 'Default chunk settings',
+        chunkSize: 'Chunk size',
+        chunkSizeHint: 'Max characters per chunk. Recommended 1000-2000.',
+        chunkOverlap: 'Chunk overlap',
+        chunkOverlapHint: 'Overlapped chars between adjacent chunks. Recommended 10-20% of chunk size.',
+        lastUpdatedBy: 'Last updated by: ',
+        rerankerNone: 'Disabled',
+        rerankerCustom: 'Custom API',
+        validateEmbeddingService: 'Please select an embedding service',
+        validateApiBaseUrl: 'Please enter API base URL',
+        validateModelName: 'Please enter model name',
+        validateChunkSizeRequired: 'Please enter chunk size',
+        validateChunkSizeRange: 'Chunk size must be between 100 and 4000',
+        validateChunkOverlapRequired: 'Please enter chunk overlap',
+        validateChunkOverlapRange: 'Chunk overlap must be between 0 and 500',
+        validateApiKeyRequired: 'Please enter API key',
+        savedApiKeyHint: 'Saved. Re-enter to update',
+        apiKeyHint: 'Required for OpenAI/Azure, optional for others',
+        fetchConfigFailed: 'Failed to fetch config',
+        embeddingConfigIncomplete: 'Please complete embedding configuration first',
+        apiKeyRequiredForService: 'API key is required for this service',
+        embeddingTestSuccess: 'Embedding test passed',
+        testFailed: 'Test failed',
+        connectFailed: 'Unable to connect to service',
+        rerankerNotEnabled: 'Please enable reranker first',
+        rerankerModelRequired: 'Please enter reranker model name',
+        rerankerTestSuccess: 'Reranker test passed',
+        rerankerTestFailed: 'Reranker test failed',
+        rerankerConnectFailed: 'Unable to connect to reranker service',
+        saveConfigSuccess: 'Configuration saved',
+        saveConfigFailed: 'Failed to save configuration',
+      }
+    : {
+        modalTitle: '知识库全局配置',
+        globalConfigTip: '全局配置将应用于所有知识库向量生成，修改后新上传的文档将使用新配置。',
+        embeddingServiceConfig: '嵌入服务配置',
+        embeddingService: '嵌入服务',
+        selectEmbeddingService: '请选择嵌入服务',
+        modelName: '模型名称',
+        apiBaseUrl: 'API基础URL',
+        apiKey: 'API密钥',
+        testConnection: '测试连接',
+        rerankerOptional: 'Reranker 精排服务（可选）',
+        rerankerService: 'Reranker 服务',
+        rerankerServiceHint: 'Reranker用于对检索结果进行精排，可显著提升检索精度。可独立于嵌入服务配置。',
+        selectRerankerService: '请选择Reranker服务',
+        rerankerModel: 'Reranker 模型',
+        rerankerApiUrl: 'Reranker API地址',
+        rerankerApiUrlPlaceholder: 'http://xinference:9997（不填则使用嵌入服务地址）',
+        rerankerApiKey: 'Reranker API密钥',
+        test: '测试',
+        defaultChunkConfig: '默认分块配置',
+        chunkSize: '分块大小',
+        chunkSizeHint: '每个文本块的最大字符数。建议值1000-2000，较小值提高检索精度，较大值保持上下文完整性。',
+        chunkOverlap: '分块重叠',
+        chunkOverlapHint: '相邻文本块之间的重叠字符数。建议为分块大小的10-20%，可避免跨块信息丢失。',
+        lastUpdatedBy: '最后更新：',
+        rerankerNone: '不启用',
+        rerankerCustom: '自定义API',
+        validateEmbeddingService: '请选择嵌入服务',
+        validateApiBaseUrl: '请输入API基础URL',
+        validateModelName: '请输入模型名称',
+        validateChunkSizeRequired: '请输入分块大小',
+        validateChunkSizeRange: '分块大小必须在100-4000之间',
+        validateChunkOverlapRequired: '请输入分块重叠',
+        validateChunkOverlapRange: '分块重叠必须在0-500之间',
+        validateApiKeyRequired: '请输入API密钥',
+        savedApiKeyHint: '已保存，如需修改请重新输入',
+        apiKeyHint: 'OpenAI/Azure必填，其他服务可选',
+        fetchConfigFailed: '获取配置失败',
+        embeddingConfigIncomplete: '请先完成嵌入服务配置',
+        apiKeyRequiredForService: '此服务需要API密钥',
+        embeddingTestSuccess: '嵌入模型测试成功！服务运行正常',
+        testFailed: '测试失败',
+        connectFailed: '无法连接到服务',
+        rerankerNotEnabled: '请先启用 Reranker 服务',
+        rerankerModelRequired: '请输入 Reranker 模型名称',
+        rerankerTestSuccess: 'Reranker 服务测试成功！',
+        rerankerTestFailed: 'Reranker 测试失败',
+        rerankerConnectFailed: '无法连接到 Reranker 服务',
+        saveConfigSuccess: '配置保存成功',
+        saveConfigFailed: '保存配置失败',
+      }
+));
 
 const formRef = ref();
 const loading = ref(false);
@@ -267,30 +384,38 @@ const embeddingServices = ref<EmbeddingServiceOption[]>([]);
 
 // Reranker 服务选项
 const rerankerServices = ref<RerankerServiceOption[]>([
-  { value: 'none', label: '不启用' },
+  { value: 'none', label: text.value.rerankerNone },
   { value: 'xinference', label: 'Xinference' },
-  { value: 'custom', label: '自定义API' },
+  { value: 'custom', label: text.value.rerankerCustom },
 ]);
+
+watch(isEnglish, () => {
+  rerankerServices.value = [
+    { value: 'none', label: text.value.rerankerNone },
+    { value: 'xinference', label: 'Xinference' },
+    { value: 'custom', label: text.value.rerankerCustom },
+  ];
+});
 
 // 动态表单验证规则
 const rules = computed(() => {
   const baseRules: any = {
     embedding_service: [
-      { required: true, message: '请选择嵌入服务' },
+      { required: true, message: text.value.validateEmbeddingService },
     ],
     api_base_url: [
-      { required: true, message: '请输入API基础URL' },
+      { required: true, message: text.value.validateApiBaseUrl },
     ],
     model_name: [
-      { required: true, message: '请输入模型名称' },
+      { required: true, message: text.value.validateModelName },
     ],
     chunk_size: [
-      { required: true, message: '请输入分块大小' },
-      { type: 'number', min: 100, max: 4000, message: '分块大小必须在100-4000之间' },
+      { required: true, message: text.value.validateChunkSizeRequired },
+      { type: 'number', min: 100, max: 4000, message: text.value.validateChunkSizeRange },
     ],
     chunk_overlap: [
-      { required: true, message: '请输入分块重叠' },
-      { type: 'number', min: 0, max: 500, message: '分块重叠必须在0-500之间' },
+      { required: true, message: text.value.validateChunkOverlapRequired },
+      { type: 'number', min: 0, max: 500, message: text.value.validateChunkOverlapRange },
     ],
   };
 
@@ -298,7 +423,7 @@ const rules = computed(() => {
   if (requiredFields.includes('api_key')) {
     baseRules.api_key = [{
       required: !hasSavedApiKey.value || apiKeyTouched.value,
-      message: '请输入API密钥',
+      message: text.value.validateApiKeyRequired,
     }];
   }
 
@@ -306,11 +431,11 @@ const rules = computed(() => {
 });
 
 const apiKeyPlaceholder = computed(() =>
-  hasSavedApiKey.value ? '已保存，如需修改请重新输入' : 'OpenAI/Azure必填，其他服务可选'
+  hasSavedApiKey.value ? text.value.savedApiKeyHint : text.value.apiKeyHint
 );
 
 const rerankerApiKeyPlaceholder = computed(() =>
-  hasSavedRerankerApiKey.value ? '已保存，如需修改请重新输入' : 'OpenAI/Azure必填，其他服务可选'
+  hasSavedRerankerApiKey.value ? text.value.savedApiKeyHint : text.value.apiKeyHint
 );
 
 // 监听弹窗显示状态
@@ -341,7 +466,7 @@ const fetchData = async () => {
     });
   } catch (error) {
     console.error('获取配置失败:', error);
-    Message.error('获取配置失败');
+    Message.error(text.value.fetchConfigFailed);
   } finally {
     fetchLoading.value = false;
   }
@@ -411,14 +536,14 @@ const handleRerankerServiceChange = (value: RerankerServiceType) => {
 // 测试嵌入服务连接
 const testEmbeddingService = async () => {
   if (!formData.embedding_service || !formData.api_base_url || !formData.model_name) {
-    Message.warning('请先完成嵌入服务配置');
+    Message.warning(text.value.embeddingConfigIncomplete);
     return;
   }
   
   const needsApiKey = formData.embedding_service === 'openai' || formData.embedding_service === 'azure_openai';
   const hasUsableApiKey = apiKeyTouched.value ? !!formData.api_key : hasSavedApiKey.value;
   if (needsApiKey && !hasUsableApiKey) {
-    Message.warning('此服务需要API密钥');
+    Message.warning(text.value.apiKeyRequiredForService);
     return;
   }
 
@@ -441,12 +566,12 @@ const testEmbeddingService = async () => {
     const result = await KnowledgeService.testEmbeddingConnection(payload);
     
     if (result.success) {
-      Message.success(result.message || '嵌入模型测试成功！服务运行正常');
+      Message.success(localizeBackendMessage(result.message, text.value.embeddingTestSuccess));
     } else {
-      Message.error(result.message || '测试失败');
+      Message.error(localizeBackendMessage(result.message, text.value.testFailed));
     }
   } catch (error: any) {
-    Message.error(error?.message || '无法连接到服务');
+    Message.error(error?.message || text.value.connectFailed);
   } finally {
     testingConnection.value = false;
   }
@@ -455,12 +580,12 @@ const testEmbeddingService = async () => {
 // 测试 Reranker 服务连接
 const testRerankerService = async () => {
   if (formData.reranker_service === 'none') {
-    Message.warning('请先启用 Reranker 服务');
+    Message.warning(text.value.rerankerNotEnabled);
     return;
   }
 
   if (!formData.reranker_model_name) {
-    Message.warning('请输入 Reranker 模型名称');
+    Message.warning(text.value.rerankerModelRequired);
     return;
   }
 
@@ -482,12 +607,12 @@ const testRerankerService = async () => {
     const result = await KnowledgeService.testRerankerConnection(payload);
 
     if (result.success) {
-      Message.success(result.message || 'Reranker 服务测试成功！');
+      Message.success(localizeBackendMessage(result.message, text.value.rerankerTestSuccess));
     } else {
-      Message.error(result.message || 'Reranker 测试失败');
+      Message.error(localizeBackendMessage(result.message, text.value.rerankerTestFailed));
     }
   } catch (error: any) {
-    Message.error(error?.message || '无法连接到 Reranker 服务');
+    Message.error(localizeBackendMessage(error?.message, text.value.rerankerConnectFailed));
   } finally {
     testingReranker.value = false;
   }
@@ -495,7 +620,7 @@ const testRerankerService = async () => {
 
 const formatDate = (dateStr?: string) => {
   if (!dateStr) return '';
-  return new Date(dateStr).toLocaleString('zh-CN');
+  return new Date(dateStr).toLocaleString(isEnglish.value ? 'en-US' : 'zh-CN');
 };
 
 const handleSubmit = async () => {
@@ -522,12 +647,12 @@ const handleSubmit = async () => {
 
     await KnowledgeService.updateGlobalConfig(payload);
 
-    Message.success('配置保存成功');
+    Message.success(text.value.saveConfigSuccess);
     emit('saved');
     emit('close');
   } catch (error: any) {
     console.error('保存配置失败:', error);
-    Message.error(error?.message || '保存配置失败');
+    Message.error(error?.message || text.value.saveConfigFailed);
   } finally {
     loading.value = false;
   }

@@ -1,9 +1,9 @@
 <template>
   <div class="skills-management-view">
     <div class="page-header">
-      <h2>Skills 管理</h2>
+      <h2>{{ pageText.pageTitle }}</h2>
       <p class="page-description">
-        管理项目的 Agent Skills。Skills 是模块化的能力扩展，包含指令和可执行脚本。
+        {{ pageText.pageDescription }}
       </p>
     </div>
 
@@ -12,7 +12,7 @@
     </div>
     <div v-else class="empty-state">
       <icon-apps style="font-size: 64px; color: #c0c4cc" />
-      <p>请先在导航栏选择一个项目</p>
+      <p>{{ pageText.selectProjectFirst }}</p>
     </div>
   </div>
 </template>
@@ -21,9 +21,24 @@
 import { computed } from 'vue'
 import { SkillManager } from '@/features/skills'
 import { useProjectStore } from '@/store/projectStore'
+import { useAppI18n } from '@/composables/useAppI18n'
 
 const projectStore = useProjectStore()
+const { isEnglish } = useAppI18n()
 const currentProjectId = computed(() => projectStore.currentProjectId)
+const pageText = computed(() => (
+  isEnglish.value
+    ? {
+        pageTitle: 'Skills Management',
+        pageDescription: 'Manage project Agent Skills. Skills are modular capability extensions containing instructions and executable scripts.',
+        selectProjectFirst: 'Select a project from the navigation first',
+      }
+    : {
+        pageTitle: 'Skills 管理',
+        pageDescription: '管理项目的 Agent Skills。Skills 是模块化的能力扩展，包含指令和可执行脚本。',
+        selectProjectFirst: '请先在导航栏选择一个项目',
+      }
+))
 </script>
 
 <style scoped>

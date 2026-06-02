@@ -12,40 +12,40 @@
       <div class="info-grid">
         <!-- 基本信息 -->
         <div class="info-section">
-          <h4>基本信息</h4>
+          <h4>{{ text.basicInfo }}</h4>
           <div class="info-item">
-            <span class="label">描述:</span>
-            <span class="value">{{ knowledgeBase.description || '暂无描述' }}</span>
+            <span class="label">{{ text.description }}</span>
+            <span class="value">{{ knowledgeBase.description || text.noDescription }}</span>
           </div>
           <div class="info-item">
-            <span class="label">所属项目:</span>
+            <span class="label">{{ text.project }}</span>
             <span class="value">{{ getProjectName(knowledgeBase.project) }}</span>
           </div>
           <div class="info-item">
-            <span class="label">状态:</span>
+            <span class="label">{{ text.status }}</span>
             <a-tag :color="knowledgeBase.is_active ? 'green' : 'red'">
-              {{ knowledgeBase.is_active ? '启用' : '禁用' }}
+              {{ knowledgeBase.is_active ? text.enabled : text.disabled }}
             </a-tag>
           </div>
           <div class="info-item">
-            <span class="label">创建者:</span>
-            <span class="value">{{ knowledgeBase.creator_name || '未知' }}</span>
+            <span class="label">{{ text.creator }}</span>
+            <span class="value">{{ knowledgeBase.creator_name || text.unknown }}</span>
           </div>
           <div class="info-item">
-            <span class="label">创建时间:</span>
+            <span class="label">{{ text.createdAt }}</span>
             <span class="value">{{ formatDate(knowledgeBase.created_at) }}</span>
           </div>
         </div>
 
         <!-- 配置信息 -->
         <div class="info-section">
-          <h4>配置信息</h4>
+          <h4>{{ text.configInfo }}</h4>
           <div class="info-item">
-            <span class="label">分块大小:</span>
+            <span class="label">{{ text.chunkSize }}</span>
             <span class="value">{{ knowledgeBase.chunk_size }}</span>
           </div>
           <div class="info-item">
-            <span class="label">分块重叠:</span>
+            <span class="label">{{ text.chunkOverlap }}</span>
             <span class="value">{{ knowledgeBase.chunk_overlap }}</span>
           </div>
         </div>
@@ -53,15 +53,15 @@
 
       <!-- 统计信息 -->
       <div class="info-section">
-        <h4>统计信息</h4>
+        <h4>{{ text.statistics }}</h4>
         <div class="stats-grid">
           <div class="stat-item">
             <div class="stat-value">{{ knowledgeBase.document_count }}</div>
-            <div class="stat-label">文档数量</div>
+            <div class="stat-label">{{ text.documentCount }}</div>
           </div>
           <div class="stat-item">
             <div class="stat-value">{{ knowledgeBase.chunk_count }}</div>
-            <div class="stat-label">分块数量</div>
+            <div class="stat-label">{{ text.chunkCount }}</div>
           </div>
         </div>
       </div>
@@ -69,15 +69,15 @@
       <!-- 文档管理 -->
       <div class="documents-section">
         <div class="section-header">
-          <h4>文档管理</h4>
+          <h4>{{ text.documentManagement }}</h4>
           <a-space>
             <a-button type="outline" size="small" @click="fetchDocuments" :loading="documentsLoading">
               <template #icon><icon-refresh /></template>
-              刷新
+              {{ text.refresh }}
             </a-button>
             <a-button type="primary" size="small" @click="showUploadModal">
               <template #icon><icon-upload /></template>
-              上传文档
+              {{ text.uploadDocument }}
             </a-button>
           </a-space>
         </div>
@@ -104,7 +104,7 @@
                 <a-tag :color="getStatusColor(record.status)">
                   {{ getStatusText(record.status) }}
                 </a-tag>
-                <a-tooltip v-if="record.status === 'failed' && record.error_message" :content="record.error_message">
+                <a-tooltip v-if="record.status === 'failed' && record.error_message" :content="formatDocumentErrorMessage(record.error_message)">
                   <icon-exclamation-circle style="color: #f53f3f; margin-left: 4px; cursor: help;" />
                 </a-tooltip>
               </div>
@@ -113,11 +113,11 @@
             <template #actions="{ record }">
               <a-space>
                 <a-button
-                  type="text"
-                  size="mini"
-                  @click="viewDocument(record.id)"
-                >
-                  查看
+                type="text"
+                size="mini"
+                @click="viewDocument(record.id)"
+              >
+                  {{ text.view }}
                 </a-button>
                 <a-button
                   v-if="record.status === 'failed'"
@@ -125,14 +125,14 @@
                   size="mini"
                   @click="reprocessDocument(record.id)"
                 >
-                  重试
+                  {{ text.retry }}
                 </a-button>
                 <a-popconfirm
-                  content="确定要删除这个文档吗？"
+                  :content="text.confirmDeleteDocument"
                   @ok="deleteDocument(record.id)"
                 >
                   <a-button type="text" size="mini" status="danger">
-                    删除
+                    {{ text.delete }}
                   </a-button>
                 </a-popconfirm>
               </a-space>
@@ -143,11 +143,11 @@
 
       <!-- 查询测试 -->
       <div class="query-section">
-        <h4>查询测试</h4>
+        <h4>{{ text.queryTest }}</h4>
         <div class="query-form">
           <a-textarea
             v-model="queryText"
-            placeholder="输入查询内容..."
+            :placeholder="text.queryPlaceholder"
             :rows="3"
             style="margin-bottom: 12px"
           />
@@ -155,7 +155,7 @@
           <!-- 查询参数设置 -->
           <div class="query-settings">
             <div class="setting-item">
-              <label>相似度阈值:</label>
+              <label>{{ text.similarityThreshold }}</label>
               <a-slider
                 v-model="similarityThreshold"
                 :min="0.1"
@@ -168,7 +168,7 @@
             </div>
 
             <div class="setting-item">
-              <label>检索数量:</label>
+              <label>{{ text.retrievalCount }}</label>
               <a-input-number
                 v-model="topK"
                 :min="1"
@@ -186,42 +186,56 @@
             @click="testQuery"
             style="width: 100%"
           >
-            测试查询
+            {{ text.runQueryTest }}
           </a-button>
         </div>
 
         <div v-if="queryResult" class="query-result">
-          <h5>查询结果</h5>
+          <h5>{{ text.queryResult }}</h5>
           <div class="result-content">
             <div class="query-info">
-              <strong>查询内容:</strong>
+              <strong>{{ text.queryLabel }}</strong>
               <p>{{ queryResult.query }}</p>
             </div>
             <div class="answer" v-if="queryResult.answer">
-              <strong>回答:</strong>
+              <strong>{{ text.answerLabel }}</strong>
               <div class="answer-content" v-html="renderAnswer(queryResult)"></div>
             </div>
             <div class="sources">
-              <strong>相关内容 ({{ queryResult.sources.length }} 条结果):</strong>
+              <strong>{{ text.relatedContent(queryResult.sources.length) }}</strong>
               <div
                 v-for="(source, index) in queryResult.sources"
                 :key="index"
                 class="source-item"
               >
-                <div class="source-content">{{ source.content }}</div>
+                <div v-if="source.metadata.content_type === 'image' && source.metadata.image_url" class="source-image">
+                  <img :src="source.metadata.image_url" :alt="source.content || text.knowledgeImage" loading="lazy" @click="previewQueryImage(source.metadata.image_url)" />
+                  <span class="image-label">{{ source.content || text.image }}</span>
+                </div>
+                <div v-else-if="source.metadata.resolved_images?.length" class="source-content-with-images">
+                  <template v-for="(seg, sIdx) in parseSourceContent(source)" :key="sIdx">
+                    <img v-if="seg.type === 'image'" :src="seg.imageUrl" :alt="text.imageN(seg.imageIndex! + 1)" class="source-inline-image" loading="lazy" @click="previewQueryImage(seg.imageUrl!)" />
+                    <span v-else>{{ seg.text }}</span>
+                  </template>
+                </div>
+                <div v-else class="source-content">{{ source.content }}</div>
                 <div class="source-meta">
-                  <span>文档: {{ source.metadata.title }}</span> |
-                  <span>相似度: {{ (source.similarity_score * 100).toFixed(1) }}%</span>
-                  <span v-if="source.metadata.page"> | 页码: {{ source.metadata.page }}</span>
+                  <span>{{ text.documentN(source.metadata.title) }}</span> |
+                  <span>{{ text.similarity((source.similarity_score * 100).toFixed(1)) }}</span>
+                  <span v-if="source.metadata.page"> | {{ text.page(source.metadata.page) }}</span>
                 </div>
               </div>
             </div>
 
+            <!-- 图片预览 -->
+            <a-modal v-model:visible="queryImagePreviewVisible" :footer="false" :width="800" :title="text.imagePreview">
+              <img :src="queryPreviewImageUrl" style="width: 100%;" />
+            </a-modal>
             <div class="timing">
               <small>
-                检索时间: {{ queryResult.retrieval_time.toFixed(2) }}s |
-                生成时间: {{ queryResult.generation_time.toFixed(2) }}s |
-                总时间: {{ queryResult.total_time.toFixed(2) }}s
+                {{ text.retrievalTime(queryResult.retrieval_time.toFixed(2)) }} |
+                {{ text.generationTime(queryResult.generation_time.toFixed(2)) }} |
+                {{ text.totalTime(queryResult.total_time.toFixed(2)) }}
               </small>
             </div>
           </div>
@@ -247,7 +261,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, onMounted } from 'vue';
+import { ref, onMounted, computed } from 'vue';
 import { Message } from '@arco-design/web-vue';
 import { IconClose, IconUpload, IconExclamationCircle, IconRefresh } from '@arco-design/web-vue/es/icon';
 import { useProjectStore } from '@/store/projectStore';
@@ -255,6 +269,8 @@ import { KnowledgeService } from '../services/knowledgeService';
 import type { KnowledgeBase, Document, QueryResponse } from '../types/knowledge';
 import DocumentUploadModal from './DocumentUploadModal.vue';
 import DocumentDetailModal from './DocumentDetailModal.vue';
+import { useAppI18n } from '@/composables/useAppI18n';
+import { translateLegacyText, type AppLocale } from '@/i18n';
 
 interface Props {
   knowledgeBase: KnowledgeBase;
@@ -265,6 +281,138 @@ const emit = defineEmits<{
   refresh: [];
   close: [];
 }>();
+const { isEnglish } = useAppI18n();
+const currentLocale = computed<AppLocale>(() => (isEnglish.value ? 'en-US' : 'zh-CN'));
+
+const text = computed(() => (
+  isEnglish.value
+    ? {
+        basicInfo: 'Basic info',
+        description: 'Description:',
+        noDescription: 'No description',
+        project: 'Project:',
+        status: 'Status:',
+        enabled: 'Enabled',
+        disabled: 'Disabled',
+        creator: 'Creator:',
+        unknown: 'Unknown',
+        createdAt: 'Created at:',
+        configInfo: 'Config info',
+        chunkSize: 'Chunk size:',
+        chunkOverlap: 'Chunk overlap:',
+        statistics: 'Statistics',
+        documentCount: 'Documents',
+        chunkCount: 'Chunks',
+        documentManagement: 'Document management',
+        refresh: 'Refresh',
+        uploadDocument: 'Upload document',
+        view: 'View',
+        retry: 'Retry',
+        delete: 'Delete',
+        confirmDeleteDocument: 'Are you sure you want to delete this document?',
+        queryTest: 'Query test',
+        queryPlaceholder: 'Enter query...',
+        similarityThreshold: 'Similarity threshold:',
+        retrievalCount: 'Top K:',
+        runQueryTest: 'Run query',
+        queryResult: 'Query result',
+        queryLabel: 'Query:',
+        answerLabel: 'Answer:',
+        relatedContent: (count: number) => `Related content (${count} result(s)):`,
+        knowledgeImage: 'Knowledge base image',
+        image: 'Image',
+        imageN: (index: number) => `Image ${index}`,
+        documentN: (title: string) => `Document: ${title}`,
+        similarity: (value: string) => `Similarity: ${value}%`,
+        page: (value: string | number) => `Page: ${value}`,
+        imagePreview: 'Image preview',
+        retrievalTime: (seconds: string) => `Retrieval: ${seconds}s`,
+        generationTime: (seconds: string) => `Generation: ${seconds}s`,
+        totalTime: (seconds: string) => `Total: ${seconds}s`,
+        columnTitle: 'Document name',
+        columnType: 'Type',
+        columnStatus: 'Status',
+        columnChunks: 'Chunks',
+        columnUploader: 'Uploader',
+        columnUploadedAt: 'Uploaded at',
+        columnActions: 'Actions',
+        statusPending: 'Pending',
+        statusProcessing: 'Processing',
+        statusCompleted: 'Completed',
+        statusFailed: 'Failed',
+        fetchDocumentsFailed: 'Failed to fetch documents',
+        reprocessStarted: 'Document reprocessing started',
+        reprocessFailed: 'Failed to reprocess document',
+        deleteSuccess: 'Document deleted',
+        deleteFailed: 'Failed to delete document',
+        queryRequired: 'Please enter query text',
+        queryFailed: 'Query failed',
+        uploadSuccess: 'Document uploaded',
+      }
+    : {
+        basicInfo: '基本信息',
+        description: '描述:',
+        noDescription: '暂无描述',
+        project: '所属项目:',
+        status: '状态:',
+        enabled: '启用',
+        disabled: '禁用',
+        creator: '创建者:',
+        unknown: '未知',
+        createdAt: '创建时间:',
+        configInfo: '配置信息',
+        chunkSize: '分块大小:',
+        chunkOverlap: '分块重叠:',
+        statistics: '统计信息',
+        documentCount: '文档数量',
+        chunkCount: '分块数量',
+        documentManagement: '文档管理',
+        refresh: '刷新',
+        uploadDocument: '上传文档',
+        view: '查看',
+        retry: '重试',
+        delete: '删除',
+        confirmDeleteDocument: '确定要删除这个文档吗？',
+        queryTest: '查询测试',
+        queryPlaceholder: '输入查询内容...',
+        similarityThreshold: '相似度阈值:',
+        retrievalCount: '检索数量:',
+        runQueryTest: '测试查询',
+        queryResult: '查询结果',
+        queryLabel: '查询内容:',
+        answerLabel: '回答:',
+        relatedContent: (count: number) => `相关内容 (${count} 条结果):`,
+        knowledgeImage: '知识库图片',
+        image: '图片',
+        imageN: (index: number) => `图片 ${index}`,
+        documentN: (title: string) => `文档: ${title}`,
+        similarity: (value: string) => `相似度: ${value}%`,
+        page: (value: string | number) => `页码: ${value}`,
+        imagePreview: '图片预览',
+        retrievalTime: (seconds: string) => `检索时间: ${seconds}s`,
+        generationTime: (seconds: string) => `生成时间: ${seconds}s`,
+        totalTime: (seconds: string) => `总时间: ${seconds}s`,
+        columnTitle: '文档名称',
+        columnType: '类型',
+        columnStatus: '状态',
+        columnChunks: '分块数',
+        columnUploader: '上传者',
+        columnUploadedAt: '上传时间',
+        columnActions: '操作',
+        statusPending: '待处理',
+        statusProcessing: '处理中',
+        statusCompleted: '已完成',
+        statusFailed: '失败',
+        fetchDocumentsFailed: '获取文档列表失败',
+        reprocessStarted: '文档重新处理已开始',
+        reprocessFailed: '重新处理文档失败',
+        deleteSuccess: '文档删除成功',
+        deleteFailed: '删除文档失败',
+        queryRequired: '请输入查询内容',
+        queryFailed: '查询失败',
+        uploadSuccess: '文档上传成功',
+      }
+));
 
 const projectStore = useProjectStore();
 
@@ -279,8 +427,99 @@ const topK = ref(3);
 const isUploadModalVisible = ref(false);
 const isDocumentDetailVisible = ref(false);
 const selectedDocumentId = ref<string | null>(null);
+const queryImagePreviewVisible = ref(false);
+const queryPreviewImageUrl = ref('');
+
+const previewQueryImage = (url: string) => {
+  queryPreviewImageUrl.value = url;
+  queryImagePreviewVisible.value = true;
+};
+
+/** 将 answer 中的图片引用替换为 <img> 标签 */
 const renderAnswer = (result: QueryResponse): string => {
-  return escapeHtml(result.answer);
+  let html = escapeHtml(result.answer);
+
+  // 从 sources 中收集图片 URL 映射
+  const imageUrlByContent = new Map<string, string>();
+  const resolvedImageUrls = new Map<number, string>();
+  for (const src of result.sources) {
+    if (src.metadata.content_type === 'image' && src.metadata.image_url) {
+      imageUrlByContent.set(src.content.trim(), src.metadata.image_url);
+    }
+    // 收集 resolved_images 中的图片
+    if (src.metadata.resolved_images) {
+      for (const img of src.metadata.resolved_images) {
+        resolvedImageUrls.set(img.image_index, img.image_url);
+      }
+    }
+  }
+
+  // 替换 [图片N] 引用
+  html = html.replace(/\[图片(\d+)\]\s*/g, (_match, idx) => {
+    const key = `[图片${idx}] `;
+    const altKey = `[图片${idx}]`;
+    const url = imageUrlByContent.get(key) || imageUrlByContent.get(altKey);
+    if (url) {
+      const alt = isEnglish.value ? `Image ${idx}` : `图片${idx}`;
+      return `<img src="${url}" alt="${alt}" class="answer-inline-image" loading="lazy" />`;
+    }
+    return _match;
+  });
+
+  // 替换 {{IMAGE:N}} 占位符
+  html = html.replace(/\{\{IMAGE:(\d+)\}\}/g, (_match, idx) => {
+    const imgIdx = parseInt(idx, 10);
+    const url = resolvedImageUrls.get(imgIdx);
+    if (url) {
+      const alt = isEnglish.value ? `Image ${imgIdx + 1}` : `图片${imgIdx + 1}`;
+      return `<img src="${url}" alt="${alt}" class="answer-inline-image" loading="lazy" />`;
+    }
+    return '';
+  });
+
+  return html;
+};
+
+interface ContentSegment {
+  type: 'text' | 'image';
+  text?: string;
+  imageUrl?: string;
+  imageIndex?: number;
+}
+
+/** 将 source content 中的 {{IMAGE:N}} 解析为文本和图片段 */
+const parseSourceContent = (source: { content: string; metadata: Record<string, any> }): ContentSegment[] => {
+  const text = source.content;
+  const resolvedImages = source.metadata.resolved_images as Array<{ image_index: number; image_url: string }> | undefined;
+  if (!resolvedImages?.length) return [{ type: 'text', text }];
+
+  const imageMap = new Map<number, string>();
+  for (const img of resolvedImages) {
+    imageMap.set(img.image_index, img.image_url);
+  }
+
+  const segments: ContentSegment[] = [];
+  const pattern = /\{\{IMAGE:(\d+)\}\}/g;
+  let lastIndex = 0;
+  let match: RegExpExecArray | null;
+
+  while ((match = pattern.exec(text)) !== null) {
+    if (match.index > lastIndex) {
+      segments.push({ type: 'text', text: text.slice(lastIndex, match.index) });
+    }
+    const imgIdx = parseInt(match[1], 10);
+    const url = imageMap.get(imgIdx);
+    if (url) {
+      segments.push({ type: 'image', imageUrl: url, imageIndex: imgIdx });
+    }
+    lastIndex = pattern.lastIndex;
+  }
+
+  if (lastIndex < text.length) {
+    segments.push({ type: 'text', text: text.slice(lastIndex) });
+  }
+
+  return segments;
 };
 
 const escapeHtml = (text: string): string => {
@@ -290,52 +529,57 @@ const escapeHtml = (text: string): string => {
 };
 
 // 文档表格列配置
-const documentColumns = [
+const documentColumns = computed(() => ([
   {
-    title: '文档名称',
+    title: text.value.columnTitle,
     dataIndex: 'title',
     width: 120,
     slotName: 'title',
   },
   {
-    title: '类型',
+    title: text.value.columnType,
     dataIndex: 'document_type',
     width: 50,
   },
   {
-    title: '状态',
+    title: text.value.columnStatus,
     dataIndex: 'status',
     slotName: 'status',
     width: 70,
   },
   {
-    title: '分块数',
+    title: text.value.columnChunks,
     dataIndex: 'chunk_count',
     width: 60,
   },
   {
-    title: '上传者',
+    title: text.value.columnUploader,
     dataIndex: 'uploader_name',
     width: 80,
   },
   {
-    title: '上传时间',
+    title: text.value.columnUploadedAt,
     dataIndex: 'uploaded_at',
     width: 100,
     render: ({ record }: { record: Document }) => {
-      return new Date(record.uploaded_at).toLocaleDateString();
+      return new Date(record.uploaded_at).toLocaleDateString(isEnglish.value ? 'en-US' : 'zh-CN');
     },
   },
   {
-    title: '操作',
+    title: text.value.columnActions,
     slotName: 'actions',
     width: 80,
   },
-];
+]));
 
 // 方法
 const formatDate = (dateString: string) => {
-  return new Date(dateString).toLocaleString();
+  return new Date(dateString).toLocaleString(isEnglish.value ? 'en-US' : 'zh-CN');
+};
+
+const formatDocumentErrorMessage = (message?: string) => {
+  if (!message) return '';
+  return translateLegacyText(message, currentLocale.value);
 };
 
 const getStatusColor = (status: string) => {
@@ -350,10 +594,10 @@ const getStatusColor = (status: string) => {
 
 const getStatusText = (status: string) => {
   const texts: Record<string, string> = {
-    pending: '待处理',
-    processing: '处理中',
-    completed: '已完成',
-    failed: '失败',
+    pending: text.value.statusPending,
+    processing: text.value.statusProcessing,
+    completed: text.value.statusCompleted,
+    failed: text.value.statusFailed,
   };
   return texts[status] || status;
 };
@@ -372,7 +616,7 @@ const fetchDocuments = async () => {
   } catch (error: any) {
     console.error('获取文档列表失败:', error);
     // 显示具体的错误消息
-    const errorMessage = error?.message || '获取文档列表失败';
+    const errorMessage = error?.message || text.value.fetchDocumentsFailed;
     Message.error(errorMessage);
   } finally {
     documentsLoading.value = false;
@@ -382,29 +626,29 @@ const fetchDocuments = async () => {
 const reprocessDocument = async (documentId: string) => {
   try {
     await KnowledgeService.reprocessDocument(documentId);
-    Message.success('文档重新处理已开始');
+    Message.success(text.value.reprocessStarted);
     await fetchDocuments();
   } catch (error) {
     console.error('重新处理文档失败:', error);
-    Message.error('重新处理文档失败');
+    Message.error(text.value.reprocessFailed);
   }
 };
 
 const deleteDocument = async (documentId: string) => {
   try {
     await KnowledgeService.deleteDocument(documentId);
-    Message.success('文档删除成功');
+    Message.success(text.value.deleteSuccess);
     await fetchDocuments();
     emit('refresh');
   } catch (error) {
     console.error('删除文档失败:', error);
-    Message.error('删除文档失败');
+    Message.error(text.value.deleteFailed);
   }
 };
 
 const testQuery = async () => {
   if (!queryText.value.trim()) {
-    Message.warning('请输入查询内容');
+    Message.warning(text.value.queryRequired);
     return;
   }
 
@@ -421,7 +665,7 @@ const testQuery = async () => {
   } catch (error: any) {
     console.error('查询失败:', error);
     // 显示具体的错误消息
-    const errorMessage = error?.message || '查询失败';
+    const errorMessage = error?.message || text.value.queryFailed;
     Message.error(errorMessage);
   } finally {
     queryLoading.value = false;
@@ -440,7 +684,7 @@ const handleDocumentUploaded = () => {
   closeUploadModal();
   fetchDocuments();
   emit('refresh');
-  Message.success('文档上传成功');
+  Message.success(text.value.uploadSuccess);
 };
 
 const viewDocument = (documentId: string) => {

@@ -4,7 +4,7 @@
       <div class="empty-icon">
         <img :src="brandLogoUrl" alt="" class="empty-logo" />
       </div>
-      <p>开始与 SkillForgeTest 的对话吧</p>
+      <p>{{ text.emptyChat }}</p>
     </div>
 
     <MessageItem
@@ -25,10 +25,11 @@
 </template>
 
 <script setup lang="ts">
-import { ref, watch, nextTick, onMounted, onUnmounted } from 'vue';
+import { ref, watch, nextTick, onMounted, onUnmounted, computed } from 'vue';
 import MessageItem from './MessageItem.vue';
 import { brandLogoUrl } from '@/utils/assetUrl';
 import type { ToolFileAttachment } from '@/features/langgraph/utils/toolResultParser';
+import { useAppI18n } from '@/composables/useAppI18n';
 
 interface ChatMessage {
   content: string;
@@ -63,6 +64,12 @@ interface Props {
 const props = withDefaults(defineProps<Props>(), {
   floatingToolImageSrc: null,
 });
+const { isEnglish } = useAppI18n();
+const text = computed(() => (
+  isEnglish.value
+    ? { emptyChat: 'Start chatting with WHartTest' }
+    : { emptyChat: '开始与 WHartTest 的对话吧' }
+));
 
 defineEmits<{
   'toggle-expand': [message: ChatMessage];

@@ -1,7 +1,7 @@
 <template>
   <div class="test-suite-management-view">
     <div v-if="!currentProjectId" class="no-project-selected">
-      <a-empty description="请在顶部选择一个项目">
+      <a-empty :description="pageText.noProjectSelected">
         <template #image>
           <icon-folder style="font-size: 48px; color: #c2c7d0;" />
         </template>
@@ -14,7 +14,7 @@
         <div class="filter-row">
           <a-input-search
             v-model="searchKeyword"
-            placeholder="搜索套件名称"
+            :placeholder="pageText.searchPlaceholder"
             allow-clear
             style="width: 300px;"
             @search="handleSearch"
@@ -24,7 +24,7 @@
             <template #icon>
               <icon-plus />
             </template>
-            创建测试套件
+            {{ pageText.createSuite }}
           </a-button>
         </div>
       </div>
@@ -55,7 +55,7 @@
           <span v-else>-</span>
         </template>
         <template #testcase_count="{ record }">
-          <a-tag color="blue">{{ record.testcase_count }} 用例</a-tag>
+          <a-tag color="blue">{{ formatCaseCount(record.testcase_count) }}</a-tag>
         </template>
         <template #created_at="{ record }">
           {{ formatDate(record.created_at) }}
@@ -66,10 +66,10 @@
               <template #icon>
                 <icon-play-arrow />
               </template>
-              执行
+              {{ pageText.execute }}
             </a-button>
             <a-button type="outline" size="small" @click="handleEdit(record)">
-              编辑
+              {{ pageText.edit }}
             </a-button>
             <a-button
               type="primary"
@@ -77,7 +77,7 @@
               size="small"
               @click="handleDelete(record)"
             >
-              删除
+              {{ pageText.delete }}
             </a-button>
           </a-space>
         </template>
@@ -116,6 +116,7 @@ import { ref, reactive, computed, onMounted, watch } from 'vue';
 import { Message, Modal } from '@arco-design/web-vue';
 import { IconPlus, IconPlayArrow, IconFolder } from '@arco-design/web-vue/es/icon';
 import { useProjectStore } from '@/store/projectStore';
+import { useAppI18n } from '@/composables/useAppI18n';
 import {
   getTestSuiteList,
   deleteTestSuite,
@@ -127,7 +128,60 @@ import TestExecutionConfirmModal from '@/components/testcase/TestExecutionConfir
 import TestSuiteDetailModal from '@/components/testcase/TestSuiteDetailModal.vue';
 
 const projectStore = useProjectStore();
+const { isEnglish } = useAppI18n();
 const currentProjectId = computed(() => projectStore.currentProjectId);
+
+const pageText = computed(() => (
+  isEnglish.value
+    ? {
+        noProjectSelected: 'Select a project from the top bar',
+        searchPlaceholder: 'Search suite name',
+        createSuite: 'Create suite',
+        execute: 'Run',
+        edit: 'Edit',
+        delete: 'Delete',
+        caseUnit: 'cases',
+        suiteName: 'Suite name',
+        description: 'Description',
+        testContent: 'Test content',
+        creator: 'Created by',
+        createdAt: 'Created at',
+        actions: 'Actions',
+        fetchListFailed: 'Failed to fetch test suites',
+        fetchListError: 'An error occurred while fetching test suites',
+        suiteWithoutCases: 'This test suite has no cases and cannot be run',
+        confirmDeleteTitle: 'Confirm deletion',
+        confirmDeleteContent: (name: string) => `Delete test suite "${name}"? This action cannot be undone.`,
+        deleteSuiteSuccess: 'Test suite deleted successfully',
+        deleteSuiteFailed: 'Failed to delete test suite',
+        deleteSuiteError: 'An error occurred while deleting the test suite',
+        executionStarted: 'Test execution started',
+      }
+    : {
+        noProjectSelected: '请在顶部选择一个项目',
+        searchPlaceholder: '搜索套件名称',
+        createSuite: '创建测试套件',
+        execute: '执行',
+        edit: '编辑',
+        delete: '删除',
+        caseUnit: '用例',
+        suiteName: '套件名称',
+        description: '描述',
+        testContent: '测试内容',
+        creator: '创建者',
+        createdAt: '创建时间',
+        actions: '操作',
+        fetchListFailed: '获取测试套件列表失败',
+        fetchListError: '获取测试套件列表时发生错误',
+        suiteWithoutCases: '该测试套件没有用例，无法执行',
+        confirmDeleteTitle: '确认删除',
+        confirmDeleteContent: (name: string) => `确定要删除测试套件 "${name}" 吗？此操作不可恢复。`,
+        deleteSuiteSuccess: '测试套件删除成功',
+        deleteSuiteFailed: '删除测试套件失败',
+        deleteSuiteError: '删除测试套件时发生错误',
+        executionStarted: '测试执行已启动',
+      }
+));
 
 const loading = ref(false);
 const searchKeyword = ref('');
@@ -148,21 +202,25 @@ const paginationConfig = reactive({
   showPageSize: true,
 });
 
-const columns = [
+const columns = computed(() => [
   { title: 'ID', dataIndex: 'id', width: 60, align: 'center' as const },
-  { title: '套件名称', dataIndex: 'name', slotName: 'name', width: 220, ellipsis: true, tooltip: false, align: 'center' as const },
-  { title: '描述', dataIndex: 'description', slotName: 'description', width: 180, ellipsis: true, tooltip: false, align: 'center' as const },
-  { title: '测试内容', dataIndex: 'testcase_count', slotName: 'testcase_count', width: 160, align: 'center' as const },
+  { title: pageText.value.suiteName, dataIndex: 'name', slotName: 'name', width: 220, ellipsis: true, tooltip: false, align: 'center' as const },
+  { title: pageText.value.description, dataIndex: 'description', slotName: 'description', width: 180, ellipsis: true, tooltip: false, align: 'center' as const },
+  { title: pageText.value.testContent, dataIndex: 'testcase_count', slotName: 'testcase_count', width: 160, align: 'center' as const },
   {
-    title: '创建者',
+    title: pageText.value.creator,
     dataIndex: 'creator_detail',
     render: ({ record }: { record: TestSuite }) => record.creator_detail?.last_name || '-',
     width: 100,
     align: 'center' as const,
   },
-  { title: '创建时间', dataIndex: 'created_at', slotName: 'created_at', width: 180, align: 'center' as const },
-  { title: '操作', slotName: 'operations', width: 280, fixed: 'right' as const, align: 'center' as const },
-];
+  { title: pageText.value.createdAt, dataIndex: 'created_at', slotName: 'created_at', width: 180, align: 'center' as const },
+  { title: pageText.value.actions, slotName: 'operations', width: 280, fixed: 'right' as const, align: 'center' as const },
+]);
+
+const formatCaseCount = (count: number) => (
+  isEnglish.value ? `${count} ${count === 1 ? 'case' : pageText.value.caseUnit}` : `${count} ${pageText.value.caseUnit}`
+);
 
 // 获取测试套件列表
 const fetchSuites = async () => {
@@ -182,13 +240,13 @@ const fetchSuites = async () => {
       suiteData.value = response.data;
       paginationConfig.total = response.total || response.data.length;
     } else {
-      Message.error(response.error || '获取测试套件列表失败');
+      Message.error(response.error || pageText.value.fetchListFailed);
       suiteData.value = [];
       paginationConfig.total = 0;
     }
   } catch (error) {
     console.error('获取测试套件列表出错:', error);
-    Message.error('获取测试套件列表时发生错误');
+    Message.error(pageText.value.fetchListError);
     suiteData.value = [];
     paginationConfig.total = 0;
   } finally {
@@ -235,7 +293,7 @@ const handleViewDetail = (suite: TestSuite) => {
 // 执行测试套件
 const handleExecute = (suite: TestSuite) => {
   if ((suite.testcase_count || 0) === 0) {
-    Message.warning('该测试套件没有用例，无法执行');
+    Message.warning(pageText.value.suiteWithoutCases);
     return;
   }
   selectedSuite.value = suite;
@@ -247,21 +305,19 @@ const handleDelete = (suite: TestSuite) => {
   if (!currentProjectId.value) return;
 
   Modal.warning({
-    title: '确认删除',
-    content: `确定要删除测试套件 "${suite.name}" 吗？此操作不可恢复。`,
-    okText: '确认',
-    cancelText: '取消',
+    title: pageText.value.confirmDeleteTitle,
+    content: pageText.value.confirmDeleteContent(suite.name),
     onOk: async () => {
       try {
         const response = await deleteTestSuite(currentProjectId.value!, suite.id);
         if (response.success) {
-          Message.success('测试套件删除成功');
+          Message.success(pageText.value.deleteSuiteSuccess);
           fetchSuites();
         } else {
-          Message.error(response.error || '删除测试套件失败');
+          Message.error(response.error || pageText.value.deleteSuiteFailed);
         }
       } catch (error) {
-        Message.error('删除测试套件时发生错误');
+        Message.error(pageText.value.deleteSuiteError);
       }
     },
   });
@@ -274,7 +330,7 @@ const handleFormSuccess = () => {
 
 // 执行成功
 const handleExecutionSuccess = (executionId: number) => {
-  Message.success('测试执行已启动');
+  Message.success(pageText.value.executionStarted);
 };
 
 watch(currentProjectId, () => {

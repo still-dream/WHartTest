@@ -171,6 +171,7 @@
 import { ref, computed, watch } from 'vue';
 import { useRouter } from 'vue-router';
 import { Message } from '@arco-design/web-vue';
+import { useAppI18n } from '@/composables/useAppI18n';
 import {
   IconExport,
   IconSelectAll,
@@ -203,6 +204,7 @@ const emit = defineEmits<{
 }>();
 
 const router = useRouter();
+const { tl } = useAppI18n();
 
 const visible = ref(false);
 const loading = ref(false);
@@ -258,7 +260,7 @@ const loadTemplates = async () => {
 
 const handleExport = async () => {
   if (form.value.exportMode === 'module' && form.value.moduleIds.length === 0) {
-    Message.warning('请选择至少一个模块');
+    Message.warning(tl('请选择至少一个模块'));
     return;
   }
   exporting.value = true;
@@ -273,10 +275,10 @@ const handleExport = async () => {
     );
 
     if (result.success) {
-      Message.success(result.message || '导出成功');
+      Message.success(tl(result.message || '导出成功'));
       handleClose();
     } else {
-      Message.error(result.error || '导出失败');
+      Message.error(tl(result.error || '导出失败'));
     }
   } finally {
     exporting.value = false;

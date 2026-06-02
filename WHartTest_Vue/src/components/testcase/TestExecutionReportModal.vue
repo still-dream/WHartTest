@@ -1,7 +1,7 @@
 <template>
   <a-modal
     v-model:visible="modalVisible"
-    title="测试执行报告"
+    :title="reportText.title"
     :width="1200"
     :footer="false"
     :mask-closable="false"
@@ -9,7 +9,7 @@
     @cancel="handleClose"
   >
     <div v-if="loading" class="loading-state">
-      <a-spin size="large" tip="正在加载报告..." />
+      <a-spin size="large" :tip="reportText.loading" />
     </div>
     <div v-else-if="error" class="error-state">
       <a-result status="error" :title="error" />
@@ -33,23 +33,23 @@
       <div class="statistics-grid">
         <a-card :bordered="false" class="stat-card total">
           <div class="stat-title-wrapper">
-            <span class="stat-main-title">总任务数</span>
+            <span class="stat-main-title">{{ reportText.totalTasks }}</span>
             <div class="stat-subtitle">
-              <a-tag size="small" color="blue">{{ report.results?.length || 0 }} 用例</a-tag>
+              <a-tag size="small" color="blue">{{ reportText.caseCount(report.results?.length || 0) }}</a-tag>
             </div>
           </div>
         </a-card>
         <a-card :bordered="false" class="stat-card passed">
-          <a-statistic title="通过" :value="report.statistics.passed" />
+          <a-statistic :title="reportText.passed" :value="report.statistics.passed" />
         </a-card>
         <a-card :bordered="false" class="stat-card failed">
-          <a-statistic title="失败" :value="report.statistics.failed" />
+          <a-statistic :title="reportText.failed" :value="report.statistics.failed" />
         </a-card>
         <a-card :bordered="false" class="stat-card error">
-          <a-statistic title="错误" :value="report.statistics.error" />
+          <a-statistic :title="reportText.errors" :value="report.statistics.error" />
         </a-card>
         <a-card :bordered="false" class="stat-card pass-rate">
-          <a-statistic title="通过率" :value="report.statistics.pass_rate" :precision="1" suffix="%" />
+          <a-statistic :title="reportText.passRate" :value="report.statistics.pass_rate" :precision="1" suffix="%" />
         </a-card>
       </div>
 
@@ -74,11 +74,11 @@
             </template>
             <template #actions="{ record }">
               <a-button type="text" size="small" @click="viewResultDetail(record)">
-                查看详情
+                {{ reportText.viewDetails }}
               </a-button>
             </template>
           </a-table>
-          <a-empty v-else description="暂无用例执行结果" />
+          <a-empty v-else :description="reportText.noCaseResults" />
       </div>
     </div>
   </a-modal>
@@ -92,31 +92,31 @@
     unmount-on-close
   >
     <template #title>
-      用例执行详情
+      {{ reportText.caseExecutionDetails }}
     </template>
     <div v-if="selectedResult">
       <h4>{{ selectedResult.testcase_name }}</h4>
       <a-descriptions :column="1" bordered>
-        <a-descriptions-item label="状态">
+        <a-descriptions-item :label="reportText.status">
           <a-tag :color="getStatusColor(selectedResult.status)">
             {{ getStatusText(selectedResult.status) }}
           </a-tag>
         </a-descriptions-item>
-        <a-descriptions-item label="执行时长">
+        <a-descriptions-item :label="reportText.executionDuration">
           {{ formatDuration(selectedResult.execution_time) }}
         </a-descriptions-item>
-        <a-descriptions-item v-if="selectedResult.error_message" label="错误信息">
+        <a-descriptions-item v-if="selectedResult.error_message" :label="reportText.errorInfo">
           <pre class="error-message">{{ selectedResult.error_message }}</pre>
         </a-descriptions-item>
       </a-descriptions>
 
-      <a-divider>执行日志</a-divider>
+      <a-divider>{{ reportText.executionLogs }}</a-divider>
       <div class="execution-log-container" v-html="formatExecutionLog(getExecutionLog(selectedResult.testcase_id))"></div>
 
-      <a-divider>执行截图</a-divider>
+      <a-divider>{{ reportText.executionScreenshots }}</a-divider>
       <div v-if="selectedResult.screenshots && selectedResult.screenshots.length > 0">
         <div class="screenshot-count">
-          共 {{ selectedResult.screenshots.length }} 张截图
+          {{ reportText.screenshotCount(selectedResult.screenshots.length) }}
         </div>
         <div class="screenshot-viewer-wrapper">
           <!-- 截图信息面板暂时移除，因为顶层screenshots数组不包含title等详细信息 -->
@@ -149,7 +149,7 @@
           </div>
         </div>
       </div>
-      <a-empty v-else description="暂无截图" />
+      <a-empty v-else :description="reportText.noScreenshots" />
     </div>
   </a-drawer>
 </template>
@@ -157,6 +157,7 @@
 <script setup lang="ts">
 import { ref, computed, watch } from 'vue';
 import { IconCalendar, IconClockCircle, IconLeft, IconRight } from '@arco-design/web-vue/es/icon';
+import { useAppI18n } from '@/composables/useAppI18n';
 import {
   getTestExecutionReport,
   getTestExecutionResults,
@@ -176,6 +177,7 @@ interface Props {
   executionId: number | null;
 }
 const props = defineProps<Props>();
+const { isEnglish, tl } = useAppI18n();
 
 // 组件事件
 const emit = defineEmits<{
@@ -195,13 +197,95 @@ const modalVisible = computed({
   set: (value) => emit('update:visible', value),
 });
 
+const reportText = computed(() => (
+  isEnglish.value
+    ? {
+        title: 'Test execution report',
+        loading: 'Loading report...',
+        totalTasks: 'Total tasks',
+        caseName: 'Case Name',
+        caseCount: (count: number) => `${count} ${count === 1 ? 'case' : 'cases'}`,
+        passed: 'Passed',
+        failed: 'Failed',
+        errors: 'Errors',
+        passRate: 'Pass Rate',
+        actions: 'Actions',
+        viewDetails: 'View Details',
+        noCaseResults: 'No case execution results',
+        caseExecutionDetails: 'Case execution details',
+        status: 'Status',
+        executionDuration: 'Execution duration',
+        errorInfo: 'Error information',
+        executionLogs: 'Execution Logs',
+        executionScreenshots: 'Execution screenshots',
+        screenshotCount: (count: number) => `${count} screenshot${count === 1 ? '' : 's'}`,
+        noScreenshots: 'No screenshots',
+        loadReportFailed: 'Failed to load report',
+        loadReportUnknown: 'An unknown error occurred while loading the report',
+        noExecutionLog: 'No execution logs',
+        pending: 'Pending',
+        running: 'Running',
+        completed: 'Completed',
+        pass: 'Passed',
+        fail: 'Failed',
+        cancelled: 'Cancelled',
+        error: 'Error',
+        skip: 'Skipped',
+        aiExecutionProcess: (count: number) => `🤖 AI execution process (${count} steps)`,
+        testResult: 'Test result',
+        summary: 'Summary',
+        testCompleted: 'Test completed',
+        stepPrefix: '[Step',
+        errorPrefix: 'Error:',
+      }
+    : {
+        title: '测试执行报告',
+        loading: '正在加载报告...',
+        totalTasks: '总任务数',
+        caseName: '用例名称',
+        caseCount: (count: number) => `${count} 用例`,
+        passed: '通过',
+        failed: '失败',
+        errors: '错误',
+        passRate: '通过率',
+        actions: '操作',
+        viewDetails: '查看详情',
+        noCaseResults: '暂无用例执行结果',
+        caseExecutionDetails: '用例执行详情',
+        status: '状态',
+        executionDuration: '执行时长',
+        errorInfo: '错误信息',
+        executionLogs: '执行日志',
+        executionScreenshots: '执行截图',
+        screenshotCount: (count: number) => `共 ${count} 张截图`,
+        noScreenshots: '暂无截图',
+        loadReportFailed: '加载报告失败',
+        loadReportUnknown: '加载报告时发生未知错误',
+        noExecutionLog: '无执行日志',
+        pending: '等待中',
+        running: '执行中',
+        completed: '已完成',
+        pass: '通过',
+        fail: '失败',
+        cancelled: '已取消',
+        error: '错误',
+        skip: '跳过',
+        aiExecutionProcess: (count: number) => `🤖 AI 执行过程（共 ${count} 个步骤）`,
+        testResult: '测试结果',
+        summary: '总结',
+        testCompleted: '测试完成',
+        stepPrefix: '[步骤',
+        errorPrefix: '错误:',
+      }
+));
+
 // 表格列配置
-const resultColumns = [
-  { title: '用例名称', dataIndex: 'testcase_name' },
-  { title: '状态', slotName: 'status', width: 100 },
-  { title: '执行时长', slotName: 'duration', width: 120 },
-  { title: '操作', slotName: 'actions', width: 100 },
-];
+const resultColumns = computed(() => [
+  { title: reportText.value.caseName, dataIndex: 'testcase_name' },
+  { title: reportText.value.status, slotName: 'status', width: 100 },
+  { title: reportText.value.executionDuration, slotName: 'duration', width: 120 },
+  { title: reportText.value.actions, slotName: 'actions', width: 100 },
+]);
 
 // 业务方法
 const fetchReport = async () => {
@@ -218,7 +302,7 @@ const fetchReport = async () => {
     if (reportRes.success && reportRes.data) {
       report.value = reportRes.data;
     } else {
-      error.value = reportRes.error || '加载报告失败';
+      error.value = reportRes.error ? tl(reportRes.error) : reportText.value.loadReportFailed;
     }
 
     if (resultsRes.success && resultsRes.data) {
@@ -226,7 +310,7 @@ const fetchReport = async () => {
     }
 
   } catch (e: any) {
-    error.value = e.message || '加载报告时发生未知错误';
+    error.value = e.message ? tl(e.message) : reportText.value.loadReportUnknown;
   } finally {
     loading.value = false;
   }
@@ -245,7 +329,7 @@ const viewResultDetail = (result: ReportResult) => {
 
 const getExecutionLog = (testcaseId: number) => {
   const result = fullResults.value.find(r => r.testcase === testcaseId);
-  return result?.execution_log || '无执行日志';
+  return result?.execution_log || reportText.value.noExecutionLog;
 };
 
 const handleClose = () => {
@@ -263,16 +347,21 @@ const getStatusColor = (status: string) => {
 
 const getStatusText = (status: string) => {
   const texts: Record<string, string> = {
-    pending: '等待中', running: '执行中', completed: '已完成',
-    pass: '通过', fail: '失败',
-    cancelled: '已取消', error: '错误', skip: '跳过'
+    pending: reportText.value.pending,
+    running: reportText.value.running,
+    completed: reportText.value.completed,
+    pass: reportText.value.pass,
+    fail: reportText.value.fail,
+    cancelled: reportText.value.cancelled,
+    error: reportText.value.error,
+    skip: reportText.value.skip,
   };
   return texts[status] || status;
 };
 
 const formatExecutionLog = (log: string): string => {
-  if (!log || log === '无执行日志') {
-    return '<div class="log-empty">无执行日志</div>';
+  if (!log || log === reportText.value.noExecutionLog) {
+    return `<div class="log-empty">${escapeHtml(reportText.value.noExecutionLog)}</div>`;
   }
 
   const lines = log.split('\n');
@@ -286,7 +375,7 @@ const formatExecutionLog = (log: string): string => {
   const closeAiSection = () => {
     if (inAiSection && aiSectionHtml) {
       html += `<details class="log-ai-section">
-        <summary class="log-ai-header">🤖 AI 执行过程（共 ${aiStepCount} 个步骤）</summary>
+        <summary class="log-ai-header">${escapeHtml(reportText.value.aiExecutionProcess(aiStepCount))}</summary>
         <div class="log-ai-content">${aiSectionHtml}</div>
       </details>`;
       aiSectionHtml = '';
@@ -320,18 +409,18 @@ const formatExecutionLog = (log: string): string => {
         const isPass = status.toUpperCase() === 'PASS';
         resultSectionHtml += `<div class="log-result-status ${isPass ? 'pass' : 'fail'}">
           <span class="status-icon">${isPass ? '✓' : '✗'}</span>
-          <span class="status-text">测试结果: ${status}</span>
+          <span class="status-text">${escapeHtml(reportText.value.testResult)}: ${escapeHtml(status)}</span>
         </div>`;
       } else if (trimmedLine.startsWith('总结:')) {
-        resultSectionHtml += `<div class="log-result-summary">${escapeHtml(trimmedLine)}</div>`;
+        resultSectionHtml += `<div class="log-result-summary">${escapeHtml(trimmedLine.replace('总结:', `${reportText.value.summary}:`))}</div>`;
       } else if (trimmedLine.startsWith('测试完成')) {
         const isPass = trimmedLine.includes('通过');
         resultSectionHtml += `<div class="log-result-status ${isPass ? 'pass' : 'fail'}">
           <span class="status-icon">${isPass ? '✓' : '✗'}</span>
-          <span class="status-text">${escapeHtml(trimmedLine)}</span>
+          <span class="status-text">${escapeHtml(tl(trimmedLine))}</span>
         </div>`;
       } else if (trimmedLine) {
-        resultSectionHtml += `<div class="log-result-line">${escapeHtml(trimmedLine)}</div>`;
+        resultSectionHtml += `<div class="log-result-line">${escapeHtml(tl(trimmedLine))}</div>`;
       }
       continue;
     }
@@ -364,18 +453,18 @@ const formatExecutionLog = (log: string): string => {
     if (!trimmedLine) {
       html += '<div class="log-line empty"></div>';
     } else if (trimmedLine.startsWith('✓')) {
-      html += `<div class="log-line success">${escapeHtml(trimmedLine)}</div>`;
+      html += `<div class="log-line success">${escapeHtml(tl(trimmedLine))}</div>`;
     } else if (trimmedLine.startsWith('✗') || trimmedLine.startsWith('❌')) {
-      html += `<div class="log-line error">${escapeHtml(trimmedLine)}</div>`;
+      html += `<div class="log-line error">${escapeHtml(tl(trimmedLine))}</div>`;
     } else if (trimmedLine.startsWith('⚠')) {
-      html += `<div class="log-line warning">${escapeHtml(trimmedLine)}</div>`;
+      html += `<div class="log-line warning">${escapeHtml(tl(trimmedLine))}</div>`;
     } else if (trimmedLine.startsWith('[步骤')) {
       const isPass = trimmedLine.includes('✓');
-      html += `<div class="log-line step-result ${isPass ? 'pass' : 'fail'}">${escapeHtml(trimmedLine)}</div>`;
+      html += `<div class="log-line step-result ${isPass ? 'pass' : 'fail'}">${escapeHtml(tl(trimmedLine))}</div>`;
     } else if (trimmedLine.startsWith('  错误:')) {
-      html += `<div class="log-line step-error">${escapeHtml(trimmedLine)}</div>`;
+      html += `<div class="log-line step-error">${escapeHtml(tl(trimmedLine))}</div>`;
     } else {
-      html += `<div class="log-line">${escapeHtml(trimmedLine)}</div>`;
+      html += `<div class="log-line">${escapeHtml(tl(trimmedLine))}</div>`;
     }
   }
 

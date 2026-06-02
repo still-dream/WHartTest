@@ -1,7 +1,7 @@
 <template>
   <a-modal
     :visible="visible"
-    title="微信接入"
+    :title="text.modalTitle"
     :footer="false"
     :width="920"
     modal-class="weixin-connect-dialog"
@@ -12,24 +12,24 @@
       <section class="hero-panel">
         <div class="hero-copy">
           <span class="hero-eyebrow">WeChat Bridge</span>
-          <h2 class="hero-title">把当前项目接到微信对话里</h2>
+          <h2 class="hero-title">{{ text.heroTitle }}</h2>
           <p class="hero-description">
-            扫码后，用户可以直接在微信里与当前项目对应的 SkillForgeTest 会话沟通，消息仍然走你现有的对话链路。
+            {{ text.heroDescription }}
           </p>
         </div>
 
         <div class="hero-side">
           <div class="hero-stats">
             <div class="hero-stat-card">
-              <span>已绑定</span>
+              <span>{{ text.boundCount }}</span>
               <strong>{{ accounts.length }}</strong>
             </div>
             <div class="hero-stat-card">
-              <span>运行中</span>
+              <span>{{ text.runningCount }}</span>
               <strong>{{ runningAccountCount }}</strong>
             </div>
             <div class="hero-stat-card">
-              <span>异常</span>
+              <span>{{ text.errorCount }}</span>
               <strong>{{ errorAccountCount }}</strong>
             </div>
           </div>
@@ -42,7 +42,7 @@
             :disabled="!projectId"
             @click="handleStartLogin"
           >
-            生成二维码
+            {{ text.generateQr }}
           </a-button>
         </div>
       </section>
@@ -69,9 +69,9 @@
         <section class="qr-panel panel-shell">
           <div class="panel-header">
             <div>
-              <span class="panel-eyebrow">扫码区</span>
+              <span class="panel-eyebrow">{{ text.scanPanel }}</span>
               <div class="panel-title-row">
-                <h3 class="panel-title">连接微信账号</h3>
+                <h3 class="panel-title">{{ text.connectAccount }}</h3>
                 <a-tag :color="statusColor" bordered>{{ statusText }}</a-tag>
               </div>
             </div>
@@ -80,8 +80,8 @@
           <div class="qr-stage" :class="{ ready: !!loginSession?.qr_data_url }">
             <template v-if="loginSession?.qr_data_url">
               <a-spin :loading="resolvingQrImage" class="qr-spin">
-                <img v-if="displayedQrSrc" :src="displayedQrSrc" alt="微信二维码" class="qr-image" />
-                <a-empty v-else description="二维码加载失败，请重新生成" />
+                <img v-if="displayedQrSrc" :src="displayedQrSrc" :alt="text.weixinQrAlt" class="qr-image" />
+                <a-empty v-else :description="text.qrLoadFailed" />
               </a-spin>
             </template>
             <template v-else>
@@ -89,7 +89,7 @@
                 <div class="qr-placeholder-grid">
                   <span v-for="cell in 16" :key="cell" class="qr-placeholder-cell" />
                 </div>
-                <p>点击上方按钮生成二维码</p>
+                <p>{{ text.clickToGenerate }}</p>
               </div>
             </template>
           </div>
@@ -97,8 +97,8 @@
           <div class="qr-status-card">
             <p class="qr-message">{{ statusMessage }}</p>
             <div class="qr-session-meta">
-              <span>会话状态：{{ statusText }}</span>
-              <span v-if="loginSession?.updated_at">更新时间：{{ formatDateTime(loginSession.updated_at) }}</span>
+              <span>{{ text.sessionStatus }}{{ statusText }}</span>
+              <span v-if="loginSession?.updated_at">{{ text.updatedAt }}{{ formatDateTime(loginSession.updated_at) }}</span>
             </div>
           </div>
         </section>
@@ -106,17 +106,17 @@
         <section class="account-panel panel-shell">
           <div class="panel-header">
             <div>
-              <span class="panel-eyebrow">账号区</span>
+              <span class="panel-eyebrow">{{ text.accountPanel }}</span>
               <div class="panel-title-row">
-                <h3 class="panel-title">已绑定账号</h3>
-                <span class="panel-subtitle">可直接启停监听，不需要重新创建绑定</span>
+                <h3 class="panel-title">{{ text.boundAccounts }}</h3>
+                <span class="panel-subtitle">{{ text.boundAccountsHint }}</span>
               </div>
             </div>
           </div>
 
           <a-spin :loading="loadingAccounts">
             <div v-if="!accounts.length" class="account-empty">
-              <a-empty description="当前项目还没有绑定微信账号" />
+              <a-empty :description="text.noBoundAccount" />
             </div>
             <div v-else class="account-list">
               <div v-for="account in accounts" :key="account.id" class="account-card">
@@ -129,7 +129,7 @@
                       </span>
                     </div>
                     <div class="account-sub">
-                      扫码微信用户：{{ account.scanned_user_id || '未知' }}
+                      {{ text.scannedUser }}{{ account.scanned_user_id || text.unknown }}
                     </div>
                   </div>
                   <a-switch
@@ -140,11 +140,11 @@
                 </div>
                 <div class="account-facts">
                   <div class="account-fact">
-                    <span class="account-fact-label">最近收消息</span>
+                    <span class="account-fact-label">{{ text.lastInbound }}</span>
                     <strong>{{ formatAccountTime(account.last_inbound_at) }}</strong>
                   </div>
                   <div class="account-fact">
-                    <span class="account-fact-label">最近发消息</span>
+                    <span class="account-fact-label">{{ text.lastOutbound }}</span>
                     <strong>{{ formatAccountTime(account.last_outbound_at) }}</strong>
                   </div>
                 </div>
@@ -172,6 +172,7 @@ import {
   type WeixinBotAccount,
   type WeixinLoginSession,
 } from '@/features/langgraph/services/weixinService';
+import { useAppI18n } from '@/composables/useAppI18n';
 
 interface Props {
   visible: boolean;
@@ -183,6 +184,111 @@ const props = defineProps<Props>();
 const emit = defineEmits<{
   (e: 'update:visible', value: boolean): void;
 }>();
+const { isEnglish } = useAppI18n();
+
+const text = computed(() => (
+  isEnglish.value
+    ? {
+        modalTitle: 'WeChat access',
+        heroTitle: 'Connect current project to WeChat chat',
+        heroDescription: 'After scanning the code, users can chat in WeChat with the WHartTest session for this project.',
+        boundCount: 'Bound',
+        runningCount: 'Running',
+        errorCount: 'Error',
+        generateQr: 'Generate QR code',
+        scanPanel: 'Scan panel',
+        connectAccount: 'Connect WeChat account',
+        weixinQrAlt: 'WeChat QR code',
+        qrLoadFailed: 'Failed to load QR code, please regenerate',
+        clickToGenerate: 'Click the button above to generate a QR code',
+        sessionStatus: 'Session status: ',
+        updatedAt: 'Updated at: ',
+        accountPanel: 'Account panel',
+        boundAccounts: 'Bound accounts',
+        boundAccountsHint: 'Start/stop listeners directly without rebinding',
+        noBoundAccount: 'No WeChat account is bound to this project',
+        scannedUser: 'Scanned WeChat user: ',
+        unknown: 'Unknown',
+        lastInbound: 'Last inbound',
+        lastOutbound: 'Last outbound',
+        workflowWaitTitle: 'Generate QR code',
+        workflowWaitText: 'Create a binding entry for the current project',
+        workflowScannedTitle: 'Scan with WeChat',
+        workflowScannedText: 'Confirm login authorization on your phone',
+        workflowConfirmedTitle: 'Start chatting',
+        workflowConfirmedText: 'Receive and send messages after connection',
+        statusWait: 'Waiting for scan',
+        statusScanned: 'Scanned',
+        statusConfirmed: 'Confirmed',
+        statusExpired: 'Expired',
+        statusFailed: 'Failed',
+        statusNotStarted: 'Not started',
+        statusDefaultMessage: 'Scan status will be shown here after generating the QR code.',
+        statusBoundSuccess: (accountId: string) => `Bound successfully: ${accountId}`,
+        statusScanPrompt: 'Scan the QR code with WeChat and confirm authorization on your phone.',
+        noData: 'N/A',
+        noRecord: 'No record',
+        accountDisabled: 'Disabled',
+        accountError: 'Error',
+        accountRunning: 'Running',
+        accountConnected: 'Connected',
+        loginStatusFailed: 'Failed to query WeChat login status, please retry later.',
+        bindSuccess: 'WeChat account bound. Background listener is running.',
+        selectProjectFirst: 'Please select a project first',
+        generateQrFailed: 'Failed to generate QR code',
+        updateAccountFailed: 'Failed to update WeChat account status',
+      }
+    : {
+        modalTitle: '微信接入',
+        heroTitle: '把当前项目接到微信对话里',
+        heroDescription: '扫码后，用户可以直接在微信里与当前项目对应的 WHartTest 会话沟通，消息仍然走你现有的对话链路。',
+        boundCount: '已绑定',
+        runningCount: '运行中',
+        errorCount: '异常',
+        generateQr: '生成二维码',
+        scanPanel: '扫码区',
+        connectAccount: '连接微信账号',
+        weixinQrAlt: '微信二维码',
+        qrLoadFailed: '二维码加载失败，请重新生成',
+        clickToGenerate: '点击上方按钮生成二维码',
+        sessionStatus: '会话状态：',
+        updatedAt: '更新时间：',
+        accountPanel: '账号区',
+        boundAccounts: '已绑定账号',
+        boundAccountsHint: '可直接启停监听，不需要重新创建绑定',
+        noBoundAccount: '当前项目还没有绑定微信账号',
+        scannedUser: '扫码微信用户：',
+        unknown: '未知',
+        lastInbound: '最近收消息',
+        lastOutbound: '最近发消息',
+        workflowWaitTitle: '生成二维码',
+        workflowWaitText: '为当前项目生成绑定入口',
+        workflowScannedTitle: '微信扫码',
+        workflowScannedText: '在手机端确认登录授权',
+        workflowConfirmedTitle: '开始对话',
+        workflowConfirmedText: '账号接入后直接收发消息',
+        statusWait: '等待扫码',
+        statusScanned: '已扫码',
+        statusConfirmed: '已确认',
+        statusExpired: '已过期',
+        statusFailed: '失败',
+        statusNotStarted: '未开始',
+        statusDefaultMessage: '生成二维码后会在这里显示扫码状态。',
+        statusBoundSuccess: (accountId: string) => `绑定成功：${accountId}`,
+        statusScanPrompt: '请使用微信扫描二维码，并在手机上确认授权。',
+        noData: '暂无',
+        noRecord: '暂无记录',
+        accountDisabled: '已停用',
+        accountError: '异常',
+        accountRunning: '运行中',
+        accountConnected: '已连接',
+        loginStatusFailed: '微信登录状态查询失败，请稍后重试。',
+        bindSuccess: '微信绑定成功，后台已开始监听微信消息',
+        selectProjectFirst: '请先选择项目',
+        generateQrFailed: '生成二维码失败',
+        updateAccountFailed: '更新微信账号状态失败',
+      }
+));
 
 const starting = ref(false);
 const loadingAccounts = ref(false);
@@ -196,23 +302,23 @@ const LOGIN_POLL_INTERVAL_MS = 2000;
 const LOGIN_POLL_RETRY_INTERVAL_MS = 4000;
 let pollTimer: number | null = null;
 
-const workflowSteps = [
-  { key: 'wait', title: '生成二维码', text: '为当前项目生成绑定入口' },
-  { key: 'scaned', title: '微信扫码', text: '在手机端确认登录授权' },
-  { key: 'confirmed', title: '开始对话', text: '账号接入后直接收发消息' },
-];
+const workflowSteps = computed(() => ([
+  { key: 'wait', title: text.value.workflowWaitTitle, text: text.value.workflowWaitText },
+  { key: 'scaned', title: text.value.workflowScannedTitle, text: text.value.workflowScannedText },
+  { key: 'confirmed', title: text.value.workflowConfirmedTitle, text: text.value.workflowConfirmedText },
+]));
 
 const runningAccountCount = computed(() => accounts.value.filter((item) => item.worker_running).length);
 const errorAccountCount = computed(() => accounts.value.filter((item) => Boolean(item.last_error)).length);
 
 const statusText = computed(() => {
   const status = loginSession.value?.status;
-  if (status === 'wait') return '等待扫码';
-  if (status === 'scaned') return '已扫码';
-  if (status === 'confirmed') return '已确认';
-  if (status === 'expired') return '已过期';
-  if (status === 'failed') return '失败';
-  return '未开始';
+  if (status === 'wait') return text.value.statusWait;
+  if (status === 'scaned') return text.value.statusScanned;
+  if (status === 'confirmed') return text.value.statusConfirmed;
+  if (status === 'expired') return text.value.statusExpired;
+  if (status === 'failed') return text.value.statusFailed;
+  return text.value.statusNotStarted;
 });
 
 const statusColor = computed(() => {
@@ -224,12 +330,12 @@ const statusColor = computed(() => {
 });
 
 const statusMessage = computed(() => {
-  if (!loginSession.value) return '生成二维码后会在这里显示扫码状态。';
+  if (!loginSession.value) return text.value.statusDefaultMessage;
   if (loginSession.value.error_message) return loginSession.value.error_message;
   if (loginSession.value.status === 'confirmed') {
-    return `绑定成功：${loginSession.value.raw_account_id}`;
+    return text.value.statusBoundSuccess(loginSession.value.raw_account_id);
   }
-  return '请使用微信扫描二维码，并在手机上确认授权。';
+  return text.value.statusScanPrompt;
 });
 
 const displayedQrSrc = computed(() => renderedQrSrc.value || loginSession.value?.qr_data_url || '');
@@ -302,10 +408,10 @@ const schedulePollLoginStatus = (delay = LOGIN_POLL_INTERVAL_MS) => {
 };
 
 const formatDateTime = (value?: string | null) => {
-  if (!value) return '暂无';
+  if (!value) return text.value.noData;
   const date = new Date(value);
   if (Number.isNaN(date.getTime())) return value;
-  return date.toLocaleString('zh-CN', {
+  return date.toLocaleString(isEnglish.value ? 'en-US' : 'zh-CN', {
     month: '2-digit',
     day: '2-digit',
     hour: '2-digit',
@@ -314,15 +420,15 @@ const formatDateTime = (value?: string | null) => {
 };
 
 const formatAccountTime = (value?: string | null) => {
-  if (!value) return '暂无记录';
+  if (!value) return text.value.noRecord;
   return formatDateTime(value);
 };
 
 const accountStatusText = (account: WeixinBotAccount) => {
-  if (!account.is_active) return '已停用';
-  if (account.last_error) return '异常';
-  if (account.worker_running) return '运行中';
-  return '已连接';
+  if (!account.is_active) return text.value.accountDisabled;
+  if (account.last_error) return text.value.accountError;
+  if (account.worker_running) return text.value.accountRunning;
+  return text.value.accountConnected;
 };
 
 const accountStatusClass = (account: WeixinBotAccount) => {
@@ -358,7 +464,7 @@ const pollLoginStatus = async () => {
       if (loginSession.value) {
         loginSession.value = {
           ...loginSession.value,
-          error_message: response.error || '微信登录状态查询失败，请稍后重试。',
+          error_message: response.error || text.value.loginStatusFailed,
         };
       }
       nextDelay = LOGIN_POLL_RETRY_INTERVAL_MS;
@@ -369,7 +475,7 @@ const pollLoginStatus = async () => {
 
     if (response.data.status === 'confirmed') {
       await loadAccounts();
-      Message.success('微信绑定成功，后台已开始监听微信消息');
+      Message.success(text.value.bindSuccess);
       return;
     }
 
@@ -388,7 +494,7 @@ const pollLoginStatus = async () => {
 
 const handleStartLogin = async () => {
   if (!props.projectId) {
-    Message.error('请先选择项目');
+    Message.error(text.value.selectProjectFirst);
     return;
   }
   starting.value = true;
@@ -399,7 +505,7 @@ const handleStartLogin = async () => {
       prompt_id: props.selectedPromptId,
     });
     if (!(response.success && response.data)) {
-      Message.error(response.error || '生成二维码失败');
+      Message.error(response.error || text.value.generateQrFailed);
       return;
     }
     loginSession.value = response.data;
@@ -414,7 +520,7 @@ const handleToggleAccount = async (accountId: number, isActive: boolean) => {
   try {
     const response = await toggleWeixinAccount(accountId, isActive);
     if (!response.success) {
-      Message.error(response.error || '更新微信账号状态失败');
+      Message.error(response.error || text.value.updateAccountFailed);
       return;
     }
     await loadAccounts();

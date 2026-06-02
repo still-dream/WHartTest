@@ -19,9 +19,9 @@ BOLD='\033[1m'
 NC='\033[0m'
 
 # 全局变量
-API_URL=""
-API_KEY=""
-MODEL_NAME=""
+API_URL="https://ccccccc.openai/v1"
+API_KEY="sk-xxxxxxxxxxxxx"
+MODEL_NAME="gpt-5.4"
 SYSTEM_PROMPT=""
 ASSUME_YES=0
 APPROVE_ALL=0
@@ -33,7 +33,9 @@ TEMPERATURE="${AI_INSTALL_TEMPERATURE:-0.7}"
 INCLUDE_TEMPERATURE="${AI_INSTALL_INCLUDE_TEMPERATURE:-1}"
 TIMEOUT="${AI_INSTALL_TIMEOUT:-120}"
 CONNECT_TIMEOUT="${AI_INSTALL_CONNECT_TIMEOUT:-30}"
-STREAM_MODE="${AI_INSTALL_STREAM:-1}"
+MAX_TOOL_ROUNDS="${AI_INSTALL_MAX_TOOL_ROUNDS:-8}"
+AI_RAW_RESPONSE_BODY=""
+API_TEST_ERROR=""
 
 # 临时目录（兼容 Linux/macOS/Git Bash/WSL）
 TMP_DIR="${TMPDIR:-/tmp}"
@@ -51,6 +53,26 @@ SED_EXTENDED_FLAG="-E"
 if ! printf 'x' | sed -E 's/x/x/' >/dev/null 2>&1; then
     SED_EXTENDED_FLAG="-r"
 fi
+
+# JSON 解析后端检测（启动时运行一次，避免每次调用都探测）
+JSON_BACKEND="none"
+HAS_PERL=0
+PY_CMD=""
+
+detect_json_backend() {
+    if command -v jq >/dev/null 2>&1; then
+        JSON_BACKEND="jq"
+    elif command -v python3 >/dev/null 2>&1; then
+        JSON_BACKEND="python"
+        PY_CMD="python3"
+    elif command -v python >/dev/null 2>&1; then
+        JSON_BACKEND="python"
+        PY_CMD="python"
+    elif command -v perl >/dev/null 2>&1; then
+        JSON_BACKEND="perl"
+    fi
+    command -v perl >/dev/null 2>&1 && HAS_PERL=1
+}
 
 # 清理函数
 cleanup() {
@@ -102,131 +124,24 @@ log_line() {
     shift
     local ts
     ts=$(date '+%F %T' 2>/dev/null || echo "unknown_time")
+    [ -z "${LOG_FILE:-}" ] && return 0
     printf '[%s] [%s] %s\n' "$ts" "$level" "$(redact_secrets "$*")" >> "$LOG_FILE" 2>/dev/null || true
-}
-
-# 获取系统信息
-get_system_info() {
-    local os_type=$(uname -s)
-    local os_version=$(uname -r)
-    local arch=$(uname -m)
-    
-    echo "操作系统: $os_type $os_version"
-    echo "架构: $arch"
-    echo "工作目录: $(pwd)"
 }
 
 # 构建系统提示词
 build_system_prompt() {
-    local sys_info=$(get_system_info)
+    SYSTEM_PROMPT="你是一个助手。
 
-    SYSTEM_PROMPT="你是一个专业的项目安装助手。你正在帮助用户安装项目。
+工作规则：
+1. 先理解用户需要什么帮助；如果需求不明确，先简短追问
+2. 需要查看环境、文件、版本、日志、目录或命令结果时，直接调用系统提供的工具，不要猜测结果
+3. 调用工具前先用一句简短的话说明要做什么
+4. 不要输出 JSON 命令，也不要输出 Markdown 代码块里的命令
+5. 不要伪造命令输出、文件内容、版本号或执行结果
+6. 系统会处理危险命令的执行确认，除非确实需要用户做选择，否则不要重复询问是否执行
+7. 回复保持简洁
 
-当前环境信息：
-$sys_info
-
-你的职责：
-1. 理解用户的安装需求和环境
-2. 提供清晰的安装步骤指导
-3. 当需要执行命令时，把命令放在回复的**最后一行**
-4. 解释每个步骤的作用
-5. 处理可能出现的错误
-
-**命令输出格式（必须严格遵守）**：
-- 命令必须单独占一行，放在回复的**最后**
-- 格式：{\"command\":\"命令\"}
-- JSON 必须是单行对象，且只包含一个 command 字段
-- 命令必须是纯 shell 命令，不能包含中文
-- 每次只能输出一个命令
-- 先写说明，最后一行写命令
-
-正确格式示例：
-\`\`\`
-让我检查一下 Docker 版本。
-{\"command\":\"docker --version\"}
-\`\`\`
-
-错误格式（禁止）：
-\`\`\`
-{\"command\":\"docker --version\"}让我检查版本
-\`\`\`
-\`\`\`
-让我{\"command\":\"docker --version\"}检查一下
-\`\`\`
-
-安全规则：
-- 只读命令（查看、检查）：可以直接执行
-- 修改性操作（安装、删除、修改配置）：必须先询问用户同意
-- 脚本会对敏感命令进行二次确认
-
-安装建议：
-- 优先检测环境，推荐合适的安装方式
-- 有 Docker 时推荐 Docker 安装
-- 无 Docker 时指导手动安装
-- Docker 拉取慢时优先配置 Docker daemon 镜像或私有仓库，避免依赖不稳定的公共代理
-
-示例对话 1：
-用户：帮我检查环境
-你：好的，让我检查一下 Docker 是否已安装。
-{\"command\":\"docker --version\"}
-
-示例对话 2：
-用户：docs 目录里有什么
-你：让我查看 docs 目录的内容。
-{\"command\":\"ls -la docs\"}
-
-示例对话 3：
-用户：帮我安装 Docker
-你：检测到您未安装 Docker。是否允许我为您安装？
-
-用户：可以
-你：好的，正在为您安装 Docker。
-{\"command\":\"curl -fsSL https://get.docker.com | sh\"}
-
-现在，请开始与用户对话，了解他们的需求。"
-}
-
-# 从环境变量或 .env 文件加载配置
-load_config_from_env() {
-    local env_file="${AI_INSTALL_ENV_FILE:-.env}"
-    
-    # 如果存在 .env 文件，先加载它
-    if [ -f "$env_file" ]; then
-        print_color "$CYAN" "📄 检测到 $env_file 文件，正在加载配置..."
-
-        # 兼容 Windows/Git Bash：自动去掉 CRLF 的 \r，避免变量带回车导致 curl/grep 等异常
-        local sanitized_env="$TMP_DIR/ai_install_env_$$.tmp"
-        sed 's/\r$//' "$env_file" > "$sanitized_env"
-
-        # 使用 source 加载（更可靠）
-        set -a
-        source "$sanitized_env"
-        set +a
-        rm -f "$sanitized_env"
-    fi
-    
-    # 从环境变量读取配置
-    if [ -n "$AI_API_URL" ]; then
-        API_URL="$AI_API_URL"
-        print_color "$GREEN" "✅ 从环境变量读取 API_URL: $API_URL"
-    fi
-    
-    if [ -n "$AI_API_KEY" ]; then
-        API_KEY="$AI_API_KEY"
-        print_color "$GREEN" "✅ 从环境变量读取 API_KEY: ${API_KEY:0:10}..."
-    fi
-    
-    if [ -n "$AI_MODEL" ]; then
-        MODEL_NAME="$AI_MODEL"
-        print_color "$GREEN" "✅ 从环境变量读取 MODEL: $MODEL_NAME"
-    fi
-
-    if [ -n "${AI_INSTALL_ASSUME_YES:-}" ]; then
-        ASSUME_YES="$AI_INSTALL_ASSUME_YES"
-        if [ "$ASSUME_YES" = "1" ]; then
-            print_color "$YELLOW" "⚠️  已启用 AI_INSTALL_ASSUME_YES=1：将自动同意执行确认命令（不推荐）"
-        fi
-    fi
+现在开始对话。"
 }
 
 # 脱敏敏感信息（避免把密钥/令牌发给 AI）
@@ -242,64 +157,96 @@ redact_secrets() {
         -e 's/sk-[A-Za-z0-9]{10,}/sk-***REDACTED***/g'
 }
 
-# 判断命令是否需要用户确认（修改性/敏感信息）
-command_needs_confirmation() {
+# 判断单条命令是否需要用户确认（修改性/敏感信息）
+# 使用 bash 内建 [[ =~ ]] 避免 fork 子进程
+command_segment_needs_confirmation() {
     local cmd="$1"
-    cmd="$(echo "$cmd" | sed 's/^[[:space:]]*//;s/[[:space:]]*$//')"
-    [ -z "$cmd" ] && return 1
+    cmd="${cmd#"${cmd%%[![:space:]]*}"}"  # trim leading
+    cmd="${cmd%"${cmd##*[![:space:]]}"}"  # trim trailing
+    [[ -z "$cmd" ]] && return 1
 
-    # 多条命令或复杂连接，保守起见需要确认
-    if echo "$cmd" | grep -Eq '(^|[^\\])[;&]|&&|\|\|'; then
-        return 0
-    fi
+    # 去除 >/dev/null 等无害重定向后，检查是否还有写文件重定向
+    local redirect_check
+    redirect_check="$(printf '%s' "$cmd" | sed "$SED_EXTENDED_FLAG" \
+        -e 's/(^|[[:space:]])[0-9]*>>?[[:space:]]*\/dev\/null([[:space:]]|$)/ /g' \
+        -e 's/(^|[[:space:]])&>>?[[:space:]]*\/dev\/null([[:space:]]|$)/ /g' \
+        -e 's/(^|[[:space:]])[0-9]*>&[0-9-]+([[:space:]]|$)/ /g')"
 
-    # 输出重定向/覆盖文件
-    if echo "$cmd" | grep -Eq '(^|[^\\])>>?|(^|[^\\])2>>?|(^|[^\\])&>|(^|[^\\])\|[[:space:]]*tee([[:space:]]|$)'; then
-        return 0
-    fi
+    # 写文件/覆盖输出
+    [[ "$redirect_check" =~ (^|[^\\])(>>?|'&>>?'|'&>') ]] && return 0
+    # tee 落盘
+    [[ "$cmd" =~ (^|[^\\])\|[[:space:]]*tee([[:space:]]|$) ]] && return 0
 
-    # 可能泄露敏感信息的只读命令：执行后输出会被回传给 AI
-    if echo "$cmd" | grep -Eq '(^|[[:space:]])(env|printenv)([[:space:]]|$)'; then
-        return 0
-    fi
-    if echo "$cmd" | grep -Eq '(^|[[:space:]])cat[[:space:]]+(\.env|.*\.env)([[:space:]]|$)'; then
-        return 0
-    fi
+    # 转小写以实现大小写无关匹配
+    local cmd_lower="${cmd,,}"
 
-    # 明确的修改性/安装类命令
-    if echo "$cmd" | grep -Eiq '(^|[[:space:]])(sudo|su)([[:space:]]|$)'; then
-        return 0
-    fi
-    if echo "$cmd" | grep -Eiq '(^|[[:space:]])(rm|mv|cp|mkdir|rmdir|chmod|chown|chgrp|ln|truncate|dd)([[:space:]]|$)'; then
-        return 0
-    fi
-    if echo "$cmd" | grep -Eiq '(^|[[:space:]])(apt|apt-get|yum|dnf|pacman|brew)([[:space:]]|$)'; then
-        return 0
-    fi
-    if echo "$cmd" | grep -Eiq '(^|[[:space:]])(pip|pip3|poetry|npm|pnpm|yarn)([[:space:]]|$)'; then
-        return 0
-    fi
-    if echo "$cmd" | grep -Eiq '(^|[[:space:]])(git)([[:space:]]+)(clone|checkout|switch|pull|push|reset|clean|rebase|merge|commit|tag)([[:space:]]|$)'; then
-        return 0
-    fi
-    if echo "$cmd" | grep -Eiq '(^|[[:space:]])docker([[:space:]]+)(run|build|pull|push|rm|rmi|volume|network)([[:space:]]|$)'; then
-        return 0
-    fi
-    if echo "$cmd" | grep -Eiq '(^|[[:space:]])docker([[:space:]]+)compose([[:space:]]+)(up|down|build|pull|push|rm)([[:space:]]|$)'; then
-        return 0
-    fi
-    if echo "$cmd" | grep -Eiq '(^|[[:space:]])docker-compose([[:space:]]+)(up|down|build|pull|push|rm|start|stop|restart)([[:space:]]|$)'; then
-        return 0
-    fi
-    if echo "$cmd" | grep -Eiq '(^|[[:space:]])(systemctl|service)([[:space:]]|$)'; then
-        return 0
-    fi
+    # 敏感信息泄露
+    [[ "$cmd_lower" =~ (^|[[:space:]])(env|printenv)([[:space:]]|$) ]] && return 0
+    [[ "$cmd_lower" =~ (^|[[:space:]])cat[[:space:]]+(\.env|.*\.env)([[:space:]]|$) ]] && return 0
+
+    # 修改性命令：提权、文件操作、包管理、git、docker、系统服务
+    [[ "$cmd_lower" =~ (^|[[:space:]])(sudo|su|rm|mv|cp|mkdir|rmdir|chmod|chown|chgrp|ln|truncate|dd)([[:space:]]|$) ]] && return 0
+    [[ "$cmd_lower" =~ (^|[[:space:]])(apt|apt-get|yum|dnf|pacman|brew|pip|pip3|poetry|npm|pnpm|yarn)([[:space:]]|$) ]] && return 0
+    [[ "$cmd_lower" =~ (^|[[:space:]])git[[:space:]]+(clone|checkout|switch|pull|push|reset|clean|rebase|merge|commit|tag)([[:space:]]|$) ]] && return 0
+    [[ "$cmd_lower" =~ (^|[[:space:]])docker[[:space:]]+(run|build|pull|push|rm|rmi|volume|network)([[:space:]]|$) ]] && return 0
+    [[ "$cmd_lower" =~ (^|[[:space:]])docker[[:space:]]+compose[[:space:]]+(up|down|build|pull|push|rm)([[:space:]]|$) ]] && return 0
+    [[ "$cmd_lower" =~ (^|[[:space:]])docker-compose[[:space:]]+(up|down|build|pull|push|rm|start|stop|restart)([[:space:]]|$) ]] && return 0
+    [[ "$cmd_lower" =~ (^|[[:space:]])(systemctl|service)([[:space:]]|$) ]] && return 0
 
     return 1
 }
 
+split_command_for_confirmation() {
+    printf '%s' "$1" | perl -0pe 's/\r\n/\n/g; s/\r/\n/g; s/&&/\n/g; s/\|\|/\n/g; s/;/\n/g'
+}
+
+# 判断命令是否需要用户确认（支持只读串联命令）
+command_needs_confirmation() {
+    local cmd="$1"
+    cmd="${cmd#"${cmd%%[![:space:]]*}"}"
+    cmd="${cmd%"${cmd##*[![:space:]]}"}"
+    [[ -z "$cmd" ]] && return 1
+
+    if [[ "$cmd" =~ '&&'|'||'|(^|[^\\])';' ]]; then
+        local segment=""
+        while IFS= read -r segment; do
+            segment="${segment#"${segment%%[![:space:]]*}"}"
+            segment="${segment%"${segment##*[![:space:]]}"}"
+            [[ -z "$segment" ]] && continue
+            if command_segment_needs_confirmation "$segment"; then
+                return 0
+            fi
+        done < <(split_command_for_confirmation "$cmd")
+        return 1
+    fi
+
+    command_segment_needs_confirmation "$cmd"
+}
+
 # 用户拒绝命令时的反馈（全局变量）
 USER_REJECT_FEEDBACK=""
+
+can_read_from_tty() {
+    [ -r /dev/tty ] && [ -w /dev/tty ]
+}
+
+prompt_read() {
+    local __resultvar="$1"
+    local prompt="$2"
+    local value=""
+
+    if can_read_from_tty; then
+        printf '%b' "$prompt" > /dev/tty
+        IFS= read -r value < /dev/tty || true
+    elif [ -t 0 ]; then
+        read -r -p "$prompt" value || true
+    else
+        return 1
+    fi
+
+    printf -v "$__resultvar" '%s' "$value"
+    return 0
+}
 
 confirm_command() {
     local cmd="$1"
@@ -309,16 +256,16 @@ confirm_command() {
         return 0
     fi
 
-    if [ ! -t 0 ]; then
-        print_color "$YELLOW" "⚠️  非交互模式：已跳过需要确认的命令：$cmd" >&2
+    if ! can_read_from_tty && [ ! -t 0 ]; then
+        print_color "$YELLOW" "[警告] 当前没有可用的交互终端，已跳过需要确认的命令：$cmd" >&2
         return 1
     fi
 
     echo "" >&2
-    print_color "$YELLOW" "⚠️  该命令可能会修改系统或泄露敏感信息：" >&2
+    print_color "$YELLOW" "[警告] 该命令可能会修改系统或泄露敏感信息：" >&2
     print_color "$BOLD$YELLOW" "  $cmd" >&2
     local choice=""
-    read -r -p "$(prompt_color "$GREEN" "是否允许执行？[y]允许 [n]拒绝 [a]本次全部允许 (默认 n): ")" choice || true
+    prompt_read choice "$(prompt_color "$GREEN" "是否允许执行？[y]允许 [n]拒绝 [a]本次全部允许 (默认 n): ")" || true
 
     case "$choice" in
         y|Y|yes|YES)
@@ -326,14 +273,14 @@ confirm_command() {
             ;;
         a|A)
             APPROVE_ALL=1
-            print_color "$YELLOW" "⚠️  已选择"本次全部允许"，后续将不再逐条确认（请谨慎）" >&2
+            print_color "$YELLOW" "[警告] 已选择 \"本次全部允许\"，后续将不再逐条确认（请谨慎）" >&2
             return 0
             ;;
         *)
             print_color "$CYAN" "已拒绝执行该命令。" >&2
             # 询问用户是否有修正建议
             local feedback=""
-            read -r -p "$(prompt_color "$CYAN" "请输入修正建议（直接回车跳过）: ")" feedback || true
+            prompt_read feedback "$(prompt_color "$CYAN" "请输入修正建议（直接回车跳过）: ")" || true
             if [ -n "$feedback" ]; then
                 USER_REJECT_FEEDBACK="$feedback"
             fi
@@ -342,163 +289,32 @@ confirm_command() {
     esac
 }
 
-# 获取可用模型列表
-fetch_models() {
-    print_color "$YELLOW" "\n🔍 正在获取可用模型列表..."
-    
-    local response=$(curl -s -w "\n%{http_code}" --connect-timeout "$CONNECT_TIMEOUT" --max-time "$TIMEOUT" -X GET "$API_URL/models" \
-        -H "Authorization: Bearer $API_KEY" \
-        -H "Content-Type: application/json" 2>/dev/null)
-    
-    local http_code=$(echo "$response" | tail -n1)
-    local body=$(echo "$response" | head -n -1)
-    
-    if [ "$http_code" = "200" ]; then
-        # 提取模型 ID 列表（尝试多种 JSON 格式）
-        local models=$(echo "$body" | grep -o '"id":"[^"]*"' | sed 's/"id":"//;s/"$//' | head -20)
-        
-        if [ -n "$models" ]; then
-            print_color "$GREEN" "✅ 获取到以下可用模型：\n"
-            
-            # 显示模型列表并编号
-            local index=1
-            local model_array=()
-            while IFS= read -r model; do
-                if [ -n "$model" ]; then
-                    print_color "$CYAN" "  [$index] $model"
-                    model_array+=("$model")
-                    ((index++))
-                fi
-            done <<< "$models"
-            
-            # 让用户选择
-            printf '\n'
-            read -r -p "$(prompt_color "$GREEN" "请选择模型编号 (或直接输入模型名称): ")" user_choice
-            
-            # 判断是数字还是模型名
-            if [[ "$user_choice" =~ ^[0-9]+$ ]] && [ "$user_choice" -ge 1 ] && [ "$user_choice" -lt "$index" ]; then
-                MODEL_NAME="${model_array[$((user_choice-1))]}"
-                print_color "$GREEN" "✅ 已选择模型: $MODEL_NAME"
-            elif [ -n "$user_choice" ]; then
-                MODEL_NAME="$user_choice"
-                print_color "$GREEN" "✅ 已设置模型: $MODEL_NAME"
-            else
-                print_color "$RED" "❌ 无效的选择"
-                return 1
-            fi
-            
-            return 0
-        fi
-    fi
-    
-    # 如果获取失败，提示用户手动输入
-    print_color "$YELLOW" "⚠️  无法自动获取模型列表"
-    echo ""
-    print_color "$CYAN" "常用模型名称参考:"
-    print_color "$BLUE" "  - OpenAI: gpt-4, gpt-4-turbo, gpt-3.5-turbo"
-    print_color "$BLUE" "  - DeepSeek: deepseek-chat, deepseek-coder"
-    print_color "$BLUE" "  - 通义千问: qwen-turbo, qwen-plus, qwen-max"
-    print_color "$BLUE" "  - 硅基流动: Qwen/Qwen2.5-7B-Instruct"
-    print_color "$BLUE" "  - Ollama: qwen2.5:7b, llama3.1:8b"
-    echo ""
-    
-    while [ -z "$MODEL_NAME" ]; do
-        read -r -p "$(prompt_color "$GREEN" "请手动输入模型名称: ")" MODEL_NAME
-        if [ -z "$MODEL_NAME" ]; then
-            print_color "$RED" "❌ 模型名称不能为空！"
-        fi
-    done
-    
-    return 0
-}
-
 # 配置 API
 setup_api() {
-    print_header "🤖 AI 智能安装助手"
-    
-    # 先尝试从环境变量加载配置
-    load_config_from_env
-    
-    # 如果环境变量中已有完整配置（包括模型），直接使用
-    if [ -n "$API_URL" ] && [ -n "$API_KEY" ] && [ -n "$MODEL_NAME" ]; then
-        echo ""
-        print_color "$GREEN" "✅ 使用环境变量配置："
-        print_color "$CYAN" "  API_URL: $API_URL"
-        print_color "$CYAN" "  API_KEY: ${API_KEY:0:10}..."
-        print_color "$CYAN" "  MODEL: $MODEL_NAME"
-        echo ""
-        
-        # 测试连接
-        print_color "$YELLOW" "🔍 正在测试 API 连接..."
-        if test_api_connection; then
-            print_color "$GREEN" "✅ API 连接成功！\n"
-            return 0
-        else
-            print_color "$RED" "❌ API 连接失败，将转为手动配置...\n"
-            API_URL=""
-            API_KEY=""
-            MODEL_NAME=""
-        fi
-    fi
-    
-    print_color "$YELLOW" "请配置 AI API（支持 OpenAI 格式的所有接口）"
-    echo ""
-    print_color "$CYAN" "💡 提示：可以创建 .env 文件预设配置（AI_API_URL, AI_API_KEY, AI_MODEL）"
-    echo ""
-    print_color "$CYAN" "示例 API 地址:"
-    print_color "$BLUE" "  - OpenAI: https://api.openai.com/v1"
-    print_color "$BLUE" "  - DeepSeek: https://api.deepseek.com/v1"
-    print_color "$BLUE" "  - 通义千问: https://dashscope.aliyuncs.com/compatible-mode/v1"
-    print_color "$BLUE" "  - 硅基流动: https://api.siliconflow.cn/v1"
-    print_color "$BLUE" "  - Ollama本地: http://localhost:11434/v1"
-    echo ""
-    
-    # 获取 API URL（如果环境变量中没有）
-    if [ -z "$API_URL" ]; then
-        while [ -z "$API_URL" ]; do
-            read -r -p "$(prompt_color "$GREEN" "请输入 API 地址: ")" API_URL
-            if [ -z "$API_URL" ]; then
-                print_color "$RED" "❌ API 地址不能为空！"
-            fi
-        done
-    fi
-    
-    # 获取 API Key（如果环境变量中没有）
-    if [ -z "$API_KEY" ]; then
-        while [ -z "$API_KEY" ]; do
-            read -r -p "$(prompt_color "$GREEN" "请输入 API Key: ")" API_KEY
-            if [ -z "$API_KEY" ]; then
-                print_color "$RED" "❌ API Key 不能为空！"
-            fi
-        done
-    fi
-    
-    # 获取模型（如果环境变量中没有）
-    if [ -z "$MODEL_NAME" ]; then
-        if ! fetch_models; then
-            API_URL=""
-            API_KEY=""
-            MODEL_NAME=""
-            return 1
-        fi
-    fi
-    
-    # 测试连接
-    print_color "$YELLOW" "\n🔍 正在测试 API 连接..."
-    if test_api_connection; then
-        print_color "$GREEN" "✅ API 连接成功！\n"
-        return 0
-    else
-        print_color "$RED" "❌ API 连接失败，请检查配置！\n"
-        API_URL=""
-        API_KEY=""
-        MODEL_NAME=""
+    print_header "AI 智能安装助手"
+
+    if [ -z "$API_URL" ] || [ -z "$API_KEY" ] || [ -z "$MODEL_NAME" ]; then
+        print_color "$RED" "[错误] 脚本内置配置不完整，请先编辑 ai_install.sh 顶部的 API_URL、API_KEY、MODEL_NAME"
         return 1
     fi
+
+    print_color "$GREEN" "[OK] 使用内置配置: $MODEL_NAME @ ${API_URL}"
+    print_color "$YELLOW" "正在测试 API 连接..."
+    if test_api_connection; then
+        print_color "$GREEN" "[OK] API 连接成功\n"
+        return 0
+    fi
+
+    print_color "$RED" "[错误] 内置配置连接失败，请直接修改 ai_install.sh 顶部配置后重试。\n"
+    if [ -n "$API_TEST_ERROR" ]; then
+        print_color "$YELLOW" "原因: $API_TEST_ERROR"
+    fi
+    return 1
 }
 
 # 测试 API 连接
 test_api_connection() {
+    API_TEST_ERROR=""
     local payload="{\"model\":\"$MODEL_NAME\",\"messages\":[{\"role\":\"user\",\"content\":\"hi\"}],\"max_tokens\":10}"
     local payload_file="$TMP_DIR/ai_install_test_payload_$$.json"
     printf '%s' "$payload" > "$payload_file"
@@ -510,436 +326,488 @@ test_api_connection() {
         --data-binary @"$payload_file" 2>/dev/null)
 
     rm -f "$payload_file" 2>/dev/null || true
-    
-    local http_code=$(echo "$response" | tail -n1)
-    
-    if [ "$http_code" = "200" ]; then
-        return 0
-    else
+
+    split_http_response "$response"
+
+    if [ "$HTTP_CODE" != "200" ]; then
+        local error_msg=""
+        error_msg=$(extract_error_message "$HTTP_BODY")
+        if [ -n "$error_msg" ]; then
+            API_TEST_ERROR="$error_msg"
+        else
+            API_TEST_ERROR="HTTP 状态码: $HTTP_CODE"
+        fi
         return 1
     fi
+
+    # HTTP 200 即视为连接成功，不要求响应必须有 content
+    return 0
 }
 
-# 去除 ANSI 颜色代码
-strip_ansi() {
-    if command -v perl >/dev/null 2>&1; then
-        # 覆盖 CSI/OSC/DCS 以及单字符 ESC 序列；尽量保留可读文本
-        # 参考：ECMA-48 / ANSI escape sequences
+# 去除 ANSI 颜色代码 + 控制字符（合并为单个函数，避免双重管道）
+sanitize_text() {
+    if (( HAS_PERL )); then
         printf '%s' "$1" | perl -pe '
-            s/\e\[[0-?]*[ -\/]*[@-~]//g;        # CSI ... Cmd
-            s/\e\][^\a]*(?:\a|\e\\)//g;        # OSC ... (BEL | ST)
-            s/\eP.*?\e\\//gs;                  # DCS ... ST
-            s/\e[@-Z\\-_]//g;                  # 2-char sequences
+            s/\e\[[0-?]*[ -\/]*[@-~]//g;
+            s/\e\][^\a]*(?:\a|\e\\)//g;
+            s/\eP.*?\e\\//gs;
+            s/\e[@-Z\\-_]//g;
+            s/[\x00-\x08\x0B\x0C\x0E-\x1F\x7F]//g;
         '
     else
         local esc
         esc=$(printf '\033')
-        # sed 版本差异较大：这里尽量只做“足够安全”的处理——至少去掉 ESC 本身，避免 JSON 控制字符报错
         printf '%s' "$1" \
-            | sed "s/${esc}\[[0-9;?]*[ -\\/]*[@-~]//g" \
-            | sed "s/${esc}//g"
-    fi
-}
-
-# 去除剩余控制字符（避免 JSON 中出现非法控制字符）
-strip_control_chars() {
-    if command -v perl >/dev/null 2>&1; then
-        printf '%s' "$1" | perl -pe 's/[\x00-\x08\x0B\x0C\x0E-\x1F\x7F]//g'
-    else
-        # 保留 \n \r \t（后续会转义）；其余 C0 控制字符直接删除
-        printf '%s' "$1" | tr -d '\000-\010\013\014\016-\037\177'
+            | sed "s/${esc}\[[0-9;?]*[ -\\/]*[@-~]//g; s/${esc}//g" \
+            | tr -d '\000-\010\013\014\016-\037\177'
     fi
 }
 
 # JSON 转义函数
 json_escape() {
-    local string="$1"
-    # 先去除 ANSI 颜色代码
-    string=$(strip_ansi "$string")
-    # 再去除剩余控制字符
-    string=$(strip_control_chars "$string")
-    # 转义特殊字符
-    string="${string//\\/\\\\}"  # 反斜杠
-    string="${string//\"/\\\"}"  # 双引号
-    string="${string//$'\n'/\\n}"  # 换行符
-    string="${string//$'\r'/\\r}"  # 回车符
-    string="${string//$'\t'/\\t}"  # 制表符
+    local string
+    string=$(sanitize_text "$1")
+    string="${string//\\/\\\\}"
+    string="${string//\"/\\\"}"
+    string="${string//$'\n'/\\n}"
+    string="${string//$'\r'/\\r}"
+    string="${string//$'\t'/\\t}"
     printf '%s' "$string"
 }
 
-# 从 OpenAI 兼容 JSON 响应中提取 assistant content（优先使用 jq/python/perl，最后才回退正则）
-extract_ai_content() {
-    local body="$1"
-    local out=""
+append_history_message_json() {
+    local message_json="$1"
+    [ -z "$message_json" ] && return 0
 
-    if command -v jq >/dev/null 2>&1; then
-        out=$(printf '%s' "$body" | jq -r '(.choices[0].message.content // .choices[0].text // empty)' 2>/dev/null || true)
-        [ "$out" = "null" ] && out=""
-        if [ -n "$out" ]; then
-            printf '%s' "$out"
-            return 0
-        fi
-    fi
-
-    if command -v python3 >/dev/null 2>&1 || command -v python >/dev/null 2>&1; then
-        local py
-        py=$(command -v python3 2>/dev/null || command -v python 2>/dev/null)
-        out=$(printf '%s' "$body" | "$py" -c 'import json,sys
-try:
-    data=json.load(sys.stdin)
-except Exception:
-    sys.exit(0)
-choices=data.get("choices") or []
-content=""
-if choices:
-    c=choices[0] or {}
-    m=c.get("message") or {}
-    content=m.get("content") or c.get("text") or ""
-if isinstance(content,str):
-    sys.stdout.write(content)
-' 2>/dev/null || true)
-        if [ -n "$out" ]; then
-            printf '%s' "$out"
-            return 0
-        fi
-    fi
-
-    if command -v perl >/dev/null 2>&1; then
-        out=$(printf '%s' "$body" | perl -MJSON::PP -0777 -ne '
-            my $txt = $_;
-            my $data;
-            eval { $data = decode_json($txt); 1 } or exit 0;
-            my $choices = $data->{choices} || [];
-            my $content = "";
-            if (@$choices) {
-                my $c0 = $choices->[0] || {};
-                my $m = $c0->{message} || {};
-                $content = $m->{content} // $c0->{text} // "";
-            }
-            print $content if defined $content;
-        ' 2>/dev/null || true)
-        if [ -n "$out" ]; then
-            printf '%s' "$out"
-            return 0
-        fi
-    fi
-
-    # 最后回退：尽量匹配 JSON 字符串（支持转义）
-    out=$(printf '%s' "$body" | sed -n 's/.*"content"[[:space:]]*:[[:space:]]*"\([^"\\]*\(\\"[^"\\]*\)*\)".*/\1/p' | head -n1 | sed 's/\\n/\n/g;s/\\"/"/g;s/\\\\/\\/g' || true)
-    printf '%s' "$out"
-}
-
-# 从 SSE 流式响应的单行中提取 delta.content（优化：优先用纯 bash，避免频繁启动外部进程）
-extract_stream_delta() {
-    local line="$1"
-
-    # 跳过空行和非 data 行
-    [[ ! "$line" =~ ^data:\ *.+ ]] && return 0
-
-    # 去掉 "data: " 前缀
-    local json="${line#data: }"
-
-    # 处理 [DONE] 信号
-    [ "$json" = "[DONE]" ] && return 0
-
-    # 快速路径：用 bash 正则直接提取 "content":"..."
-    # 匹配模式：delta 后面的 content 字段
-    if [[ "$json" =~ \"content\":\"([^\"\\]*)\" ]]; then
-        printf '%s' "${BASH_REMATCH[1]}"
-        return 0
-    fi
-
-    # 处理 content 为 null 或不存在的情况
-    if [[ "$json" =~ \"content\":null ]] || [[ ! "$json" =~ \"content\" ]]; then
-        return 0
-    fi
-
-    # 复杂情况（含转义字符）：回退到 jq
-    if command -v jq >/dev/null 2>&1; then
-        local out
-        out=$(printf '%s' "$json" | jq -r '(.choices[0].delta.content // empty)' 2>/dev/null || true)
-        [ "$out" = "null" ] && out=""
-        printf '%s' "$out"
+    if [ -f "$CONVERSATION_FILE" ] && [ -s "$CONVERSATION_FILE" ]; then
+        printf ',%s\n' "$message_json" >> "$CONVERSATION_FILE"
+    else
+        printf '%s\n' "$message_json" > "$CONVERSATION_FILE"
     fi
 }
 
-extract_error_message() {
-    local body="$1"
-    local out=""
-
-    if command -v jq >/dev/null 2>&1; then
-        out=$(printf '%s' "$body" | jq -r '(.error.message // .message // .msg // .error // empty)' 2>/dev/null || true)
-        [ "$out" = "null" ] && out=""
-        if [ -n "$out" ]; then
-            printf '%s' "$out"
-            return 0
-        fi
-    fi
-
-    if command -v python3 >/dev/null 2>&1 || command -v python >/dev/null 2>&1; then
-        local py
-        py=$(command -v python3 2>/dev/null || command -v python 2>/dev/null)
-        out=$(printf '%s' "$body" | "$py" -c 'import json,sys
-try:
-    data=json.load(sys.stdin)
-except Exception:
-    sys.exit(0)
-err=data.get("error") or {}
-msg=err.get("message") if isinstance(err,dict) else None
-msg = msg or data.get("message") or data.get("msg") or data.get("error") or ""
-if isinstance(msg,str):
-    sys.stdout.write(msg)
-' 2>/dev/null || true)
-        if [ -n "$out" ]; then
-            printf '%s' "$out"
-            return 0
-        fi
-    fi
-
-    if command -v perl >/dev/null 2>&1; then
-        out=$(printf '%s' "$body" | perl -MJSON::PP -0777 -ne '
-            my $txt = $_;
-            my $data;
-            eval { $data = decode_json($txt); 1 } or exit 0;
-            my $msg = "";
-            if (ref($data->{error}) eq "HASH" && defined $data->{error}{message}) { $msg = $data->{error}{message}; }
-            elsif (defined $data->{message}) { $msg = $data->{message}; }
-            elsif (defined $data->{msg}) { $msg = $data->{msg}; }
-            elsif (defined $data->{error} && !ref($data->{error})) { $msg = $data->{error}; }
-            print $msg if defined $msg;
-        ' 2>/dev/null || true)
-        if [ -n "$out" ]; then
-            printf '%s' "$out"
-            return 0
-        fi
-    fi
-
-    out=$(printf '%s' "$body" | grep -o '"message":"[^"]*"' | head -1 | sed 's/"message":"//;s/"$//' || true)
-    printf '%s' "$out"
-}
-
-# 调用 AI API
-call_ai() {
+append_user_message_to_history() {
     local user_message="$1"
     local sanitized_user_message
     sanitized_user_message="$(redact_secrets "$user_message")"
+    append_history_message_json "{\"role\":\"user\",\"content\":\"$(json_escape "$sanitized_user_message")\"}"
+}
 
-    # 参数校验/兼容（部分 OpenAI 兼容接口对 temperature/max_tokens 很敏感）
+append_assistant_text_to_history() {
+    local ai_message="$1"
+    append_history_message_json "{\"role\":\"assistant\",\"content\":\"$(json_escape "$ai_message")\"}"
+}
+
+append_assistant_tool_calls_to_history() {
+    local ai_message="$1"
+    local tool_calls_json="$2"
+
+    if [ -n "$ai_message" ]; then
+        append_history_message_json "{\"role\":\"assistant\",\"content\":\"$(json_escape "$ai_message")\",\"tool_calls\":$tool_calls_json}"
+    else
+        append_history_message_json "{\"role\":\"assistant\",\"content\":null,\"tool_calls\":$tool_calls_json}"
+    fi
+}
+
+append_tool_result_to_history() {
+    local tool_call_id="$1"
+    local tool_output="$2"
+    append_history_message_json "{\"role\":\"tool\",\"tool_call_id\":\"$(json_escape "$tool_call_id")\",\"content\":\"$(json_escape "$tool_output")\"}"
+}
+
+build_messages_json() {
+    local messages="[{\"role\":\"system\",\"content\":\"$(json_escape "$SYSTEM_PROMPT")\"}"
+
+    if [ -f "$CONVERSATION_FILE" ]; then
+        local history
+        history=$(cat "$CONVERSATION_FILE")
+        if [ -n "$history" ]; then
+            messages="$messages,$history"
+        fi
+    fi
+
+    messages="$messages]"
+    printf '%s' "$messages"
+}
+
+get_shell_tool_definitions_json() {
+    cat <<'EOF'
+[{"type":"function","function":{"name":"run_shell_command","description":"Run one bash command in the current working directory and return stdout and stderr. Use this whenever you need to inspect the environment, list files, check versions, or perform installation steps.","parameters":{"type":"object","properties":{"command":{"type":"string","description":"A single bash command to execute."}},"required":["command"],"additionalProperties":false}}}]
+EOF
+}
+
+build_request_payload() {
+    local messages_json="$1"
+    local temp_part=""
+    if [ "${INCLUDE_TEMPERATURE:-1}" = "1" ]; then
+        temp_part="\"temperature\": $TEMPERATURE,"
+    fi
+
+    printf '{"model":"%s","messages":%s,%s"max_tokens":%s,"stream":true,"tools":%s,"tool_choice":"auto"}' \
+        "$MODEL_NAME" "$messages_json" "$temp_part" "$MAX_TOKENS" "$(get_shell_tool_definitions_json)"
+}
+
+# 将 SSE 流式响应聚合为标准非流式 JSON（兼容后续所有 extract_* 函数）
+parse_sse_to_json() {
+    if [ -n "$PY_CMD" ]; then
+        "$PY_CMD" -c '
+import json,sys
+content="";tc={}
+for line in sys.stdin:
+    line=line.strip()
+    if line=="data: [DONE]" or not line.startswith("data: "): continue
+    try: chunk=json.loads(line[6:])
+    except: continue
+    delta=(chunk.get("choices") or [{}])[0].get("delta") or {}
+    if delta.get("content"): content+=delta["content"]
+    for t in delta.get("tool_calls") or []:
+        i=t.get("index",0)
+        if i not in tc: tc[i]={"id":"","type":"function","function":{"name":"","arguments":""}}
+        if t.get("id"): tc[i]["id"]=t["id"]
+        fn=t.get("function") or {}
+        if fn.get("name"): tc[i]["function"]["name"]=fn["name"]
+        tc[i]["function"]["arguments"]+=fn.get("arguments","")
+msg={"content":content if content else None,"role":"assistant"}
+if tc: msg["tool_calls"]=[tc[i] for i in sorted(tc)]
+print(json.dumps({"choices":[{"message":msg,"finish_reason":"stop"}]}))
+' 2>/dev/null
+    elif (( HAS_PERL )); then
+        perl -MJSON::PP -e '
+            my($content,%tc)=("");
+            while(<STDIN>){
+                chomp; last if /^data: \[DONE\]/; next unless s/^data: //;
+                my $c; eval{$c=decode_json($_);1} or next;
+                my $d=($c->{choices}[0]||{})->{delta}||{};
+                $content.=$d->{content}//"";
+                for my $t(@{$d->{tool_calls}||[]}){
+                    my $i=$t->{index}//0;
+                    $tc{$i}//={id=>"",type=>"function",function=>{name=>"",arguments=>""}};
+                    $tc{$i}{id}=$t->{id} if $t->{id};
+                    my $fn=$t->{function}||{};
+                    $tc{$i}{function}{name}=$fn->{name} if $fn->{name};
+                    $tc{$i}{function}{arguments}.=$fn->{arguments}//"";
+                }
+            }
+            my $msg={content=>length($content)?$content:undef,role=>"assistant"};
+            $msg->{tool_calls}=[map{$tc{$_}}sort{$a<=>$b}keys%tc] if %tc;
+            print encode_json({choices=>[{message=>$msg,finish_reason=>"stop"}]});
+        ' 2>/dev/null
+    fi
+}
+
+post_chat_completion_payload() {
+    local payload_file="$1"
+    local sse_file="$TMP_DIR/ai_sse_$$.txt"
+    local http_code
+    http_code=$(curl -sS -w "%{http_code}" -o "$sse_file" \
+        --connect-timeout "$CONNECT_TIMEOUT" --max-time "$TIMEOUT" \
+        -X POST "$API_URL/chat/completions" \
+        -H "Authorization: Bearer $API_KEY" \
+        -H "Content-Type: application/json" \
+        -H "Expect:" \
+        --data-binary @"$payload_file" 2>/dev/null)
+
+    local body
+    if [ "$http_code" = "200" ]; then
+        body=$(parse_sse_to_json < "$sse_file")
+    else
+        body=$(cat "$sse_file")
+    fi
+    rm -f "$sse_file" 2>/dev/null || true
+    printf '%s\n%s' "$body" "$http_code"
+}
+
+# 拆分 curl 响应为 http_code + body，结果写入全局变量
+HTTP_CODE="" ; HTTP_BODY=""
+split_http_response() {
+    HTTP_CODE=$(tail -n1 <<< "$1")
+    HTTP_BODY=$(head -n -1 <<< "$1")
+}
+
+# 通用 JSON 查询调度器
+# 用法: json_query "$input" "jq_flags" "jq_expr" "py_script" "perl_script"
+json_query() {
+    local input="$1" jq_flags="$2" jq_expr="$3" py_script="$4" perl_script="$5"
+    case "$JSON_BACKEND" in
+        jq)     printf '%s' "$input" | jq $jq_flags "$jq_expr" 2>/dev/null || true ;;
+        python) printf '%s' "$input" | "$PY_CMD" -c "$py_script" 2>/dev/null || true ;;
+        perl)   printf '%s' "$input" | perl -MJSON::PP -0777 -ne "$perl_script" 2>/dev/null || true ;;
+    esac
+}
+
+extract_tool_calls_json() {
+    local out
+    out=$(json_query "$1" "-c" \
+        '(.choices[0].message.tool_calls // empty)' \
+        'import json,sys
+try: data=json.load(sys.stdin)
+except: sys.exit(0)
+tc=((data.get("choices") or [{}])[0] or {}).get("message",{}).get("tool_calls") or []
+if tc: sys.stdout.write(json.dumps(tc,separators=(",",":")))' \
+        'my $d; eval{$d=decode_json($_);1} or exit 0; my $c=$d->{choices}||[];
+my $tc=(@$c?($c->[0]{message}||{})->{tool_calls}||[]:[]);
+print encode_json($tc) if ref($tc) eq "ARRAY"&&@$tc;')
+    [ "$out" = "[]" ] && out=""
+    printf '%s' "$out"
+}
+
+extract_tool_call_records() {
+    [ -z "$1" ] && return 0
+    json_query "$1" "-c" \
+        '.[]? | {id:(.id//""),name:(.function.name//""),command:(try(.function.arguments|fromjson|.command)catch""),args_raw:(.function.arguments//"")}' \
+        'import json,sys
+try: calls=json.load(sys.stdin)
+except: sys.exit(0)
+for c in calls or []:
+ fn=c.get("function") or {};ar=fn.get("arguments","") or "";cmd=""
+ try:
+  a=json.loads(ar) if ar else {};cmd=a.get("command","") if isinstance(a,dict) else ""
+ except: cmd=""
+ sys.stdout.write(json.dumps({"id":c.get("id",""),"name":fn.get("name",""),"command":cmd,"args_raw":ar},separators=(",",":"))+"\n")' \
+        'my $calls;eval{$calls=decode_json($_);1} or exit 0;
+for my $c(@{$calls||[]}){my $fn=$c->{function}||{};my $ar=$fn->{arguments}//q{};my $cmd=q{};
+if($ar ne q{}){my $a;eval{$a=decode_json($ar);1};$cmd=$a->{command}//q{} if ref($a) eq "HASH"}
+print encode_json({id=>$c->{id}//q{},name=>$fn->{name}//q{},command=>$cmd,args_raw=>$ar}),"\n"}'
+}
+
+TOOL_RECORD_ID=""
+TOOL_RECORD_NAME=""
+TOOL_RECORD_COMMAND=""
+TOOL_RECORD_ARGS_RAW=""
+
+parse_tool_call_record() {
+    local record_json="$1"
+    TOOL_RECORD_ID="" ; TOOL_RECORD_NAME="" ; TOOL_RECORD_COMMAND="" ; TOOL_RECORD_ARGS_RAW=""
+    local -a fields=()
+    mapfile -d '' -t fields < <(
+        json_query "$record_json" "-j" \
+            '(.id//""),"\u0000",(.name//""),"\u0000",(.command//""),"\u0000",(.args_raw//""),"\u0000"' \
+            'import json,sys
+try: r=json.load(sys.stdin)
+except: sys.exit(0)
+for k in ("id","name","command","args_raw"):
+ v=r.get(k,"")
+ if not isinstance(v,str): v=""
+ sys.stdout.buffer.write(v.encode("utf-8","replace")+b"\0")' \
+            'my $r;eval{$r=decode_json($_);1} or exit 0;
+for my $k(qw(id name command args_raw)){my $v=$r->{$k};$v=q{} if !defined $v||ref($v);print $v,"\0"}'
+    )
+    [ "${#fields[@]}" -ge 4 ] || return 1
+    TOOL_RECORD_ID="${fields[0]}" ; TOOL_RECORD_NAME="${fields[1]}"
+    TOOL_RECORD_COMMAND="${fields[2]}" ; TOOL_RECORD_ARGS_RAW="${fields[3]}"
+}
+
+# 从 OpenAI 兼容 JSON 响应中提取 assistant content
+extract_ai_content() {
+    local out
+    out=$(json_query "$1" "-r" \
+        '(.choices[0].message.content // .choices[0].text // empty)' \
+        'import json,sys
+try: data=json.load(sys.stdin)
+except: sys.exit(0)
+c=(data.get("choices") or [{}])[0] or {}
+content=(c.get("message") or {}).get("content") or c.get("text") or ""
+if isinstance(content,str): sys.stdout.write(content)' \
+        'my $d; eval{$d=decode_json($_);1} or exit 0; my $c=$d->{choices}||[];
+if(@$c){my $m=($c->[0]||{})->{message}||{};
+print $m->{content}//$c->[0]{text}//"" }')
+    [ "$out" = "null" ] && out=""
+    if [ -n "$out" ]; then printf '%s' "$out"; return 0; fi
+    # 正则回退
+    out=$(printf '%s' "$1" | sed -n 's/.*"content"[[:space:]]*:[[:space:]]*"\([^"\\]*\(\\"[^"\\]*\)*\)".*/\1/p' | head -n1 | sed 's/\\n/\n/g;s/\\"/"/g;s/\\\\/\\/g' || true)
+    printf '%s' "$out"
+}
+
+response_has_visible_output() {
+    [ -n "$(extract_ai_content "$1")" ] || [ -n "$(extract_tool_calls_json "$1")" ]
+}
+
+extract_error_message() {
+    local out
+    out=$(json_query "$1" "-r" \
+        '(.error.message // .message // .msg // .error // empty)' \
+        'import json,sys
+try: data=json.load(sys.stdin)
+except: sys.exit(0)
+err=data.get("error") or {}
+msg=(err.get("message") if isinstance(err,dict) else None) or data.get("message") or data.get("msg") or data.get("error") or ""
+if isinstance(msg,str): sys.stdout.write(msg)' \
+        'my $d; eval{$d=decode_json($_);1} or exit 0; my $msg="";
+if(ref($d->{error}) eq "HASH"&&defined $d->{error}{message}){$msg=$d->{error}{message}}
+elsif(defined $d->{message}){$msg=$d->{message}}
+elsif(defined $d->{msg}){$msg=$d->{msg}}
+elsif(defined $d->{error}&&!ref($d->{error})){$msg=$d->{error}}
+print $msg if defined $msg;')
+    [ "$out" = "null" ] && out=""
+    if [ -n "$out" ]; then printf '%s' "$out"; return 0; fi
+    # 正则回退
+    printf '%s' "$1" | grep -o '"message":"[^"]*"' | head -1 | sed 's/"message":"//;s/"$//' || true
+}
+
+# 调用 AI API，返回原始响应 body（非流式）
+# 响应内容写入全局变量 AI_RAW_RESPONSE_BODY，避免命令替换触发子 shell 丢失状态。
+call_ai_raw_response() {
     if ! [[ "$MAX_TOKENS" =~ ^[0-9]+$ ]]; then
         MAX_TOKENS=1024
     fi
     if ! [[ "$TEMPERATURE" =~ ^[0-9]+(\.[0-9]+)?$ ]]; then
         TEMPERATURE="0.7"
     fi
-    
-    # 构建消息数组
-    local messages="[{\"role\":\"system\",\"content\":\"$(json_escape "$SYSTEM_PROMPT")\"}"
-    
-    # 读取历史对话
-    if [ -f "$CONVERSATION_FILE" ]; then
-        local history=$(cat "$CONVERSATION_FILE")
-        if [ -n "$history" ]; then
-            messages="$messages,$history"
-        fi
-    fi
-    
-    # 添加当前用户消息
-    messages="$messages,{\"role\":\"user\",\"content\":\"$(json_escape "$sanitized_user_message")\"}]"
 
-    # 构建 payload（根据 STREAM_MODE 决定是否启用流式）
-    local stream_flag="false"
-    [ "$STREAM_MODE" = "1" ] && stream_flag="true"
+    local messages
+    messages=$(build_messages_json)
 
-    local payload=""
-    if [ "${INCLUDE_TEMPERATURE:-1}" = "1" ]; then
-        payload="{
-                \"model\": \"$MODEL_NAME\",
-                \"messages\": $messages,
-                \"temperature\": $TEMPERATURE,
-                \"max_tokens\": $MAX_TOKENS,
-                \"stream\": $stream_flag
-            }"
-    else
-        payload="{
-                \"model\": \"$MODEL_NAME\",
-                \"messages\": $messages,
-                \"max_tokens\": $MAX_TOKENS,
-                \"stream\": $stream_flag
-            }"
-    fi
+    local payload
+    payload=$(build_request_payload "$messages")
 
     local payload_file="$TMP_DIR/ai_install_payload_$$.json"
     printf '%s' "$payload" > "$payload_file"
 
     if [ -n "$LOG_FILE" ] && [ "$DEBUG_LOG" = "1" ]; then
-        log_line "DEBUG" "AI request: url=$API_URL/chat/completions model=$MODEL_NAME stream=$stream_flag payload=$(redact_secrets "$(cat "$payload_file")")"
+        log_line "DEBUG" "AI request: url=$API_URL/chat/completions model=$MODEL_NAME payload=$(redact_secrets "$(cat "$payload_file")")"
     fi
 
-    local ai_message=""
+    local response
+    response=$(post_chat_completion_payload "$payload_file")
+    rm -f "$payload_file" 2>/dev/null || true
+    split_http_response "$response"
+    local http_code="$HTTP_CODE" body="$HTTP_BODY"
 
-    # 流式模式
-    if [ "$STREAM_MODE" = "1" ]; then
-        local stream_error=""
-        local http_code=""
-        local temp_response="$TMP_DIR/ai_install_stream_$$.tmp"
-
-        # 使用 curl 流式读取，--no-buffer 确保实时输出
-        curl -sS --no-buffer --connect-timeout "$CONNECT_TIMEOUT" --max-time "$TIMEOUT" \
-            -w "\n__HTTP_CODE__:%{http_code}" \
-            -X POST "$API_URL/chat/completions" \
-            -H "Authorization: Bearer $API_KEY" \
-            -H "Content-Type: application/json" \
-            -H "Expect:" \
-            --data-binary @"$payload_file" 2>/dev/null > "$temp_response"
-
-        rm -f "$payload_file" 2>/dev/null || true
-
-        # 提取 HTTP 状态码
-        http_code=$(grep "__HTTP_CODE__:" "$temp_response" 2>/dev/null | tail -n1 | sed 's/.*__HTTP_CODE__://')
-        [ -z "$http_code" ] && http_code="000"
-
-        if [ "$http_code" != "200" ]; then
-            local body=$(grep -v "__HTTP_CODE__:" "$temp_response" 2>/dev/null | tr '\n' ' ')
-            rm -f "$temp_response" 2>/dev/null || true
-            print_color "$RED" "❌ AI 调用失败"
-            local error_msg=$(extract_error_message "$body")
-            if [ -n "$error_msg" ]; then
-                print_color "$YELLOW" "错误信息: $error_msg"
-            else
-                print_color "$YELLOW" "HTTP 状态码: $http_code"
-            fi
-            log_line "ERROR" "AI stream call failed: http_code=$http_code body=$body"
-            print_color "$CYAN" "日志已写入: $LOG_FILE"
-            return 1
+    # HTTP 400 时尝试简化参数重试
+    if [ "$http_code" = "400" ]; then
+        local fb_file="$TMP_DIR/ai_install_payload_fallback_$$.json"
+        printf '{"model":"%s","messages":%s,"max_tokens":512,"stream":true,"tools":%s,"tool_choice":"auto"}' \
+            "$MODEL_NAME" "$messages" "$(get_shell_tool_definitions_json)" > "$fb_file"
+        [ "$DEBUG_LOG" = "1" ] && log_line "DEBUG" "AI fallback request (no temperature, max_tokens=512)"
+        local fb_response
+        fb_response=$(post_chat_completion_payload "$fb_file")
+        rm -f "$fb_file" 2>/dev/null || true
+        split_http_response "$fb_response"
+        [ "$DEBUG_LOG" = "1" ] && log_line "DEBUG" "AI fallback response: http_code=$HTTP_CODE"
+        if [ "$HTTP_CODE" = "200" ]; then
+            http_code="$HTTP_CODE" ; body="$HTTP_BODY"
         fi
+    fi
 
-        # 解析流式响应并实时输出
-        printf '%b' "$CYAN" >&2
-        while IFS= read -r line || [ -n "$line" ]; do
-            # 跳过 HTTP 状态码标记行
-            [[ "$line" =~ __HTTP_CODE__: ]] && continue
-            # 去除可能的 \r
-            line="${line%$'\r'}"
-            # 提取 delta content
-            local delta=$(extract_stream_delta "$line")
-            if [ -n "$delta" ]; then
-                printf '%s' "$delta" >&2
-                ai_message="${ai_message}${delta}"
-            fi
-        done < "$temp_response"
-        printf '%b\n' "$NC" >&2
-
-        rm -f "$temp_response" 2>/dev/null || true
-
-        if [ -z "$ai_message" ]; then
-            print_color "$RED" "❌ AI 调用失败"
-            log_line "ERROR" "AI stream returned empty content"
-            print_color "$CYAN" "日志已写入: $LOG_FILE"
-            return 1
+    if [ "$http_code" != "200" ]; then
+        print_color "$RED" "[错误] AI 调用失败" >&2
+        local error_msg=""
+        error_msg=$(extract_error_message "$body")
+        if [ -n "$error_msg" ]; then
+            print_color "$YELLOW" "错误信息: $error_msg" >&2
+        else
+            print_color "$YELLOW" "HTTP 状态码: $http_code" >&2
         fi
+        log_line "ERROR" "AI call failed: http_code=$http_code url=$API_URL/chat/completions model=$MODEL_NAME body=$(echo "$body" | tr '\n' ' ')"
+        print_color "$CYAN" "日志已写入: $LOG_FILE" >&2
+        if [ "$DEBUG_LOG" != "1" ]; then
+            print_color "$CYAN" "可用 AI_INSTALL_DEBUG=1 重新运行以记录请求 payload（已脱敏）" >&2
+        fi
+        return 1
+    fi
 
-    # 非流式模式（原逻辑）
+    AI_RAW_RESPONSE_BODY="$body"
+    return 0
+}
+
+render_ai_message() {
+    local message="$1"
+    [ -z "$message" ] && return 0
+    print_color "$BLUE" "\nAI: $message\n" >&2
+}
+
+strip_think_blocks() {
+    local text="$1"
+    if (( HAS_PERL )); then
+        printf '%s' "$text" | perl -0777 -pe 's/<think>.*?<\/think>//gs'
     else
-        local response=$(curl -sS -w "\n%{http_code}" --connect-timeout "$CONNECT_TIMEOUT" --max-time "$TIMEOUT" -X POST "$API_URL/chat/completions" \
-            -H "Authorization: Bearer $API_KEY" \
-            -H "Content-Type: application/json" \
-            -H "Expect:" \
-            --data-binary @"$payload_file" 2>/dev/null)
+        printf '%s' "$text" | sed '/<think>/,/<\/think>/d'
+    fi
+}
 
-        rm -f "$payload_file" 2>/dev/null || true
+execute_tool_calls_from_json() {
+    local records
+    records=$(extract_tool_call_records "$1")
+    if [ -z "$records" ]; then
+        print_color "$YELLOW" "[警告] tool_calls 存在，但未能解析出可执行工具。" >&2
+        return 1
+    fi
 
-        local http_code
-        http_code=$(echo "$response" | tail -n1)
-        local body
-        body=$(echo "$response" | head -n -1)
-
-        if [ -n "$LOG_FILE" ] && [ "$DEBUG_LOG" = "1" ]; then
-            log_line "DEBUG" "AI response: http_code=$http_code body=$(echo "$body" | tr '\n' ' ')"
+    local record=""
+    while IFS= read -r record; do
+        [ -z "$record" ] && continue
+        if ! parse_tool_call_record "$record"; then
+            append_tool_result_to_history "" "错误：工具调用记录解析失败。原始记录：$record"
+            continue
         fi
 
-        # 兼容回退：部分接口会对 temperature 或较大的 max_tokens 返回 400
-        if [ "$http_code" = "400" ]; then
-            local fallback_payload="{
-                    \"model\": \"$MODEL_NAME\",
-                    \"messages\": $messages,
-                    \"max_tokens\": 512
-                }"
-            local fallback_payload_file="$TMP_DIR/ai_install_payload_fallback_$$.json"
-            printf '%s' "$fallback_payload" > "$fallback_payload_file"
-            if [ -n "$LOG_FILE" ] && [ "$DEBUG_LOG" = "1" ]; then
-                log_line "DEBUG" "AI fallback request (no temperature, max_tokens=512): payload=$(redact_secrets "$(cat "$fallback_payload_file")")"
-            fi
-
-            local fallback_response
-            fallback_response=$(curl -sS -w "\n%{http_code}" --connect-timeout "$CONNECT_TIMEOUT" --max-time "$TIMEOUT" -X POST "$API_URL/chat/completions" \
-                -H "Authorization: Bearer $API_KEY" \
-                -H "Content-Type: application/json" \
-                -H "Expect:" \
-                --data-binary @"$fallback_payload_file" 2>/dev/null)
-            rm -f "$fallback_payload_file" 2>/dev/null || true
-
-            local fallback_code
-            fallback_code=$(echo "$fallback_response" | tail -n1)
-            local fallback_body
-            fallback_body=$(echo "$fallback_response" | head -n -1)
-
-            if [ -n "$LOG_FILE" ] && [ "$DEBUG_LOG" = "1" ]; then
-                log_line "DEBUG" "AI fallback response: http_code=$fallback_code body=$(echo "$fallback_body" | tr '\n' ' ')"
-            fi
-
-            if [ "$fallback_code" = "200" ]; then
-                http_code="$fallback_code"
-                body="$fallback_body"
-            fi
+        local tool_output=""
+        if [ "$TOOL_RECORD_NAME" != "run_shell_command" ]; then
+            tool_output="错误：不支持的工具 $TOOL_RECORD_NAME"
+        elif [ -z "$TOOL_RECORD_COMMAND" ]; then
+            tool_output="错误：工具参数缺少 command 字段。原始参数：$TOOL_RECORD_ARGS_RAW"
+        elif ! command_needs_confirmation "$TOOL_RECORD_COMMAND" || confirm_command "$TOOL_RECORD_COMMAND"; then
+            tool_output=$(execute_command "$TOOL_RECORD_COMMAND")
+        elif [ -n "$USER_REJECT_FEEDBACK" ]; then
+            tool_output="已跳过：用户拒绝执行该命令。用户反馈：$USER_REJECT_FEEDBACK"
+        else
+            tool_output="已跳过：用户未同意执行该命令。"
         fi
+        append_tool_result_to_history "$TOOL_RECORD_ID" "$tool_output"
+    done <<< "$records"
+    return 0
+}
 
-        if [ "$http_code" != "200" ]; then
-            print_color "$RED" "❌ AI 调用失败"
-            local error_msg=""
-            error_msg=$(extract_error_message "$body")
-            if [ -n "$error_msg" ]; then
-                print_color "$YELLOW" "错误信息: $error_msg"
-            else
-                print_color "$YELLOW" "HTTP 状态码: $http_code"
-            fi
-            log_line "ERROR" "AI call failed: http_code=$http_code url=$API_URL/chat/completions model=$MODEL_NAME body=$(echo "$body" | tr '\n' ' ')"
-            print_color "$CYAN" "日志已写入: $LOG_FILE"
-            if [ "$DEBUG_LOG" != "1" ]; then
-                print_color "$CYAN" "可用 AI_INSTALL_DEBUG=1 重新运行以记录请求 payload（已脱敏）"
-            fi
+request_ai_response() {
+    local user_message="$1"
+    append_user_message_to_history "$user_message"
+
+    local round=0
+    while [ "$round" -lt "$MAX_TOOL_ROUNDS" ]; do
+        if ! call_ai_raw_response; then
             return 1
         fi
+        local body="$AI_RAW_RESPONSE_BODY"
 
+        local ai_message=""
         ai_message=$(extract_ai_content "$body")
+        ai_message=$(strip_think_blocks "$ai_message")
+        local tool_calls_json=""
+        tool_calls_json=$(extract_tool_calls_json "$body")
+
+        if [ -n "$tool_calls_json" ]; then
+            append_assistant_tool_calls_to_history "$ai_message" "$tool_calls_json"
+            render_ai_message "$ai_message"
+            execute_tool_calls_from_json "$tool_calls_json" || true
+            round=$((round + 1))
+            continue
+        fi
 
         if [ -z "$ai_message" ]; then
-            print_color "$RED" "❌ AI 调用失败"
-            log_line "ERROR" "AI call returned empty content: body=$(echo "$body" | tr '\n' ' ')"
-            print_color "$CYAN" "日志已写入: $LOG_FILE"
+            print_color "$RED" "[错误] AI 调用失败" >&2
+            log_line "ERROR" "AI call returned empty content without tool_calls: body=$(echo "$body" | tr '\n' ' ')"
+            print_color "$YELLOW" "原因: 接口返回了空消息（content=null），不是终端没显示。" >&2
+            print_color "$CYAN" "日志已写入: $LOG_FILE" >&2
             return 1
         fi
-    fi
-    
-    # 保存对话历史
-    local user_json="{\"role\":\"user\",\"content\":\"$(json_escape "$sanitized_user_message")\"}"
-    local assistant_json="{\"role\":\"assistant\",\"content\":\"$(json_escape "$ai_message")\"}"
-    
-    if [ -f "$CONVERSATION_FILE" ]; then
-        printf '%s\n' ",$user_json,$assistant_json" >> "$CONVERSATION_FILE"
-    else
-        printf '%s\n' "$user_json,$assistant_json" > "$CONVERSATION_FILE"
-    fi
-    
-    echo "$ai_message"
+
+        append_assistant_text_to_history "$ai_message"
+        printf '%s' "$ai_message"
+        return 0
+    done
+
+    print_color "$RED" "[错误] AI 工具调用次数过多，已中止当前轮对话" >&2
+    log_line "ERROR" "AI exceeded max tool rounds: $MAX_TOOL_ROUNDS"
+    return 1
 }
 
 # 执行命令
 execute_command() {
     local command="$1"
     
-    # 使用紫色背景和白色文字显示命令，使其更醒目
+    # 使用高对比颜色显示命令，便于在终端里区分
     echo "" >&2
-    echo -e "\033[45;37m ⚡ 执行系统命令 \033[0m \033[1;35m$command\033[0m" >&2
+    echo -e "\033[44;37m 执行命令 \033[0m \033[1;36m$command\033[0m" >&2
     echo -e "\033[0;90m----------------------------------------\033[0m" >&2
     
     # 执行命令并捕获输出（同时显示在终端）
@@ -971,270 +839,31 @@ execute_command() {
     
     echo -e "\033[0;90m----------------------------------------\033[0m" >&2
     if [ $exit_code -eq 0 ]; then
-        print_color "$GREEN" "✅ 执行成功" >&2
+        print_color "$GREEN" "[OK] 执行成功" >&2
     else
-        print_color "$RED" "❌ 执行失败 (返回码: $exit_code)" >&2
+        print_color "$RED" "[错误] 执行失败 (返回码: $exit_code)" >&2
     fi
     echo "" >&2
     
     # 将结果反馈给 AI（去除 ANSI 颜色代码，防止 JSON 错误）
-    local clean_output=$(strip_ansi "$output")
-    clean_output=$(redact_secrets "$clean_output")
-    local status
-    if [ $exit_code -eq 0 ]; then
-        status="成功"
-    else
-        status="失败"
-    fi
+    local clean_output
+    clean_output=$(redact_secrets "$(sanitize_text "$output")")
+    local status="失败"
+    [ $exit_code -eq 0 ] && status="成功"
     local feedback=$'命令执行'"$status"$'。\n输出:\n'"$clean_output"
     
-    # 这里的 echo 是为了让调用者（process_ai_response）捕获反馈，而不是打印到屏幕
-    # 因为 process_ai_response 会调用 call_ai，需要这个反馈作为输入
     printf '%s' "$feedback"
-}
-
-# 清理候选命令（不做猜测性修复）
-sanitize_command_candidate() {
-    local cmd="$1"
-
-    cmd=$(printf '%s' "$cmd" | tr -d '\r')
-    cmd=$(printf '%s' "$cmd" | sed 's/^[[:space:]]*//;s/[[:space:]]*$//')
-    cmd="${cmd//：/:}"
-
-    # 去掉常见包裹符号
-    cmd=$(printf '%s' "$cmd" | sed "s/^[\`'\"[:space:]]*//;s/[\`'\"[:space:]]*$//")
-    cmd=$(printf '%s' "$cmd" | sed 's/^[\$>#][[:space:]]*//')
-    cmd="${cmd%】}"
-    cmd="${cmd%]}"
-
-    # 支持简单 JSON 包裹格式：{"command":"..."}
-    if printf '%s' "$cmd" | grep -Eq '^\{.*\}$'; then
-        local json_cmd=""
-        if command -v perl >/dev/null 2>&1; then
-            json_cmd=$(printf '%s' "$cmd" | perl -ne '
-                if (/"(?:command|cmd|execute|执行命令|命令)"\s*:\s*"((?:[^"\\]|\\.)*)"/i) {
-                    my $v = $1;
-                    $v =~ s/\\\\/__BS__/g;
-                    $v =~ s/\\"/"/g;
-                    $v =~ s/\\n/ /g;
-                    $v =~ s/\\t/ /g;
-                    $v =~ s/\\r//g;
-                    $v =~ s/\\\//\//g;
-                    $v =~ s/__BS__/\\/g;
-                    print $v;
-                }
-            ' 2>/dev/null || true)
-        else
-            json_cmd=$(printf '%s' "$cmd" | sed -n $SED_EXTENDED_FLAG 's/^[[:space:]]*\{.*"(command|cmd|execute|执行命令|命令)"[[:space:]]*:[[:space:]]*"([^"]*)".*\}[[:space:]]*$/\2/Ip' | head -n1)
-        fi
-        [ -n "$json_cmd" ] && cmd="$json_cmd"
-    fi
-
-    # 去掉前缀标签
-    cmd=$(printf '%s' "$cmd" | sed $SED_EXTENDED_FLAG 's/^(执行命令|命令|command|cmd|execute):[[:space:]]*//I')
-    cmd=$(printf '%s' "$cmd" | sed 's/[。；;，,[:space:]]*$//')
-
-    # 处理“一整句里带命令标签”的情况
-    if echo "$cmd" | grep -Eiq '(执行命令|命令|command|cmd|execute):'; then
-        local tagged=""
-        tagged=$(printf '%s' "$cmd" | sed -n $SED_EXTENDED_FLAG 's/.*(执行命令|命令|command|cmd|execute):[[:space:]]*//Ip' | head -n1)
-        if [ -n "$tagged" ]; then
-            cmd="$tagged"
-            cmd=$(printf '%s' "$cmd" | sed 's/^[[:space:]]*//;s/[[:space:]]*$//')
-            cmd=$(printf '%s' "$cmd" | sed 's/[。；;，,[:space:]]*$//')
-        fi
-    fi
-
-    printf '%s' "$cmd"
-}
-
-# 判断文本是否像一条 shell 命令（避免误把自然语言当命令）
-is_likely_shell_command() {
-    local cmd="$1"
-    cmd=$(printf '%s' "$cmd" | sed 's/^[[:space:]]*//;s/[[:space:]]*$//')
-    [ -z "$cmd" ] && return 1
-
-    # 仅处理单行命令
-    case "$cmd" in
-        *$'\n'*)
-            return 1
-            ;;
-    esac
-
-    local probe="$cmd"
-    # 跳过前置环境变量（例如 FOO=1 BAR=2 cmd）
-    while printf '%s' "$probe" | grep -Eq '^[A-Za-z_][A-Za-z0-9_]*=[^[:space:]]+[[:space:]]+'; do
-        probe=$(printf '%s' "$probe" | sed 's/^[A-Za-z_][A-Za-z0-9_]*=[^[:space:]]*[[:space:]]*//')
-    done
-
-    local first=""
-    first=$(printf '%s' "$probe" | sed 's/[[:space:]].*$//;s/[;&|].*$//')
-    [ -z "$first" ] && return 1
-
-    case "$first" in
-        -*)
-            return 1
-            ;;
-        "【"*|"["*)
-            return 1
-            ;;
-    esac
-
-    # 绝对/相对路径形式的可执行文件
-    if printf '%s' "$first" | grep -Eq '^(\./|/)'; then
-        return 0
-    fi
-
-    # 允许少量 shell 控制语句
-    case "$first" in
-        if|for|while|case|do|then|fi|{|\(|:)
-            return 0
-            ;;
-    esac
-
-    # 普通命令必须在当前 shell 环境可解析（builtin/alias/function/PATH）
-    if command -v "$first" >/dev/null 2>&1; then
-        return 0
-    fi
-
-    return 1
-}
-
-# 从 AI 回复里提取待执行命令（兼容多种格式）
-extract_commands_from_response() {
-    local text="$1"
-    local normalized_text="$text"
-    normalized_text="${normalized_text//：/:}"
-    local candidates=""
-
-    if command -v perl >/dev/null 2>&1; then
-        candidates=$(printf '%s' "$normalized_text" | perl -0777 -ne '
-            my $t = $_;
-            my @out = ();
-
-            while ($t =~ /(?:^|\n)\s*(\{[^\n{}]*"(?:command|cmd|execute|执行命令|命令)"\s*:\s*"(?:(?:[^"\\]|\\.)*)"[^\n{}]*\})\s*(?=\n|$)/sig) { push @out, $1; }
-            while ($t =~ /【\s*执行命令\s*:\s*(.*?)\s*】/sg) { push @out, $1; }
-            while ($t =~ /\[\s*执行命令\s*:\s*(.*?)\s*\]/sg) { push @out, $1; }
-            while ($t =~ /(?:^|\n)\s*(?:执行命令|命令|command|cmd|execute)\s*:\s*([^\n]+)/sig) { push @out, $1; }
-
-            while ($t =~ /```(?:bash|sh|shell)?[ \t]*\n(.*?)```/sig) {
-                my $blk = $1;
-                $blk =~ s/\r//g;
-                for my $ln (split /\n/, $blk) {
-                    $ln =~ s/^\s+|\s+$//g;
-                    next if $ln eq q{} || $ln =~ /^#/;
-                    $ln =~ s/^\$\s*//;
-                    push @out, $ln;
-                    last;
-                }
-            }
-
-            print "$_\n" for @out;
-        ' 2>/dev/null || true)
-    else
-        candidates=$(printf '%s\n' "$normalized_text" | sed -n \
-            -e 's/^[[:space:]]*\({[^}]*"[Cc]ommand"[[:space:]]*:[[:space:]]*"[^"]*"[^}]*}\)[[:space:]]*$/\1/p' \
-            -e 's/^[[:space:]]*\({[^}]*"[Cc][Mm][Dd]"[[:space:]]*:[[:space:]]*"[^"]*"[^}]*}\)[[:space:]]*$/\1/p' \
-            -e 's/.*【执行命令:[[:space:]]*\([^】]*\)】.*/\1/p' \
-            -e 's/.*\[执行命令:[[:space:]]*\([^]]*\)\].*/\1/p' \
-            -e 's/^[[:space:]]*[Ee]xecute[[:space:]]*:[[:space:]]*\(.*\)$/\1/p' \
-            -e 's/^[[:space:]]*[Cc][Mm][Dd][[:space:]]*:[[:space:]]*\(.*\)$/\1/p')
-    fi
-
-    local result=""
-    local seen=$'\n'
-    local raw=""
-    while IFS= read -r raw; do
-        local cmd=""
-        cmd=$(sanitize_command_candidate "$raw")
-        [ -z "$cmd" ] && continue
-        if ! is_likely_shell_command "$cmd"; then
-            continue
-        fi
-        case "$seen" in
-            *$'\n'"$cmd"$'\n'*) continue ;;
-        esac
-        seen="${seen}${cmd}"$'\n'
-        result="${result}${cmd}"$'\n'
-    done <<< "$candidates"
-
-    printf '%s' "$result"
-}
-
-# 处理 AI 响应
-process_ai_response() {
-    local response="$1"
-    
-    # 处理 AI 响应
-    # 1. 去除 <think>...</think> 内容
-    local clean_response="$response"
-    if command -v perl &> /dev/null; then
-        clean_response=$(echo "$clean_response" | perl -0777 -pe 's/<think>.*?<\/think>//gs')
-    else
-        clean_response=$(echo "$clean_response" | sed '/<think>/,/<\/think>/d')
-    fi
-
-    # 提取命令（仅接受明确格式；不做残缺猜测）
-    local commands=""
-    commands=$(extract_commands_from_response "$clean_response")
-    
-    # 2. 提取纯文本响应（保留命令标记并高亮）
-    # 方案：将【执行命令：xxx】替换为 [准备执行: xxx] 并高亮
-    local display_response=$(echo "$clean_response" | sed "s/【执行命令：/$(echo -e "\033[1;33m[准备执行: ")/g" | sed "s/】/$(echo -e "]\033[0m")/g")
-    
-    # 去除多余的空行
-    display_response=$(echo "$display_response" | sed '/^$/d')
-    
-    if [ -n "$display_response" ]; then
-        print_color "$BLUE" "\n🤖 AI: $display_response\n"
-    fi
-    
-    # 如果有命令，逐个执行
-    if [ -n "$commands" ]; then
-        local all_results=""
-        
-        # 设置 IFS 为换行符，以便逐行读取命令
-        local IFS=$'\n'
-        for cmd in $commands; do
-            local result=""
-            if command_needs_confirmation "$cmd"; then
-                if confirm_command "$cmd"; then
-                    result=$(execute_command "$cmd")
-                else
-                    if [ -n "$USER_REJECT_FEEDBACK" ]; then
-                        result="已跳过：用户拒绝执行该命令。用户反馈：$USER_REJECT_FEEDBACK"
-                    else
-                        result="已跳过：用户未同意执行该命令。"
-                    fi
-                fi
-            else
-                result=$(execute_command "$cmd")
-            fi
-            
-            # 收集结果
-            all_results="${all_results}命令 '$cmd' 执行结果：\n$result\n"
-        done
-        unset IFS
-        
-        # 将所有命令的执行结果反馈给 AI
-        if [ -n "$all_results" ]; then
-            local next_response=""
-            if next_response=$(call_ai "$all_results"); then
-                process_ai_response "$next_response"
-            fi
-        fi
-    fi
 }
 
 # 主对话循环
 chat_loop() {
-    print_header "💬 开始对话（输入 'quit' 或 'exit' 退出）"
+    print_header "开始对话（输入 quit 或 exit 退出）"
     
     # 初始问候
     print_color "$YELLOW" "正在初始化 AI 助手..."
     local initial_response=""
-    if initial_response=$(call_ai "你好！我想安装 WHartTest 项目，请帮我检查环境并指导安装。"); then
-        process_ai_response "$initial_response"
+    if initial_response=$(request_ai_response "请先简单打个招呼，并询问用户需要什么帮助。"); then
+        render_ai_message "$initial_response"
     fi
     
     while true; do
@@ -1243,7 +872,7 @@ chat_loop() {
         
         # 检查退出命令
         if [[ "$user_input" =~ ^(quit|exit|退出|q)$ ]]; then
-            print_color "$CYAN" "\n👋 再见！"
+            print_color "$CYAN" "\n再见！"
             break
         fi
         
@@ -1254,20 +883,21 @@ chat_loop() {
         
         # 调用 AI
         local ai_response=""
-        if ai_response=$(call_ai "$user_input"); then
-            process_ai_response "$ai_response"
+        if ai_response=$(request_ai_response "$user_input"); then
+            render_ai_message "$ai_response"
         fi
     done
 }
 
 # 主函数
 main() {
+    detect_json_backend
     init_log
     log_line "INFO" "ai_install started (cwd=$(pwd))"
 
     # 检查 curl 是否安装
     if ! command -v curl &> /dev/null; then
-        print_color "$RED" "❌ 未找到 curl 命令，请先安装 curl"
+        print_color "$RED" "[错误] 未找到 curl 命令，请先安装 curl"
         echo "Ubuntu/Debian: sudo apt-get install curl"
         echo "CentOS/RHEL: sudo yum install curl"
         echo "macOS: brew install curl"
@@ -1278,13 +908,10 @@ main() {
     build_system_prompt
     
     # 配置 API
-    while ! setup_api; do
-        read -r -p "$(prompt_color "$YELLOW" "是否重新配置？(y/n): ")" retry
-        if [ "$retry" != "y" ]; then
-            print_color "$CYAN" "👋 退出程序"
-            exit 0
-        fi
-    done
+    if ! setup_api; then
+        print_color "$CYAN" "退出程序"
+        exit 1
+    fi
     log_line "INFO" "config: api_url=$API_URL model=$MODEL_NAME max_tokens=$MAX_TOKENS temperature=$TEMPERATURE include_temperature=$INCLUDE_TEMPERATURE log_file=$LOG_FILE"
     
     # 开始对话

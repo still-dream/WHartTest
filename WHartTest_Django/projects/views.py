@@ -243,6 +243,10 @@ class ProjectViewSet(BaseModelViewSet):
         from skills.models import Skill
         from mcp_tools.models import RemoteMCPConfig
         from ui_automation.models import UiTestCase, UiExecutionRecord
+        from api_testcases.models import ApiTestCase, ApiTestReport
+        from api_testtasks.models import ApiTestTaskExecution
+        from api_interfaces.models import ApiInterface
+        from api_sync.models import ApiSyncConfig
 
         # 1. 功能用例统计（按审核状态）
         testcase_stats = TestCase.objects.filter(project=project).aggregate(
@@ -337,6 +341,34 @@ class ProjectViewSet(BaseModelViewSet):
             },
         }
 
+        # 8. API 自动化测试统计
+        api_testcases = ApiTestCase.objects.filter(project=project)
+        api_interfaces = ApiInterface.objects.filter(project=project)
+        api_sync_configs = ApiSyncConfig.objects.filter(interface__project=project)
+        api_task_executions = ApiTestTaskExecution.objects.filter(
+            task_suite__project=project,
+        )
+        api_reports = ApiTestReport.objects.filter(testcase__project=project)
+
+        api_testing_stats = {
+            'total_cases': api_testcases.count(),
+            'total_interfaces': api_interfaces.count(),
+            'total_sync_configs': api_sync_configs.count(),
+            'total_executions': api_task_executions.count(),
+            'execution_by_status': {
+                'completed': api_task_executions.filter(status='completed').count(),
+                'failed': api_task_executions.filter(status='failed').count(),
+                'running': api_task_executions.filter(status='running').count(),
+                'canceled': api_task_executions.filter(status='canceled').count(),
+            },
+            'report_summary': api_reports.aggregate(
+                total=Count('id'),
+                success=Count('id', filter=Q(status='success')),
+                failure=Count('id', filter=Q(status='failure')),
+                error=Count('id', filter=Q(status='error')),
+            ),
+        }
+
         # 构建响应数据
         response_data = {
             'project': {
@@ -379,6 +411,7 @@ class ProjectViewSet(BaseModelViewSet):
             'mcp': mcp_stats,
             'skills': skill_stats,
             'ui_automation': ui_automation_stats,
+            'api_testing': api_testing_stats,
         }
 
         return Response(response_data)

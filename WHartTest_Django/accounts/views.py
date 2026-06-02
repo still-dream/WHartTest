@@ -314,7 +314,7 @@ class ContentTypeViewSet(viewsets.ReadOnlyModelViewSet):
     """
 
     queryset = ContentType.objects.exclude(
-        app_label__in=["admin", "contenttypes", "sessions"]
+        app_label__in=["admin", "contenttypes", "sessions", "orchestrator_integration"]
     ).order_by("app_label", "model")
     serializer_class = ContentTypeSerializer
     permission_classes = [IsAuthenticated, HasModelPermission]
@@ -333,7 +333,7 @@ class PermissionViewSet(
     """
 
     queryset = Permission.objects.exclude(
-        content_type__app_label__in=["admin", "contenttypes", "sessions"]
+        content_type__app_label__in=["admin", "contenttypes", "sessions", "orchestrator_integration"]
     ).order_by("content_type__app_label", "codename")
     serializer_class = PermissionSerializer
     permission_classes = [IsAuthenticated, HasModelPermission]

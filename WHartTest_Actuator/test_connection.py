@@ -11,6 +11,7 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).parent))
 
 from models import SocketDataModel, QueueModel, UiSocketEnum, ResponseCode, NoticeType
+from websocket_client import WebSocketClient, build_websocket_origin
 
 try:
     import websockets
@@ -26,7 +27,7 @@ async def test_connection():
     print(f"正在连接: {server_url}")
     
     try:
-        async with websockets.connect(server_url) as ws:
+        async with websockets.connect(server_url, origin=build_websocket_origin(server_url)) as ws:
             print("✅ 连接成功!")
             
             # 接收欢迎消息
@@ -69,7 +70,6 @@ async def test_connection():
 
 async def test_executor_flow():
     """测试执行器工作流程"""
-    from websocket_client import WebSocketClient
     from consumer import TaskConsumer
     
     print("\n测试执行器工作流程...")

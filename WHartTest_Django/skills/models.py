@@ -357,6 +357,134 @@ class Skill(models.Model):
                 shutil.rmtree(full_storage_path, ignore_errors=True)
             raise
 
+    @staticmethod
+    def _validate_remote_url(url: str) -> str:
+        """校验远程 URL 协议、hostname 并阻止 SSRF（私有/回环/链路本地等 IP）"""
+        import ipaddress
+        import socket
+        from urllib.parse import urlparse
+
+        url = (url or '').strip()
+        if not url:
+            raise ValidationError('URL 不能为空')
+
+        parsed = urlparse(url)
+        if parsed.scheme != 'https':
+            raise ValidationError('仅支持 HTTPS 协议')
+
+        host = parsed.hostname or ''
+        if not host:
+            raise ValidationError('无效的 URL：缺少 hostname')
+
+        # 主机名形式直接是 IP 时先校验该 IP，避免后续 DNS 解析失败遮蔽问题。
+        try:
+            ip = ipaddress.ip_address(host)
+            if ip.is_private or ip.is_loopback or ip.is_link_local or ip.is_multicast or ip.is_reserved or ip.is_unspecified:
+                raise ValidationError('不允许访问内网/保留地址')
+        except ValueError:
+            # 不是字面量 IP，走域名解析路径。
+            pass
+
+        try:
+            infos = socket.getaddrinfo(host, None)
+        except socket.gaierror as e:
+            raise ValidationError(f'无法解析主机名：{e}')
+
+        for info in infos:
+            addr = info[4][0]
+            try:
+                ip = ipaddress.ip_address(addr)
+            except ValueError:
+                continue
+            # 任何解析记录命中内网范围都直接拒绝，避免域名混入内网 IP 触发 SSRF。
+            if ip.is_private or ip.is_loopback or ip.is_link_local or ip.is_multicast or ip.is_reserved or ip.is_unspecified:
+                raise ValidationError('目标主机解析到内网/保留地址，已拒绝')
+
+        return url
+
+    @classmethod
+    def create_from_zip_url(
+        cls,
+        zip_url: str,
+        project: Project,
+        creator: User,
+        expected_sha256: str | None = None,
+    ) -> list['Skill']:
+        """
+        从远程 HTTPS URL 下载 zip 包并导入 Skills（用于 Skill 商店）
+
+        Args:
+            zip_url: zip 包的 HTTPS URL
+            project: 所属项目
+            creator: 创建者
+            expected_sha256: 可选 SHA256 校验和（小写 16 进制 64 位字符）
+
+        Returns:
+            成功导入的 Skill 列表
+        """
+        import hashlib
+        import tempfile
+
+        from django.conf import settings as dj_settings
+
+        try:
+            import httpx
+        except ImportError:
+            raise ValidationError('服务器未安装 httpx，无法下载远程 Skill')
+
+        zip_url = cls._validate_remote_url(zip_url)
+        max_size = int(getattr(dj_settings, 'SKILL_STORE_MAX_ZIP_SIZE', 10 * 1024 * 1024))
+        timeout = int(getattr(dj_settings, 'SKILL_STORE_DOWNLOAD_TIMEOUT', 60))
+
+        # SpooledTemporaryFile：小文件在内存中，超过阈值后自动落盘，避免占用过多内存。
+        buf = tempfile.SpooledTemporaryFile(max_size=2 * 1024 * 1024, suffix='.zip')
+        downloaded = 0
+        sha = hashlib.sha256()
+
+        try:
+            try:
+                with httpx.stream(
+                    'GET', zip_url,
+                    timeout=httpx.Timeout(timeout, connect=10.0),
+                    follow_redirects=True,
+                ) as resp:
+                    if resp.status_code != 200:
+                        raise ValidationError(f'下载失败：HTTP {resp.status_code}')
+
+                    # Content-Length 在头部时优先用它做超量预判，省下载流量。
+                    content_length = resp.headers.get('content-length')
+                    if content_length and content_length.isdigit() and int(content_length) > max_size:
+                        raise ValidationError(f'zip 文件超过限制（{max_size // 1024 // 1024}MB）')
+
+                    for chunk in resp.iter_bytes(chunk_size=64 * 1024):
+                        if not chunk:
+                            continue
+                        downloaded += len(chunk)
+                        if downloaded > max_size:
+                            raise ValidationError(f'zip 文件超过限制（{max_size // 1024 // 1024}MB）')
+                        sha.update(chunk)
+                        buf.write(chunk)
+            except httpx.TimeoutException:
+                raise ValidationError(f'下载超时（{timeout}秒）')
+            except httpx.RequestError as e:
+                raise ValidationError(f'下载失败：{e}')
+
+            if downloaded == 0:
+                raise ValidationError('下载内容为空')
+
+            if expected_sha256:
+                expected = expected_sha256.strip().lower()
+                actual = sha.hexdigest()
+                # 严格匹配 sha256，避免被恶意中间人替换 zip 内容。
+                if expected != actual:
+                    raise ValidationError(f'SHA256 校验失败：期望 {expected}，实际 {actual}')
+
+            buf.seek(0)
+            # 复用现有 create_from_zip 解压与建表逻辑，避免逻辑重复。
+            return cls.create_from_zip(buf, project, creator)
+        finally:
+            buf.close()
+
     @classmethod
     def create_from_git(
         cls,

@@ -11,6 +11,7 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).parent))
 
 from models import SocketDataModel, QueueModel, UiSocketEnum, ResponseCode, NoticeType
+from websocket_client import build_websocket_origin
 
 try:
     import websockets
@@ -27,7 +28,7 @@ async def test_actuator_directly():
     web_ws_url = "ws://127.0.0.1:8000/ws/ui/web/"
     
     try:
-        async with websockets.connect(web_ws_url) as ws:
+        async with websockets.connect(web_ws_url, origin=build_websocket_origin(web_ws_url)) as ws:
             # 接收欢迎消息
             welcome = await asyncio.wait_for(ws.recv(), timeout=5)
             print(f"✅ 前端WebSocket连接成功")
@@ -78,7 +79,7 @@ async def check_actuator_connection():
     actuator_ws_url = "ws://127.0.0.1:8000/ws/ui/actuator/"
     
     try:
-        async with websockets.connect(actuator_ws_url) as ws:
+        async with websockets.connect(actuator_ws_url, origin=build_websocket_origin(actuator_ws_url)) as ws:
             welcome = await asyncio.wait_for(ws.recv(), timeout=5)
             data = json.loads(welcome)
             print(f"✅ 执行器WebSocket端点可用: {data.get('msg', '')}")

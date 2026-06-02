@@ -7,6 +7,8 @@ from rest_framework.renderers import JSONRenderer
 # 导入 DRF 编码器工具。
 from rest_framework.utils import encoders
 
+from .i18n import translate_app_text, translate_error_payload
+
 
 # 定义统一响应渲染器。
 class UnifiedResponseRenderer(JSONRenderer):
@@ -121,6 +123,12 @@ class UnifiedResponseRenderer(JSONRenderer):
                     unified_response.update(data)
                     unified_response["code"] = original_code
 
+                # DRF 分页信封：包含 count + results 的 dict。
+                elif isinstance(data, dict) and 'count' in data and 'results' in data:
+                    unified_response["data"] = data["results"]
+                    unified_response["total"] = data["count"]
+                    unified_response["message"] = "操作成功"
+
                 # 普通成功数据包装。
                 else:
                     unified_response["data"] = data
@@ -153,6 +161,10 @@ class UnifiedResponseRenderer(JSONRenderer):
                     )
                 }
 
+        language = renderer_context.get("request").LANGUAGE_CODE if renderer_context.get("request") else None
+        unified_response["message"] = translate_app_text(unified_response.get("message", ""), language)
+        unified_response["errors"] = translate_error_payload(unified_response.get("errors"), language)
+
         # 删除操作语义化提示。
         if (
             status_code == 200
@@ -160,6 +172,7 @@ class UnifiedResponseRenderer(JSONRenderer):
             and getattr(response, "_original_status", None) == 204
         ):
             unified_response["message"] = "删除操作成功完成"
+            unified_response["message"] = translate_app_text(unified_response["message"], language)
 
         # 调用父类完成最终 JSON 序列化。
         return super().render(unified_response, accepted_media_type, renderer_context)

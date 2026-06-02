@@ -16,22 +16,34 @@ cd "$REPO_ROOT"
 LOG_DIR="data/docker-logs"
 ENV_FILE=${DOCKER_ENV_FILE:-.env}
 DEPLOY_MODE=""
+RUN_ACTION=""
 COMPOSE_FILE=""
 COMPOSE_CMD=()
 _RANKED_DIR=""
+ENSURE_DB=0
 mkdir -p "$LOG_DIR"
 
 usage() {
   cat <<'USAGE'
 用法:
-  ./run_compose.sh [remote|local] [compose-file]
+  ./run_compose.sh [remote|local] [db-check|db-upgrade] [compose-file] [--ensure-db]
 
 模式:
   remote   远程拉取预构建镜像（默认 compose: docker-compose.yml）
   local    本地源码构建镜像（默认 compose: docker-compose.local.yml）
 
+动作:
+  up           正常启动服务（默认）
+  db-check     检测数据库连通性与目标数据库是否存在
+  db-upgrade   检测并执行 Django migrations 升级数据库结构
+
+选项:
+  --ensure-db  当目标 PostgreSQL 数据库不存在时，自动创建后再升级
+
 环境变量:
   DOCKER_DEPLOY_MODE=remote|local
+  DOCKER_RUN_ACTION=up|db-check|db-upgrade
+  DOCKER_ENSURE_DB=0|1
   DOCKER_SOURCE_PROFILE=auto|native|mirror
   DOCKER_BUILD_NO_CACHE=1
   DOCKER_BUILD_PULL=1
@@ -78,12 +90,61 @@ prompt_deploy_mode() {
   done
 }
 
+prompt_run_action() {
+  local choice=""
+  local default_choice="1"
+
+  if [ "$ENSURE_DB" -eq 1 ]; then
+    default_choice="4"
+  fi
+
+  echo "请选择操作："
+  echo "  1) 正常启动服务"
+  echo "  2) 检测数据库状态"
+  echo "  3) 检测并升级数据库结构"
+  echo "  4) 检测、必要时创建数据库并升级结构"
+
+  while true; do
+    read -r -p "请输入 1、2、3 或 4（默认 ${default_choice}）: " choice
+    choice=${choice:-$default_choice}
+
+    case "$choice" in
+      1|up)
+        RUN_ACTION="up"
+        return 0
+        ;;
+      2|db-check)
+        RUN_ACTION="db-check"
+        return 0
+        ;;
+      3|db-upgrade)
+        RUN_ACTION="db-upgrade"
+        return 0
+        ;;
+      4|db-upgrade-create|db-upgrade-ensure)
+        RUN_ACTION="db-upgrade"
+        ENSURE_DB=1
+        return 0
+        ;;
+      *)
+        echo "输入无效，请输入 1、2、3 或 4。"
+        ;;
+    esac
+  done
+}
+
 resolve_mode_and_compose() {
   while [ "$#" -gt 0 ]; do
     case "$1" in
       -h|--help)
         usage
         exit 0
+        ;;
+      db-check|db-upgrade)
+        RUN_ACTION="$1"
+        ;;
+      --ensure-db)
+        ENSURE_DB=1
         ;;
       remote|local)
         DEPLOY_MODE="$1"
@@ -99,6 +160,14 @@ resolve_mode_and_compose() {
     esac
     shift
   done
+
+  if [ -z "$RUN_ACTION" ] && [ -n "${DOCKER_RUN_ACTION:-}" ]; then
+    RUN_ACTION="$DOCKER_RUN_ACTION"
+  fi
+
+  if [ "$ENSURE_DB" -eq 0 ] && [ "${DOCKER_ENSURE_DB:-0}" = "1" ]; then
+    ENSURE_DB=1
+  fi
 
   if [ -z "$DEPLOY_MODE" ] && [ -n "${DOCKER_DEPLOY_MODE:-}" ]; then
     DEPLOY_MODE="$DOCKER_DEPLOY_MODE"
@@ -131,8 +200,157 @@ resolve_mode_and_compose() {
     exit 1
   fi
 
+  if [ -z "$RUN_ACTION" ]; then
+    if [ -t 0 ] && [ -t 1 ]; then
+      prompt_run_action
+    else
+      RUN_ACTION="up"
+    fi
+  fi
+
+  case "$RUN_ACTION" in
+    up|db-check|db-upgrade)
+      ;;
+    *)
+      echo "错误：DOCKER_RUN_ACTION 仅支持 up、db-check、db-upgrade，当前值为 '$RUN_ACTION'" >&2
+      exit 1
+      ;;
+  esac
+
   echo "部署模式: $DEPLOY_MODE"
   echo "使用的 compose 文件: $COMPOSE_FILE"
+  echo "执行动作: $RUN_ACTION"
+}
+
+normalize_branch_data_variant() {
+  case "$1" in
+    github|pro|dev|auto)
+      printf '%s' "$1"
+      ;;
+    *)
+      printf '%s' ""
+      ;;
+  esac
+}
+
+get_current_branch_name() {
+  git rev-parse --abbrev-ref HEAD 2>/dev/null || true
+}
+
+get_branch_data_variant() {
+  local branch_name="${1:-}"
+
+  if [[ "$branch_name" == *-github ]]; then
+    printf '%s' "github"
+    return 0
+  fi
+
+  if [[ "$branch_name" == *-pro ]]; then
+    printf '%s' "pro"
+    return 0
+  fi
+
+  printf '%s' "dev"
+}
+
+build_postgres_db_name() {
+  local variant="$1"
+  if [ "$variant" = "dev" ]; then
+    printf '%s' "wharttest_dev"
+  else
+    printf 'wharttest_dev_%s' "$variant"
+  fi
+}
+
+is_default_postgres_db_name() {
+  case "$1" in
+    ""|wharttest|wharttest_dev|wharttest_dev_github|wharttest_dev_pro)
+      return 0
+      ;;
+    *)
+      return 1
+      ;;
+  esac
+}
+
+is_default_sqlite_path() {
+  case "$1" in
+    ""|/app/data/db.sqlite3|db.sqlite3)
+      return 0
+      ;;
+    *)
+      return 1
+      ;;
+  esac
+}
+
+is_default_checkpoint_sqlite_path() {
+  case "$1" in
+    ""|/app/data/chat_history.sqlite|chat_history.sqlite)
+      return 0
+      ;;
+    *)
+      return 1
+      ;;
+  esac
+}
+
+configure_branch_data_variant() {
+  if [ "$DEPLOY_MODE" != "local" ]; then
+    return 0
+  fi
+
+  if [ "${WHARTTEST_AUTO_BRANCH_DATA:-1}" != "1" ]; then
+    echo "本地开发数据自动切换已禁用（WHARTTEST_AUTO_BRANCH_DATA=${WHARTTEST_AUTO_BRANCH_DATA:-0}）"
+    return 0
+  fi
+
+  local branch_name=""
+  local variant=""
+  local explicit_variant=""
+  local sqlite_path=""
+  local checkpoint_path=""
+
+  branch_name=$(get_current_branch_name)
+  explicit_variant=$(normalize_branch_data_variant "${POSTGRES_DB_VARIANT:-}")
+  if [ -n "$explicit_variant" ] && [ "$explicit_variant" != "auto" ]; then
+    variant="$explicit_variant"
+  else
+    variant=$(get_branch_data_variant "$branch_name")
+  fi
+
+  export POSTGRES_DB_VARIANT="$variant"
+
+  if is_default_postgres_db_name "${POSTGRES_DB:-}"; then
+    export POSTGRES_DB
+    POSTGRES_DB=$(build_postgres_db_name "$variant")
+  fi
+
+  if is_default_sqlite_path "${DATABASE_PATH:-}"; then
+    export DATABASE_PATH
+    if [ "$variant" = "dev" ]; then
+      DATABASE_PATH="/app/data/db.sqlite3"
+    else
+      DATABASE_PATH="/app/data/db_${variant}.sqlite3"
+    fi
+  fi
+
+  if is_default_checkpoint_sqlite_path "${LANGGRAPH_CHECKPOINT_SQLITE_PATH:-}"; then
+    export LANGGRAPH_CHECKPOINT_SQLITE_PATH
+    if [ "$variant" = "dev" ]; then
+      LANGGRAPH_CHECKPOINT_SQLITE_PATH="/app/data/chat_history.sqlite"
+    else
+      LANGGRAPH_CHECKPOINT_SQLITE_PATH="/app/data/chat_history_${variant}.sqlite"
+    fi
+  fi
+
+  echo "本地开发数据变体: $variant"
+  if [ -n "$branch_name" ]; then
+    echo "当前 Git 分支: $branch_name"
+  fi
+  echo "- POSTGRES_DB: ${POSTGRES_DB:-}"
+  echo "- DATABASE_PATH: ${DATABASE_PATH:-}"
+  echo "- LANGGRAPH_CHECKPOINT_SQLITE_PATH: ${LANGGRAPH_CHECKPOINT_SQLITE_PATH:-}"
 }
 
 probe_url() {
@@ -1398,6 +1616,13 @@ configure_remote_image_sources() {
   apply_remote_image_override DOCKER_PLAYWRIGHT_MCP_IMAGE "mcr.microsoft.com/playwright/mcp" "$mcr_candidate"
 }
 
+cleanup_ranked_dir() {
+  if [ -n "${_RANKED_DIR:-}" ] && [ -d "$_RANKED_DIR" ]; then
+    rm -rf "$_RANKED_DIR"
+  fi
+  _RANKED_DIR=""
+}
+
 require_docker() {
   if ! command -v docker >/dev/null 2>&1; then
     echo "错误：未找到 docker 命令。请先安装 Docker Desktop 或 Docker Engine。" >&2
@@ -1415,6 +1640,247 @@ require_docker() {
     echo "你也可以在远程 Docker 引擎可用时设置 DOCKER_HOST。" >&2
     exit 3
   fi
+}
+
+resolve_target_postgres_db() {
+  local explicit_variant=""
+  local explicit_db=""
+  local branch_name=""
+  local variant=""
+
+  explicit_variant=$(normalize_branch_data_variant "${POSTGRES_DB_VARIANT:-}")
+  if [ -n "$explicit_variant" ]; then
+    if [ "$explicit_variant" = "auto" ]; then
+      branch_name=$(get_current_branch_name)
+      variant=$(get_branch_data_variant "$branch_name")
+    else
+      variant="$explicit_variant"
+    fi
+    build_postgres_db_name "$variant"
+    return 0
+  fi
+
+  explicit_db=${POSTGRES_DB:-}
+  if [ -n "$explicit_db" ]; then
+    printf '%s' "$explicit_db"
+    return 0
+  fi
+
+  branch_name=$(get_current_branch_name)
+  variant=$(get_branch_data_variant "$branch_name")
+  build_postgres_db_name "$variant"
+}
+
+quote_sql_literal() {
+  local value="${1//\'/\'\'}"
+  printf "'%s'" "$value"
+}
+
+quote_sql_identifier() {
+  local value="${1//\"/\"\"}"
+  printf '"%s"' "$value"
+}
+
+wait_for_service_ready() {
+  local service="$1"
+  local timeout="${2:-120}"
+  local interval=2
+  local elapsed=0
+  local container_id=""
+  local status=""
+
+  while [ "$elapsed" -lt "$timeout" ]; do
+    container_id=$("${COMPOSE_CMD[@]}" -f "$COMPOSE_FILE" ps -q "$service" 2>/dev/null || true)
+
+    if [ -n "$container_id" ]; then
+      status=$(docker inspect -f '{{if .State.Health}}{{.State.Health.Status}}{{else}}{{.State.Status}}{{end}}' "$container_id" 2>/dev/null || true)
+      case "$status" in
+        healthy|running)
+          echo "服务 $service 已就绪（$status）"
+          return 0
+          ;;
+        exited|dead)
+          echo "错误：服务 $service 启动失败（$status）" >&2
+          return 1
+          ;;
+      esac
+    fi
+
+    sleep "$interval"
+    elapsed=$((elapsed + interval))
+  done
+
+  echo "错误：等待服务 $service 就绪超时（${timeout}s）" >&2
+  return 1
+}
+
+warn_remote_branch_auto_variant() {
+  local explicit_variant=""
+  explicit_variant=$(normalize_branch_data_variant "${POSTGRES_DB_VARIANT:-}")
+  if [ "$DEPLOY_MODE" = "remote" ] && [ "$explicit_variant" = "auto" ]; then
+    echo "警告：当前 remote 模式启用了 POSTGRES_DB_VARIANT=auto，目标数据库会按当前 Git 分支自动推导。" >&2
+  fi
+}
+
+ensure_postgres_service() {
+  echo "启动 PostgreSQL 服务..."
+  "${COMPOSE_CMD[@]}" -f "$COMPOSE_FILE" up -d postgres
+  wait_for_service_ready postgres "${DOCKER_POSTGRES_READY_TIMEOUT:-120}"
+}
+
+postgres_database_exists() {
+  local db_name="$1"
+  local quoted_db=""
+  local result=""
+
+  quoted_db=$(quote_sql_literal "$db_name")
+  result=$("${COMPOSE_CMD[@]}" -f "$COMPOSE_FILE" exec -T postgres \
+    psql --username "${POSTGRES_USER:-postgres}" --dbname postgres \
+    -tAc "SELECT 1 FROM pg_database WHERE datname = ${quoted_db}" 2>/dev/null | tr -d '[:space:]' || true)
+
+  [ "$result" = "1" ]
+}
+
+create_postgres_database() {
+  local db_name="$1"
+  local quoted_db=""
+
+  quoted_db=$(quote_sql_identifier "$db_name")
+  echo "创建 PostgreSQL 数据库: $db_name"
+  "${COMPOSE_CMD[@]}" -f "$COMPOSE_FILE" exec -T postgres \
+    psql --username "${POSTGRES_USER:-postgres}" --dbname postgres \
+    -v ON_ERROR_STOP=1 \
+    -c "CREATE DATABASE ${quoted_db};"
+}
+
+confirm_create_database() {
+  local db_name="$1"
+  local answer=""
+
+  if [ "$ENSURE_DB" -eq 1 ]; then
+    return 0
+  fi
+
+  if [ -t 0 ] && [ -t 1 ]; then
+    read -r -p "数据库 '$db_name' 不存在，是否立即创建？[y/N]: " answer
+    case "$answer" in
+      y|Y|yes|YES)
+        return 0
+        ;;
+    esac
+  fi
+
+  return 1
+}
+
+prepare_backend_for_db_action() {
+  case "$DEPLOY_MODE" in
+    remote)
+      configure_remote_image_sources
+
+      if [ "${DOCKER_REMOTE_PULL:-1}" = "1" ]; then
+        echo "准备数据库维护所需远程镜像..."
+        pull_image_with_fallback DOCKER_BACKEND_IMAGE "ghcr.io/mgdaaslab/wharttest-backend:latest" ghcr
+        if [ "${DATABASE_TYPE:-postgres}" = "postgres" ]; then
+          pull_image_with_fallback DOCKER_POSTGRES_IMAGE "postgres:16-alpine" dockerhub
+        fi
+      else
+        echo "已跳过远程镜像拉取（DOCKER_REMOTE_PULL=0）"
+      fi
+
+      cleanup_ranked_dir
+      ;;
+    local)
+      local build_args=()
+
+      export DOCKER_BUILDKIT=1
+      export COMPOSE_DOCKER_CLI_BUILD=1
+
+      configure_download_sources
+      configure_local_base_images
+
+      if [ "${DOCKER_BUILD_NO_CACHE:-0}" = "1" ]; then
+        build_args+=(--no-cache)
+      fi
+
+      if [ "${DOCKER_BUILD_PULL:-0}" = "1" ]; then
+        build_args+=(--pull)
+      fi
+
+      echo "构建 backend 镜像（数据库维护模式）..."
+      "${COMPOSE_CMD[@]}" -f "$COMPOSE_FILE" build "${build_args[@]}" backend
+      ;;
+  esac
+}
+
+run_backend_python() {
+  "${COMPOSE_CMD[@]}" -f "$COMPOSE_FILE" run --rm --no-deps --entrypoint python backend "$@"
+}
+
+run_db_check() {
+  local database_type="${DATABASE_TYPE:-postgres}"
+  local target_db=""
+
+  echo "开始检测数据库状态..."
+  echo "数据库类型: $database_type"
+
+  if [ "$database_type" = "postgres" ]; then
+    warn_remote_branch_auto_variant
+    target_db=$(resolve_target_postgres_db)
+
+    echo "目标 PostgreSQL 数据库: $target_db"
+    echo "连接地址: ${POSTGRES_HOST:-postgres}:${POSTGRES_PORT:-5432}"
+
+    ensure_postgres_service
+
+    if postgres_database_exists "$target_db"; then
+      echo "✔ 数据库存在：$target_db"
+      echo "提示：如需升级数据库结构，可执行: ./run_compose.sh $DEPLOY_MODE db-upgrade"
+      return 0
+    fi
+
+    echo "✘ 数据库不存在：$target_db" >&2
+    echo "提示：可使用 --ensure-db 让 db-upgrade 在升级前自动创建该数据库。" >&2
+    return 1
+  fi
+
+  echo "SQLite 模式无需预检查远程数据库，迁移时会直接使用当前 DATABASE_PATH。"
+}
+
+run_db_upgrade() {
+  local database_type="${DATABASE_TYPE:-postgres}"
+  local target_db=""
+
+  echo "开始执行数据库结构升级..."
+  echo "数据库类型: $database_type"
+
+  if [ "$database_type" = "postgres" ]; then
+    warn_remote_branch_auto_variant
+    target_db=$(resolve_target_postgres_db)
+
+    echo "目标 PostgreSQL 数据库: $target_db"
+    echo "连接地址: ${POSTGRES_HOST:-postgres}:${POSTGRES_PORT:-5432}"
+
+    ensure_postgres_service
+
+    if ! postgres_database_exists "$target_db"; then
+      echo "目标数据库不存在：$target_db"
+      if confirm_create_database "$target_db"; then
+        create_postgres_database "$target_db"
+      else
+        echo "已取消自动创建数据库。你也可以重试并附加 --ensure-db。" >&2
+        return 1
+      fi
+    else
+      echo "✔ 数据库存在：$target_db"
+    fi
+  fi
+
+  prepare_backend_for_db_action
+
+  echo "执行 Django migrations..."
+  run_backend_python manage.py migrate --noinput
+  echo "✔ 数据库结构升级完成。"
 }
 
 run_remote_mode() {
@@ -1443,10 +1909,7 @@ run_remote_mode() {
     echo "已跳过远程镜像拉取（DOCKER_REMOTE_PULL=0）"
   fi
 
-  # 清理排名临时目录
-  if [ -n "${_RANKED_DIR:-}" ] && [ -d "$_RANKED_DIR" ]; then
-    rm -rf "$_RANKED_DIR"
-  fi
+  cleanup_ranked_dir
 
   if [ "${DOCKER_FORCE_RECREATE:-1}" = "1" ]; then
     up_args+=(--force-recreate)
@@ -1535,24 +1998,24 @@ run_local_mode() {
 }
 
 collect_status_and_logs() {
-  echo "收集主要服务状态与日志..."
+  echo "收集主要服务状态..."
   local services=(backend redis postgres qdrant mcp frontend playwright-mcp)
 
   "${COMPOSE_CMD[@]}" -f "$COMPOSE_FILE" ps
 
   for svc in "${services[@]}"; do
-    echo "--- 日志: $svc（最近 200 行）---"
-    "${COMPOSE_CMD[@]}" -f "$COMPOSE_FILE" logs --tail 200 "$svc" | tee "$LOG_DIR/$svc.log" || true
+    "${COMPOSE_CMD[@]}" -f "$COMPOSE_FILE" logs --tail 200 "$svc" > "$LOG_DIR/$svc.log" 2>&1 || true
   done
 
   echo "日志已保存到 $LOG_DIR/*.log"
-  echo "如果服务启动失败，请先查看日志，并检查端口占用与宿主机挂载文件是否可用。"
+  echo "如果服务启动失败，请查看日志文件，并检查端口占用与宿主机挂载文件是否可用。"
 }
 
 print_summary() {
   cat <<'EOF2'
 说明:
 - 运行脚本后可选择两种模式：`remote` 远程拉预构建镜像，`local` 本地构建镜像。
+- 可选动作新增：`db-check` 用于检测数据库连通性与目标库是否存在，`db-upgrade` 用于执行 Django migrations 升级数据库结构；可搭配 `--ensure-db` 在缺库时自动创建 PostgreSQL 数据库。
 - `remote` 模式会按仓库类型自动测速：Docker Hub 在官方 / `docker.1panel.live` / `docker.1ms.run` / `docker.xuanyuan.me` / `docker.m.daocloud.io` 之间择优，GHCR 在官方 / `ghcr.1ms.run` / `ghcr.nju.edu.cn` / `ghcr.m.daocloud.io` 之间择优，MCR 在官方 / `mcr.azure.cn` / `mcr.m.daocloud.io` 之间择优。
 - `local` 模式会自动探测下载源和基础镜像加速；下载源内置候选已扩展为官方源 + 清华 / 中科大 / 阿里云 / 腾讯云 / 华为云 / 北外 / 交大 / `npmmirror` / `hf-mirror` 等；基础镜像（Python / Node / Nginx / PostgreSQL / Redis / Qdrant / Playwright MCP）会自动选最快的 DockerHub / MCR 镜像源加速拉取。
 - `DOCKER_SOURCE_PROFILE` 支持 `auto|native|mirror`；`auto` 会在全部候选里测速选最快，`mirror` 只在镜像源里选最快。
@@ -1563,7 +2026,18 @@ EOF2
 main() {
   load_env_file
   resolve_mode_and_compose "$@"
+  configure_branch_data_variant
   require_docker
+
+  if [ "$RUN_ACTION" = "db-check" ]; then
+    run_db_check
+    return 0
+  fi
+
+  if [ "$RUN_ACTION" = "db-upgrade" ]; then
+    run_db_upgrade
+    return 0
+  fi
 
   case "$DEPLOY_MODE" in
     remote)

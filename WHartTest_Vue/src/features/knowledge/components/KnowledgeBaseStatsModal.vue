@@ -1,20 +1,20 @@
 <template>
   <a-modal
     :visible="visible"
-    title="知识库统计信息"
+    :title="text.modalTitle"
     :width="800"
     :footer="false"
     @cancel="$emit('close')"
   >
     <div v-if="loading" class="loading-container">
       <a-spin size="large" />
-      <div class="loading-text">正在加载统计信息...</div>
+      <div class="loading-text">{{ text.loading }}</div>
     </div>
 
     <div v-else-if="statistics" class="stats-container">
       <!-- 概览统计 -->
       <div class="stats-overview">
-        <h3>概览统计</h3>
+        <h3>{{ text.overview }}</h3>
         <div class="stats-grid">
           <div class="stat-card">
             <div class="stat-icon document-icon">
@@ -22,7 +22,7 @@
             </div>
             <div class="stat-content">
               <div class="stat-value">{{ statistics.document_count }}</div>
-              <div class="stat-label">文档总数</div>
+              <div class="stat-label">{{ text.totalDocuments }}</div>
             </div>
           </div>
 
@@ -32,7 +32,7 @@
             </div>
             <div class="stat-content">
               <div class="stat-value">{{ statistics.chunk_count }}</div>
-              <div class="stat-label">分块总数</div>
+              <div class="stat-label">{{ text.totalChunks }}</div>
             </div>
           </div>
 
@@ -42,7 +42,7 @@
             </div>
             <div class="stat-content">
               <div class="stat-value">{{ statistics.query_count }}</div>
-              <div class="stat-label">查询次数</div>
+              <div class="stat-label">{{ text.queryCount }}</div>
             </div>
           </div>
         </div>
@@ -50,28 +50,28 @@
 
       <!-- 文档状态分布 -->
       <div class="status-distribution">
-        <h3>文档状态分布</h3>
+        <h3>{{ text.documentStatusDistribution }}</h3>
         <div class="status-grid">
           <div class="status-item completed">
             <div class="status-count">{{ statistics.document_status_distribution.completed }}</div>
-            <div class="status-label">已完成</div>
+            <div class="status-label">{{ text.completed }}</div>
           </div>
           <div class="status-item processing">
             <div class="status-count">{{ statistics.document_status_distribution.processing }}</div>
-            <div class="status-label">处理中</div>
+            <div class="status-label">{{ text.processing }}</div>
           </div>
           <div class="status-item failed">
             <div class="status-count">{{ statistics.document_status_distribution.failed }}</div>
-            <div class="status-label">失败</div>
+            <div class="status-label">{{ text.failed }}</div>
           </div>
         </div>
       </div>
 
       <!-- 最近查询 -->
       <div class="recent-queries">
-        <h3>最近查询</h3>
+        <h3>{{ text.recentQueries }}</h3>
         <div v-if="statistics.recent_queries.length === 0" class="empty-queries">
-          暂无查询记录
+          {{ text.noRecentQueries }}
         </div>
         <div v-else class="queries-list">
           <div
@@ -83,7 +83,7 @@
               <div class="query-text">{{ query.query }}</div>
               <div class="query-meta">
                 <span class="query-time">{{ formatDate(query.created_at) }}</span>
-                <span class="query-duration">耗时: {{ query.total_time.toFixed(3) }}s</span>
+                <span class="query-duration">{{ text.duration(query.total_time.toFixed(3)) }}</span>
               </div>
             </div>
           </div>
@@ -92,18 +92,18 @@
 
       <!-- 性能指标 -->
       <div class="performance-metrics">
-        <h3>性能指标</h3>
+        <h3>{{ text.performanceMetrics }}</h3>
         <div class="metrics-grid">
           <div class="metric-item">
-            <div class="metric-label">平均查询时间</div>
+            <div class="metric-label">{{ text.avgQueryTime }}</div>
             <div class="metric-value">
               {{ getAverageQueryTime() }}s
             </div>
           </div>
           <div class="metric-item">
-            <div class="metric-label">平均文档大小</div>
+            <div class="metric-label">{{ text.avgDocumentSize }}</div>
             <div class="metric-value">
-              {{ getAverageChunksPerDocument() }} 分块/文档
+              {{ text.chunksPerDocument(getAverageChunksPerDocument()) }}
             </div>
           </div>
         </div>
@@ -111,13 +111,13 @@
     </div>
 
     <div v-else class="error-container">
-      <a-result status="error" title="加载失败">
+      <a-result status="error" :title="text.loadFailedTitle">
         <template #subtitle>
-          无法加载统计信息，请稍后重试
+          {{ text.loadFailedSubtitle }}
         </template>
         <template #extra>
           <a-button type="primary" @click="loadStatistics">
-            重新加载
+            {{ text.reload }}
           </a-button>
         </template>
       </a-result>
@@ -126,11 +126,12 @@
 </template>
 
 <script setup lang="ts">
-import { ref, watch } from 'vue';
+import { ref, watch, computed } from 'vue';
 import { Message } from '@arco-design/web-vue';
 import { IconFile, IconLayers, IconSearch } from '@arco-design/web-vue/es/icon';
 import { KnowledgeService } from '../services/knowledgeService';
 import type { KnowledgeBaseStatistics } from '../types/knowledge';
+import { useAppI18n } from '@/composables/useAppI18n';
 
 interface Props {
   visible: boolean;
@@ -141,6 +142,65 @@ const props = defineProps<Props>();
 defineEmits<{
   close: [];
 }>();
+const { isEnglish } = useAppI18n();
+
+const text = computed(() => (
+  isEnglish.value
+    ? {
+        modalTitle: 'Knowledge base statistics',
+        loading: 'Loading statistics...',
+        overview: 'Overview',
+        totalDocuments: 'Total documents',
+        totalChunks: 'Total chunks',
+        queryCount: 'Queries',
+        documentStatusDistribution: 'Document status distribution',
+        completed: 'Completed',
+        processing: 'Processing',
+        failed: 'Failed',
+        recentQueries: 'Recent queries',
+        noRecentQueries: 'No recent queries',
+        duration: (seconds: string) => `Duration: ${seconds}s`,
+        performanceMetrics: 'Performance metrics',
+        avgQueryTime: 'Average query time',
+        avgDocumentSize: 'Average document size',
+        chunksPerDocument: (count: string) => `${count} chunks/document`,
+        loadFailedTitle: 'Load failed',
+        loadFailedSubtitle: 'Unable to load statistics. Please try again later.',
+        reload: 'Reload',
+        loadStatsFailed: 'Failed to load statistics',
+        justNow: 'Just now',
+        minutesAgo: (value: number) => `${value} minute(s) ago`,
+        hoursAgo: (value: number) => `${value} hour(s) ago`,
+        daysAgo: (value: number) => `${value} day(s) ago`,
+      }
+    : {
+        modalTitle: '知识库统计信息',
+        loading: '正在加载统计信息...',
+        overview: '概览统计',
+        totalDocuments: '文档总数',
+        totalChunks: '分块总数',
+        queryCount: '查询次数',
+        documentStatusDistribution: '文档状态分布',
+        completed: '已完成',
+        processing: '处理中',
+        failed: '失败',
+        recentQueries: '最近查询',
+        noRecentQueries: '暂无查询记录',
+        duration: (seconds: string) => `耗时: ${seconds}s`,
+        performanceMetrics: '性能指标',
+        avgQueryTime: '平均查询时间',
+        avgDocumentSize: '平均文档大小',
+        chunksPerDocument: (count: string) => `${count} 分块/文档`,
+        loadFailedTitle: '加载失败',
+        loadFailedSubtitle: '无法加载统计信息，请稍后重试',
+        reload: '重新加载',
+        loadStatsFailed: '加载统计信息失败',
+        justNow: '刚刚',
+        minutesAgo: (value: number) => `${value}分钟前`,
+        hoursAgo: (value: number) => `${value}小时前`,
+        daysAgo: (value: number) => `${value}天前`,
+      }
+));
 
 const loading = ref(false);
 const statistics = ref<KnowledgeBaseStatistics | null>(null);
@@ -163,7 +223,7 @@ const loadStatistics = async () => {
   } catch (error: any) {
     console.error('加载统计信息失败:', error);
     // 显示具体的错误消息
-    const errorMessage = error?.message || '加载统计信息失败';
+    const errorMessage = error?.message || text.value.loadStatsFailed;
     Message.error(errorMessage);
     statistics.value = null;
   } finally {
@@ -179,10 +239,10 @@ const formatDate = (dateString: string) => {
   const diffHours = Math.floor(diffMs / (1000 * 60 * 60));
   const diffDays = Math.floor(diffMs / (1000 * 60 * 60 * 24));
 
-  if (diffMins < 1) return '刚刚';
-  if (diffMins < 60) return `${diffMins}分钟前`;
-  if (diffHours < 24) return `${diffHours}小时前`;
-  if (diffDays < 7) return `${diffDays}天前`;
+  if (diffMins < 1) return text.value.justNow;
+  if (diffMins < 60) return text.value.minutesAgo(diffMins);
+  if (diffHours < 24) return text.value.hoursAgo(diffHours);
+  if (diffDays < 7) return text.value.daysAgo(diffDays);
   
   return date.toLocaleDateString();
 };

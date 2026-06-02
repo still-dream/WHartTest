@@ -3,14 +3,14 @@
     <div class="table-header">
       <div class="search-box">
         <a-input-search
-          placeholder="搜索用户名/邮箱"
+          :placeholder="text.searchPlaceholder"
           allow-clear
           style="width: 300px"
           @search="onSearch"
         />
       </div>
       <div class="action-buttons">
-        <a-button type="primary" @click="showAddMembersModal">添加成员</a-button>
+        <a-button type="primary" @click="showAddMembersModal">{{ text.addMembers }}</a-button>
       </div>
     </div>
 
@@ -24,7 +24,7 @@
     >
       <template #operations="{ record }">
         <a-space>
-          <a-button type="primary" status="danger" size="small" @click="removeMember(record)">移除</a-button>
+          <a-button type="primary" status="danger" size="small" @click="removeMember(record)">{{ text.remove }}</a-button>
         </a-space>
       </template>
     </a-table>
@@ -32,17 +32,17 @@
     <!-- 添加成员模态框 -->
     <a-modal
       v-model:visible="addMembersModalVisible"
-      title="添加成员"
+      :title="text.addMembersTitle"
       @cancel="cancelAddMembers"
       @before-ok="handleAddMembers"
       :mask-closable="false"
       :width="600"
     >
       <a-form ref="addMembersFormRef" :model="addMembersForm" layout="vertical" :auto-label-width="false">
-        <a-form-item field="userIds" label="选择用户" required>
+        <a-form-item field="userIds" :label="text.selectUsers" required>
           <a-select
             v-model="addMembersForm.userIds"
-            placeholder="请选择用户"
+            :placeholder="text.selectUsersPlaceholder"
             multiple
             :options="availableUsers"
             :filter-option="true"
@@ -55,8 +55,9 @@
 </template>
 
 <script setup lang="ts">
-import { ref, reactive, onMounted, watch } from 'vue';
+import { ref, reactive, onMounted, watch, computed } from 'vue';
 import { Message, Modal } from '@arco-design/web-vue';
+import { useAppI18n } from '@/composables/useAppI18n';
 import {
   getOrganizationUsers,
   addUsersToOrganization,
@@ -72,6 +73,68 @@ const props = defineProps<{
 const emit = defineEmits<{
   (e: 'refresh'): void;
 }>();
+const { isEnglish } = useAppI18n();
+const text = computed(() => (
+  isEnglish.value
+    ? {
+        searchPlaceholder: 'Search username/email',
+        addMembers: 'Add members',
+        remove: 'Remove',
+        addMembersTitle: 'Add members',
+        selectUsers: 'Select users',
+        selectUsersPlaceholder: 'Select users',
+        userId: 'User ID',
+        username: 'Username',
+        email: 'Email',
+        fullName: 'Full name',
+        actions: 'Actions',
+        fetchMembersFailed: 'Failed to fetch organization members',
+        fetchMembersError: 'An error occurred while fetching organization members',
+        fetchUsersFailed: 'Failed to fetch user list',
+        fetchUsersError: 'An error occurred while fetching user list',
+        invalidOrganizationId: 'Invalid organization ID',
+        selectAtLeastOneUser: 'Select at least one user',
+        addMembersSuccess: 'Members added successfully',
+        addMembersFailed: 'Failed to add members',
+        addMembersError: 'An error occurred while adding members',
+        removeConfirmTitle: 'Confirm removal',
+        removeConfirmContent: (username: string) => `Remove user "${username}" from this organization?`,
+        removeConfirmOk: 'Remove',
+        cancel: 'Cancel',
+        removeMembersSuccess: 'Member removed successfully',
+        removeMembersFailed: 'Failed to remove member',
+        removeMembersError: 'An error occurred while removing the member',
+      }
+    : {
+        searchPlaceholder: '搜索用户名/邮箱',
+        addMembers: '添加成员',
+        remove: '移除',
+        addMembersTitle: '添加成员',
+        selectUsers: '选择用户',
+        selectUsersPlaceholder: '请选择用户',
+        userId: '用户ID',
+        username: '用户名',
+        email: '邮箱',
+        fullName: '姓名',
+        actions: '操作',
+        fetchMembersFailed: '获取组织成员列表失败',
+        fetchMembersError: '获取组织成员列表时发生错误',
+        fetchUsersFailed: '获取用户列表失败',
+        fetchUsersError: '获取用户列表时发生错误',
+        invalidOrganizationId: '组织ID无效',
+        selectAtLeastOneUser: '请选择至少一个用户',
+        addMembersSuccess: '成员添加成功',
+        addMembersFailed: '添加成员失败',
+        addMembersError: '添加成员时发生错误',
+        removeConfirmTitle: '确认移除',
+        removeConfirmContent: (username: string) => `确定要将用户 "${username}" 从组织中移除吗？`,
+        removeConfirmOk: '确定移除',
+        cancel: '取消',
+        removeMembersSuccess: '成员移除成功',
+        removeMembersFailed: '移除成员失败',
+        removeMembersError: '移除成员时发生错误',
+      }
+));
 
 // 加载状态
 const loading = ref(false);
@@ -79,22 +142,22 @@ const loading = ref(false);
 const searchKeyword = ref('');
 
 // 表格列定义
-const columns = [
+const columns = computed(() => [
   {
-    title: '用户ID',
+    title: text.value.userId,
     dataIndex: 'id',
     width: 80,
   },
   {
-    title: '用户名',
+    title: text.value.username,
     dataIndex: 'username',
   },
   {
-    title: '邮箱',
+    title: text.value.email,
     dataIndex: 'email',
   },
   {
-    title: '姓名',
+    title: text.value.fullName,
     dataIndex: 'name',
     render: ({ record }: { record: OrganizationUser }) => {
       const fullName = [record.first_name, record.last_name].filter(Boolean).join(' ');
@@ -102,11 +165,11 @@ const columns = [
     },
   },
   {
-    title: '操作',
+    title: text.value.actions,
     slotName: 'operations',
     width: 100,
   },
-];
+]);
 
 // 成员数据
 const membersData = ref<OrganizationUser[]>([]);
@@ -138,13 +201,13 @@ const fetchMembersList = async () => {
       membersData.value = response.data;
       pagination.total = response.total || response.data.length;
     } else {
-      Message.error(response.error || '获取组织成员列表失败');
+      Message.error(response.error || text.value.fetchMembersFailed);
       membersData.value = [];
       pagination.total = 0;
     }
   } catch (error) {
     console.error('获取组织成员列表出错:', error);
-    Message.error('获取组织成员列表时发生错误');
+    Message.error(text.value.fetchMembersError);
     membersData.value = [];
     pagination.total = 0;
   } finally {
@@ -209,12 +272,12 @@ const fetchAllUsers = async () => {
         value: user.id
       }));
     } else {
-      Message.error(response.error || '获取用户列表失败');
+      Message.error(response.error || text.value.fetchUsersFailed);
       availableUsers.value = [];
     }
   } catch (error) {
     console.error('获取用户列表出错:', error);
-    Message.error('获取用户列表时发生错误');
+    Message.error(text.value.fetchUsersError);
     availableUsers.value = [];
   }
 };
@@ -246,13 +309,13 @@ const cancelAddMembers = () => {
 // 处理添加成员
 const handleAddMembers = async (done: (closed: boolean) => void) => {
   if (!props.organizationId) {
-    Message.error('组织ID无效');
+    Message.error(text.value.invalidOrganizationId);
     done(false);
     return;
   }
 
   if (addMembersForm.userIds.length === 0) {
-    Message.warning('请选择至少一个用户');
+    Message.warning(text.value.selectAtLeastOneUser);
     done(false);
     return;
   }
@@ -261,19 +324,19 @@ const handleAddMembers = async (done: (closed: boolean) => void) => {
     const response = await addUsersToOrganization(props.organizationId, addMembersForm.userIds);
 
     if (response.success) {
-      Message.success(response.message || '成员添加成功');
+      Message.success(response.message || text.value.addMembersSuccess);
       // 刷新成员列表
       fetchMembersList();
       // 通知父组件刷新
       emit('refresh');
       done(true); // 关闭模态框
     } else {
-      Message.error(response.error || '添加成员失败');
+      Message.error(response.error || text.value.addMembersFailed);
       done(false); // 不关闭模态框
     }
   } catch (error) {
     console.error('添加成员出错:', error);
-    Message.error('添加成员时发生错误');
+    Message.error(text.value.addMembersError);
     done(false); // 不关闭模态框
   }
 };
@@ -281,31 +344,31 @@ const handleAddMembers = async (done: (closed: boolean) => void) => {
 // 移除成员
 const removeMember = (member: OrganizationUser) => {
   if (!props.organizationId) {
-    Message.error('组织ID无效');
+    Message.error(text.value.invalidOrganizationId);
     return;
   }
 
   Modal.warning({
-    title: '确认移除',
-    content: `确定要将用户 "${member.username}" 从组织中移除吗？`,
-    okText: '确定移除',
-    cancelText: '取消',
+    title: text.value.removeConfirmTitle,
+    content: text.value.removeConfirmContent(member.username),
+    okText: text.value.removeConfirmOk,
+    cancelText: text.value.cancel,
     onOk: async () => {
       try {
         const response = await removeUsersFromOrganization(props.organizationId, [member.id]);
 
         if (response.success) {
-          Message.success(response.message || '成员移除成功');
+          Message.success(response.message || text.value.removeMembersSuccess);
           // 刷新成员列表
           fetchMembersList();
           // 通知父组件刷新
           emit('refresh');
         } else {
-          Message.error(response.error || '移除成员失败');
+          Message.error(response.error || text.value.removeMembersFailed);
         }
       } catch (error) {
         console.error('移除成员出错:', error);
-        Message.error('移除成员时发生错误');
+        Message.error(text.value.removeMembersError);
       }
     }
   });

@@ -7,12 +7,38 @@ import asyncio
 import json
 import logging
 from typing import Optional, Callable, Any
+from urllib.parse import parse_qsl, urlencode, urlsplit, urlunsplit
 import websockets
 from websockets.client import WebSocketClientProtocol
 
 from models import SocketDataModel, QueueModel, ResponseCode, NoticeType, UiSocketEnum
 
 logger = logging.getLogger('actuator')
+
+
+def build_websocket_connect_url(url: str, actuator_id: str | None = None) -> str:
+    """构建带执行器 ID 的 WebSocket 连接地址。"""
+    if not actuator_id:
+        return url
+
+    parsed_url = urlsplit(url)
+    query_items = [
+        (key, value)
+        for key, value in parse_qsl(parsed_url.query, keep_blank_values=True)
+        if key not in {'id', 'user_id'}
+    ]
+    query_items.append(('id', actuator_id))
+    return urlunsplit(parsed_url._replace(query=urlencode(query_items)))
+
+
+def build_websocket_origin(url: str) -> str | None:
+    """根据 WebSocket 地址推导握手所需的 HTTP Origin。"""
+    parsed_url = urlsplit(url)
+    if not parsed_url.scheme or not parsed_url.netloc:
+        return None
+
+    origin_scheme = 'https' if parsed_url.scheme == 'wss' else 'http'
+    return urlunsplit((origin_scheme, parsed_url.netloc, '', '', ''))
 
 
 class WebSocketClient:
@@ -38,16 +64,22 @@ class WebSocketClient:
     async def connect(self) -> bool:
         """建立WebSocket连接"""
         try:
-            # 连接URL带上actuator_id
-            connect_url = f"{self.url}?{self.actuator_id}"
+            connect_url = build_websocket_connect_url(self.url, self.actuator_id)
+            origin = build_websocket_origin(self.url)
+            connect_kwargs = {
+                'ping_interval': 30,
+                'ping_timeout': 10,
+                'close_timeout': 10,
+            }
+            if origin:
+                connect_kwargs['origin'] = origin
+
             self.websocket = await websockets.connect(
                 connect_url,
-                ping_interval=30,
-                ping_timeout=10,
-                close_timeout=10
+                **connect_kwargs,
             )
             self.connected = True
-            logger.info(f"已连接到服务器: {self.url}")
+            logger.info(f"已连接到服务器: {connect_url}")
             
             # 连接成功后发送执行器信息
             await self._send_actuator_info()

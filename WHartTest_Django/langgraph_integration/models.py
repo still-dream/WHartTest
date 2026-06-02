@@ -11,6 +11,7 @@ class LLMConfig(models.Model):
     
     PROVIDER_CHOICES = [
         ('openai_compatible', 'OpenAI 兼容'),
+        ('deepseek', 'DeepSeek'),
         ('qwen', 'Qwen/通义千问'),
     ]
     

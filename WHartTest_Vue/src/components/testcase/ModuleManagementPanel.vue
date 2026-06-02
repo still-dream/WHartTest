@@ -369,9 +369,11 @@ defineExpose({
   height: 100%;
   display: flex;
   flex-direction: column;
-  background-color: #fff;
+  background-color: var(--theme-card-bg);
+  color: var(--theme-page-text);
+  border: 1px solid var(--theme-card-border);
   border-radius: 8px;
-  box-shadow: -4px 0 10px rgba(0, 0, 0, 0.2), 0 4px 10px rgba(0, 0, 0, 0.2), 0 0 10px rgba(0, 0, 0, 0.15);
+  box-shadow: var(--theme-card-shadow);
   overflow: hidden; /* 防止内容溢出容器 */
 }
 
@@ -379,6 +381,10 @@ defineExpose({
   border-bottom: 1px solid var(--color-border-2);
   padding: 12px 16px;
   flex-shrink: 0;
+}
+
+:deep(.module-panel .arco-card-header-title) {
+  color: var(--theme-text);
 }
 
 :deep(.module-panel .arco-card-body) {
@@ -451,13 +457,15 @@ defineExpose({
 
 .module-action-button {
   width: 80px;
-  background-color: #ffffff; /* 修改操作按钮背景色 */
-  border-color: #ffffff;
+  background-color: var(--theme-toggle-bg);
+  border-color: var(--theme-input-border);
+  color: var(--theme-text);
 }
 
 .module-action-button:hover {
-  background-color: #ffffff; /* 悬停时的颜色 */
-  border-color: #ffffff;
+  background-color: var(--theme-toggle-hover);
+  border-color: rgba(var(--theme-accent-rgb), 0.28);
+  color: var(--theme-accent-hover);
 }
 
 :deep(.arco-dropdown-option) {

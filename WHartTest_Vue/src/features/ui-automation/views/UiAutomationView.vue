@@ -2,29 +2,29 @@
   <div class="ui-automation-layout">
     <ModulePanel ref="modulePanelRef" @select="onModuleSelect" @updated="onModuleUpdated" />
     <div class="layout-content">
-      <a-tabs v-model:active-key="activeTab" type="card-gutter">
-        <a-tab-pane key="pages" title="页面管理">
+      <a-tabs :key="`ui-automation-tabs-${locale}`" v-model:active-key="activeTab" type="card-gutter">
+        <a-tab-pane key="pages" :title="tl('页面管理')">
           <PageList ref="pageListRef" :selected-module-id="selectedModuleId" />
         </a-tab-pane>
-        <a-tab-pane key="page-steps" title="页面步骤">
+        <a-tab-pane key="page-steps" :title="tl('页面步骤')">
           <PageStepList ref="pageStepListRef" :selected-module-id="selectedModuleId" />
         </a-tab-pane>
-        <a-tab-pane key="testcases" title="测试用例">
+        <a-tab-pane key="testcases" :title="tl('测试用例')">
           <TestCaseList ref="testCaseListRef" :selected-module-id="selectedModuleId" />
         </a-tab-pane>
-        <a-tab-pane key="execution-records" title="执行记录">
+        <a-tab-pane key="execution-records" :title="tl('执行记录')">
           <ExecutionRecordList ref="executionRecordListRef" />
         </a-tab-pane>
-        <a-tab-pane key="batch-records" title="批量执行">
+        <a-tab-pane key="batch-records" :title="tl('批量执行')">
           <BatchRecordList ref="batchRecordListRef" />
         </a-tab-pane>
-        <a-tab-pane key="public-data" title="公共数据">
+        <a-tab-pane key="public-data" :title="tl('公共数据')">
           <PublicDataList ref="publicDataListRef" />
         </a-tab-pane>
-        <a-tab-pane key="env-config" title="环境配置">
+        <a-tab-pane key="env-config" :title="tl('环境配置')">
           <EnvConfigList ref="envConfigListRef" />
         </a-tab-pane>
-        <a-tab-pane key="actuators" title="执行器">
+        <a-tab-pane key="actuators" :title="tl('执行器')">
           <ActuatorList ref="actuatorListRef" />
         </a-tab-pane>
       </a-tabs>
@@ -34,6 +34,7 @@
 
 <script setup lang="ts">
 import { ref, watch } from 'vue'
+import { useAppI18n } from '@/composables/useAppI18n'
 import ModulePanel from '../components/ModulePanel.vue'
 import PageList from './PageList.vue'
 import PageStepList from './PageStepList.vue'
@@ -45,6 +46,7 @@ import EnvConfigList from './EnvConfigList.vue'
 import ActuatorList from './ActuatorList.vue'
 import type { UiModule } from '../types'
 
+const { locale, tl } = useAppI18n()
 const activeTab = ref('pages')
 const modulePanelRef = ref()
 const selectedModuleId = ref<number | undefined>(undefined)

@@ -47,7 +47,7 @@ AI 驱动的端到端测试生成流水线：
 ### 知识库管理与文档理解
 构建项目级知识库，为 AI 生成提供精准上下文：
 - **多格式支持**：PDF、Word、Excel、PPT、Markdown、网页链接
-- **智能分块**：RecursiveCharacterTextSplitter 文档分块，支持图片提取（PDF 用 PyMuPDF，DOCX 用 python-docx）
+- **智能分块**：RecursiveCharacterTextSplitter 文档分块，支持图片提取（PDF 用 pypdf，DOCX 用 python-docx）
 - **混合检索**：Dense + BM25 Sparse 稀疏-稠密混合检索 + RRF 融合排序
 - **Reranker 精排**：可配置重排序模型提升检索精度
 - **多模态嵌入**：支持文档图片的多模态向量化
