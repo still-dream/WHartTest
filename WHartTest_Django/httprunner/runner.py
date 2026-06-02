@@ -54,7 +54,7 @@ class SessionRunner(object):
     __log_path: Text = ""
     __log_handler_id = None  # 存储日志处理器的ID，便于后续移除
 
-    def __init(self):
+    def _init_runner(self):
         self.__config = self.config.struct()
         self.__session_variables = self.__session_variables or {}
         self.__start_at = 0
@@ -66,11 +66,10 @@ class SessionRunner(object):
         )
         self.case_id = self.case_id or str(uuid.uuid4())
         self.root_dir = self.root_dir or self.__project_meta.RootDir
-        
-        # 确保日志目录存在
+
         log_dir = os.path.join(self.root_dir, "logs")
         os.makedirs(log_dir, exist_ok=True)
-        
+
         self.__log_path = os.path.join(log_dir, f"{self.case_id}.run.log")
 
         self.__step_results = self.__step_results or []
@@ -218,7 +217,7 @@ class SessionRunner(object):
         """main entrance, discovered by pytest"""
         ga4_client.send_event("test_start")
         print("\n")
-        self.__init()
+        self._init_runner()
         self.__parse_config(param)
 
         if ALLURE is not None and not self.__is_referenced:
@@ -293,6 +292,7 @@ class HttpRunner(SessionRunner):
     def __init__(self):
         self.config = Config("HttpRunner")
         self.teststeps = []
+        self._init_runner()
 
     def with_project_meta(self, project_meta):
         self.__project_meta = project_meta

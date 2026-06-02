@@ -26,7 +26,10 @@ def load_custom_functions(project_id):
             is_active=True
         ).select_related('project')
 
-        project_name = custom_functions[0].project.name if custom_functions else "Unknown"
+        if custom_functions:
+            project_name = custom_functions[0].project.name
+        else:
+            project_name = "Unknown"
         logger.info(f"Loading custom functions for project [{project_name}]")
 
         for func in custom_functions:
