@@ -1,4 +1,4 @@
-# UI自动化执行器 (WHartTest Actuator)
+# UI自动化执行器 (SkillForgeTest Actuator)
 
 独立的UI自动化执行器服务，通过WebSocket连接Django后端，接收并执行自动化测试任务。
 
@@ -51,7 +51,7 @@
 ## 安装
 
 ```bash
-cd WHartTest_Actuator
+cd SkillForgeTest_Actuator
 pip install -r requirements.txt
 ```
 
@@ -116,15 +116,15 @@ pip install pyinstaller
 ### 执行打包
 
 ```bash
-cd WHartTest_Actuator
+cd SkillForgeTest_Actuator
 uv run python build_exe.py
 ```
 
 ### 输出目录
 
 ```
-dist/WHartTest_Actuator/
-├── WHartTest_Actuator.exe  # 主程序
+dist/SkillForgeTest_Actuator/
+├── SkillForgeTest_Actuator.exe  # 主程序
 ├── config.toml             # 配置文件
 ├── start.bat               # GUI模式启动脚本
 ├── start_no_gui.bat        # 无GUI模式启动脚本
@@ -137,7 +137,7 @@ dist/WHartTest_Actuator/
 
 ### 使用说明
 
-1. 将 `dist/WHartTest_Actuator/` 目录复制到目标机器
+1. 将 `dist/SkillForgeTest_Actuator/` 目录复制到目标机器
 2. 编辑 `config.toml` 配置服务器地址和账号
 3. 双击 `start.bat` 启动（GUI模式）或 `start_no_gui.bat`（无GUI模式）
 
@@ -166,7 +166,7 @@ python main.py --id actuator-machine-c --server ws://server:8000/ws/ui/actuator/
 ## 文件说明
 
 ```
-WHartTest_Actuator/
+SkillForgeTest_Actuator/
 ├── main.py              # 主入口，启动执行器
 ├── models.py            # 消息模型定义
 ├── websocket_client.py  # WebSocket客户端

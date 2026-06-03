@@ -63,7 +63,7 @@ async def test_connection():
             
     except ConnectionRefusedError:
         print("❌ 连接被拒绝 - 请确保Django服务器正在运行")
-        print("   启动方式: cd WHartTest_Django && python manage.py runserver")
+        print("   启动方式: cd SkillForgeTest_Django && python manage.py runserver")
     except Exception as e:
         print(f"❌ 连接错误: {e}")
 

@@ -293,7 +293,7 @@ async def main():
     print("测试完成!")
     print("=" * 60)
     print("\n提示: 如果要测试完整执行流程，需要同时运行执行器:")
-    print("cd WHartTest_Actuator && uv run python main.py")
+    print("cd SkillForgeTest_Actuator && uv run python main.py")
 
 
 if __name__ == '__main__':

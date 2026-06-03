@@ -6,7 +6,7 @@ api_username = "admin"
 api_password = "admin123456"
 
 [actuator]
-name = "WHartTest-001"
+name = "SkillForgeTest-001"
 
 [browser]
 browser_type = "chromium"

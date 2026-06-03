@@ -12,7 +12,7 @@ UI自动化执行器 - 主入口
     python main.py --server ws://localhost:8000/ws/ui/actuator/ --id my-actuator
     
     # 打包成 exe 后运行
-    WHartTest_Actuator.exe --gui
+    SkillForgeTest_Actuator.exe --gui
 """
 
 import argparse

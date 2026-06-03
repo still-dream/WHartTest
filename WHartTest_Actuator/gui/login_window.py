@@ -122,21 +122,32 @@ class LoginWindow(QDialog):
             tomli_w.dump(self._config, f)
     
     def _init_ui(self):
-        """初始化界面 - 左右分栏设计"""
-        self.setWindowTitle("WHartTest 执行器登录")
-        self.setFixedSize(920, 640)
-        self.setWindowFlags(self.windowFlags() & ~Qt.WindowContextHelpButtonHint)
+        """初始化界面 - 标题栏 + 左右分栏设计"""
+        self.setWindowTitle("SkillForgeTest 执行器登录")
+        # 增加 40px 高度以容纳自定义标题栏
+        self.setFixedSize(920, 680)
+        # 使用无边框窗口（自定义标题栏提供拖动 + 最小化 + 关闭）
+        self.setWindowFlags(Qt.Dialog | Qt.FramelessWindowHint)
         self.setStyleSheet("background-color: #f0f2f5;")
-        
+
         # 设置窗口图标
         window_icon = self._get_window_icon()
         if window_icon:
             self.setWindowIcon(window_icon)
 
-        # 主布局 - 水平分栏
-        main_layout = QHBoxLayout(self)
+        # 自定义标题栏（拖动 + 最小化 + 关闭）
+        self._init_custom_titlebar()
+
+        # 主布局 - 垂直：标题栏 + 主体
+        main_layout = QVBoxLayout(self)
         main_layout.setContentsMargins(0, 0, 0, 0)
         main_layout.setSpacing(0)
+        main_layout.addWidget(self._title_bar)
+
+        # 主体布局 - 水平：左品牌 + 右表单
+        body_layout = QHBoxLayout()
+        body_layout.setContentsMargins(0, 0, 0, 0)
+        body_layout.setSpacing(0)
 
         # ========== 左侧品牌区域 ==========
         left_panel = QFrame()
@@ -175,7 +186,7 @@ class LoginWindow(QDialog):
         left_layout.addSpacing(24)
 
         # 左侧标题
-        left_title = QLabel("WHartTest")
+        left_title = QLabel("SkillForgeTest")
         left_title.setStyleSheet("""
             font-size: 32px;
             font-weight: bold;
@@ -187,7 +198,7 @@ class LoginWindow(QDialog):
         left_layout.addSpacing(8)
 
         # 左侧副标题
-        left_subtitle = QLabel("小麦智测自动化平台")
+        left_subtitle = QLabel("J&T智萃平台")
         left_subtitle.setStyleSheet("""
             font-size: 16px;
             color: rgba(255, 255, 255, 0.85);
@@ -256,7 +267,7 @@ class LoginWindow(QDialog):
         left_layout.addLayout(features_grid)
         left_layout.addStretch(3)
 
-        main_layout.addWidget(left_panel)
+        body_layout.addWidget(left_panel)
 
         # ========== 右侧登录表单区域 ==========
         right_panel = QFrame()
@@ -889,10 +900,118 @@ class LoginWindow(QDialog):
         self.cancel_btn = QPushButton()
         self.cancel_btn.hide()
 
-        main_layout.addWidget(right_panel)
+        body_layout.addWidget(right_panel)
+        main_layout.addLayout(body_layout)
 
         # 回车键登录
         self.password_input.returnPressed.connect(self._on_login_clicked)
+
+    def _init_custom_titlebar(self):
+        """
+        自定义无边框窗口的标题栏
+
+        功能：
+        - 整条标题栏可拖动窗口
+        - 最小化按钮：调用 showMinimized()
+        - 关闭按钮：调用 close() 触发 closeEvent -> reject()，与原行为一致
+        - 按钮悬停 / 按下提供视觉反馈
+        - 关闭按钮悬停时变红（Windows 风格）
+        - 窗口固定大小时，双击标题栏不做最大化
+        """
+        # ----- 标题栏容器 -----
+        self._title_bar = QFrame()
+        self._title_bar.setObjectName("customTitleBar")
+        self._title_bar.setFixedHeight(40)
+        self._title_bar.setStyleSheet("""
+            QFrame#customTitleBar {
+                background: qlineargradient(x1:0, y1:0, x2:0, y2:1,
+                    stop:0 #1E88E5, stop:1 #1565C0);
+                border: none;
+            }
+        """)
+
+        title_layout = QHBoxLayout(self._title_bar)
+        title_layout.setContentsMargins(16, 0, 0, 0)
+        title_layout.setSpacing(0)
+
+        # ----- 标题文字（左侧） -----
+        self._title_label = QLabel("SkillForgeTest 执行器登录")
+        self._title_label.setAlignment(Qt.AlignVCenter | Qt.AlignLeft)
+        self._title_label.setStyleSheet(
+            "color: white; font-size: 13px; font-weight: 500; "
+            "background: transparent; border: none;"
+        )
+        title_layout.addWidget(self._title_label)
+        title_layout.addStretch()
+
+        # ----- 按钮通用样式 -----
+        btn_base_style = """
+            QPushButton {
+                background: transparent;
+                color: white;
+                border: none;
+                font-family: 'Segoe UI', 'Microsoft YaHei', sans-serif;
+            }
+            QPushButton:hover {
+                background: rgba(255, 255, 255, 0.15);
+            }
+            QPushButton:pressed {
+                background: rgba(255, 255, 255, 0.25);
+            }
+        """
+        btn_close_style = btn_base_style + """
+            QPushButton:hover { background: #E81123; }
+            QPushButton:pressed { background: #B10E1C; }
+        """
+
+        # ----- 最小化按钮 -----
+        self.minimize_btn = QPushButton("\u2014")  # 减号 "−"
+        self.minimize_btn.setFixedSize(46, 40)
+        self.minimize_btn.setCursor(Qt.PointingHandCursor)
+        self.minimize_btn.setToolTip("最小化")
+        self.minimize_btn.setStyleSheet(
+            btn_base_style + "font-size: 14px; font-weight: bold;"
+        )
+        self.minimize_btn.clicked.connect(self.showMinimized)
+        title_layout.addWidget(self.minimize_btn)
+
+        # ----- 关闭按钮 -----
+        self.close_btn = QPushButton("\u2715")  # "✕"
+        self.close_btn.setFixedSize(46, 40)
+        self.close_btn.setCursor(Qt.PointingHandCursor)
+        self.close_btn.setToolTip("关闭")
+        self.close_btn.setStyleSheet(
+            btn_close_style + "font-size: 14px; font-weight: bold;"
+        )
+        self.close_btn.clicked.connect(self.close)
+        title_layout.addWidget(self.close_btn)
+
+        # ----- 标题栏拖动支持 -----
+        # 记录鼠标按下时的全局偏移
+        self._drag_position = None
+
+        def _on_press(event):
+            if event.button() == Qt.LeftButton:
+                self._drag_position = (
+                    event.globalPos() - self.frameGeometry().topLeft()
+                )
+                event.accept()
+
+        def _on_move(event):
+            if (
+                event.buttons() & Qt.LeftButton
+                and self._drag_position is not None
+            ):
+                self.move(event.globalPos() - self._drag_position)
+                event.accept()
+
+        def _on_release(event):
+            self._drag_position = None
+            event.accept()
+
+        self._title_bar.mousePressEvent = _on_press
+        self._title_bar.mouseMoveEvent = _on_move
+        self._title_bar.mouseReleaseEvent = _on_release
 
     def closeEvent(self, event):
         """处理窗口关闭事件"""
@@ -922,9 +1041,9 @@ class LoginWindow(QDialog):
             base_path = Path(__file__).parent.parent
         
         icon_paths = [
-            base_path / "data" / "WHartTest.png",
-            base_path / "WHartTest.png",
-            base_path.parent / "WHartTest_Vue" / "public" / "WHartTest.png",
+            base_path / "data" / "SkillForgeTest.png",
+            base_path / "SkillForgeTest.png",
+            base_path.parent / "SkillForgeTest_Vue" / "public" / "SkillForgeTest.png",
         ]
         
         for icon_path in icon_paths:
@@ -936,9 +1055,9 @@ class LoginWindow(QDialog):
         """创建 Logo - 尝试加载图片，失败则使用默认绘制"""
         # 尝试加载项目 logo 图片
         logo_paths = [
-            Path(__file__).parent.parent / "data" / "WHartTest.png",
-            Path(__file__).parent.parent.parent / "WHartTest_Vue" / "public" / "WHartTest.png",
-            Path(__file__).parent.parent / "WHartTest.png",
+            Path(__file__).parent.parent / "data" / "SkillForgeTest.png",
+            Path(__file__).parent.parent.parent / "SkillForgeTest_Vue" / "public" / "SkillForgeTest.png",
+            Path(__file__).parent.parent / "SkillForgeTest.png",
         ]
         
         for logo_path in logo_paths:

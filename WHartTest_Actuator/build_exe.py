@@ -1,5 +1,5 @@
 """
-WHartTest Actuator 打包脚本
+SkillForgeTest Actuator 打包脚本
 
 使用方法:
     uv run python build_exe.py
@@ -8,7 +8,7 @@ WHartTest Actuator 打包脚本
     pip install pyinstaller
 
 生成文件:
-    dist/WHartTest_Actuator/WHartTest_Actuator.exe
+    dist/SkillForgeTest_Actuator/SkillForgeTest_Actuator.exe
 """
 
 import os
@@ -35,7 +35,7 @@ def clean_build():
 def build():
     """执行打包"""
     print("=" * 50)
-    print("WHartTest Actuator 打包工具")
+    print("SkillForgeTest Actuator 打包工具")
     print("=" * 50)
     
     # 检查 PyInstaller 是否安装
@@ -64,7 +64,7 @@ def build():
     
     # 复制配置文件
     print("\n[3/3] 复制配置文件...")
-    dist_dir = Path('dist/WHartTest_Actuator')
+    dist_dir = Path('dist/SkillForgeTest_Actuator')
     
     # 复制示例配置文件
     if Path('config.example.toml').exists():
@@ -85,9 +85,9 @@ def build():
     print("打包完成!")
     print(f"输出目录: {dist_dir.absolute()}")
     print("\n使用说明:")
-    print("  1. 进入 dist/WHartTest_Actuator/ 目录")
+    print("  1. 进入 dist/SkillForgeTest_Actuator/ 目录")
     print("  2. 编辑 config.toml 配置文件")
-    print("  3. 运行 WHartTest_Actuator.exe 或 start.bat")
+    print("  3. 运行 SkillForgeTest_Actuator.exe 或 start.bat")
     print("\n首次运行说明:")
     print("  - 首次运行会自动下载 Chromium 浏览器（约 150MB）")
     print("  - 浏览器会下载到 browsers/ 目录")
@@ -100,10 +100,10 @@ def create_launcher(dist_dir: Path):
     # Windows 批处理启动脚本
     bat_content = '''@echo off
 chcp 65001 >nul
-title WHartTest Actuator
+title SkillForgeTest Actuator
 
 echo ========================================
-echo   WHartTest UI 自动化执行器
+echo   SkillForgeTest UI 自动化执行器
 echo ========================================
 echo.
 
@@ -116,7 +116,7 @@ if not exist "config.toml" (
 
 REM 启动执行器（GUI 模式）
 echo 启动执行器...
-WHartTest_Actuator.exe --gui
+SkillForgeTest_Actuator.exe --gui
 
 echo.
 echo 执行器已退出
@@ -129,15 +129,15 @@ pause
     # 无 GUI 启动脚本
     bat_nogui_content = '''@echo off
 chcp 65001 >nul
-title WHartTest Actuator (无GUI模式)
+title SkillForgeTest Actuator (无GUI模式)
 
 echo ========================================
-echo   WHartTest UI 自动化执行器 (无GUI模式)
+echo   SkillForgeTest UI 自动化执行器 (无GUI模式)
 echo ========================================
 echo.
 
 REM 启动执行器（无 GUI 模式，使用配置文件中的账号密码）
-WHartTest_Actuator.exe --no-gui
+SkillForgeTest_Actuator.exe --no-gui
 
 echo.
 echo 执行器已退出
