@@ -46,6 +46,22 @@ class ScheduledTask(models.Model):
         _('执行器ID'), max_length=100, blank=True, default='',
         help_text=_('UI自动化模块时选择的执行器')
     )
+    environment = models.ForeignKey(
+        'api_environments.ApiEnvironment',
+        on_delete=models.PROTECT,
+        related_name='scheduled_tasks',
+        null=True, blank=True,
+        verbose_name=_('API 环境配置'),
+        help_text=_('测试套件模块执行时使用的 API 环境配置'),
+    )
+    ui_environment = models.ForeignKey(
+        'ui_automation.UiEnvironmentConfig',
+        on_delete=models.PROTECT,
+        related_name='scheduled_tasks',
+        null=True, blank=True,
+        verbose_name=_('UI 环境配置'),
+        help_text=_('UI 自动化模块执行时使用的浏览器/环境配置'),
+    )
 
     # 关联的执行对象
     test_suite = models.ForeignKey(

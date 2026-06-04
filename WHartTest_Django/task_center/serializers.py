@@ -7,6 +7,8 @@ class ScheduledTaskSerializer(serializers.ModelSerializer):
     schedule_display = serializers.SerializerMethodField()
     creator_name = serializers.SerializerMethodField()
     test_suite_name = serializers.SerializerMethodField()
+    environment_name = serializers.SerializerMethodField()
+    ui_environment_name = serializers.SerializerMethodField()
     ui_testcase_ids = serializers.PrimaryKeyRelatedField(
         source='ui_testcases', many=True,
         queryset=UiTestCase.objects.all(), required=False
@@ -23,12 +25,18 @@ class ScheduledTaskSerializer(serializers.ModelSerializer):
             'schedule_display', 'created_at', 'updated_at',
             'test_suite', 'test_suite_name', 'ui_testcase_ids',
             'actuator_id',
+            'environment', 'environment_name',
+            'ui_environment', 'ui_environment_name',
         ]
         read_only_fields = [
             'project', 'status', 'last_run_at', 'creator', 'creator_name',
             'schedule_display', 'created_at', 'updated_at',
-            'test_suite_name',
+            'test_suite_name', 'environment_name', 'ui_environment_name',
         ]
+        extra_kwargs = {
+                'environment': {'required': False, 'allow_null': True},
+                'ui_environment': {'required': False, 'allow_null': True},
+            }
 
     def get_schedule_display(self, obj):
         return obj.get_schedule_display_text()
@@ -43,6 +51,32 @@ class ScheduledTaskSerializer(serializers.ModelSerializer):
             return obj.test_suite.name
         return None
 
+    def get_environment_name(self, obj):
+        if obj.environment_id:
+            return obj.environment.name
+        return None
+
+    def get_ui_environment_name(self, obj):
+        if obj.ui_environment_id:
+            return obj.ui_environment.name
+        return None
+
+    def validate_environment(self, value):
+        """校验环境属于当前项目"""
+        project = self.context.get('project')
+        if project is not None and value.project_id != project.id:
+            raise serializers.ValidationError('所选环境不属于当前项目')
+        return value
+
+    def validate_ui_environment(self, value):
+        """校验 UI 环境配置属于当前项目（仅在填写时校验）"""
+        if value is None:
+            return value
+        project = self.context.get('project')
+        if project is not None and value.project_id != project.id:
+            raise serializers.ValidationError('所选 UI 环境配置不属于当前项目')
+        return value
+
     def validate_name(self, value):
         if len(value) > 50:
             raise serializers.ValidationError('任务名称最大长度为50字符')
@@ -56,6 +90,18 @@ class ScheduledTaskSerializer(serializers.ModelSerializer):
         if module == ScheduledTask.TaskModule.TEST_SUITE:
             if not attrs.get('test_suite') and not getattr(self.instance, 'test_suite', None):
                 raise serializers.ValidationError({'test_suite': '测试套件模块必须关联一个测试套件'})
+
+        # UI 自动化模块 → ui_environment 必填，environment 非必填
+        if module == ScheduledTask.TaskModule.UI_AUTOMATION:
+            ui_env = attrs.get('ui_environment', getattr(self.instance, 'ui_environment_id', None))
+            if not ui_env:
+                raise serializers.ValidationError({'ui_environment': 'UI 自动化模块必须选择 UI 环境配置'})
+
+        # 测试套件模块 → environment 必填
+        if module == ScheduledTask.TaskModule.TEST_SUITE:
+            env = attrs.get('environment', getattr(self.instance, 'environment_id', None))
+            if not env:
+                raise serializers.ValidationError({'environment': '测试套件模块必须选择 API 环境配置'})
 
         if schedule_type == ScheduledTask.ScheduleType.ONCE:
             if not attrs.get('once_datetime') and not getattr(self.instance, 'once_datetime', None):

@@ -97,6 +97,20 @@
             {{ record.last_run_at ? formatDate(record.last_run_at) : emptyPlaceholder }}
           </template>
 
+          <template #environment="{ record }">
+            <a-tag v-if="record.environment_name" color="green">
+              {{ record.environment_name }}
+            </a-tag>
+            <span v-else class="action-placeholder">{{ emptyPlaceholder }}</span>
+          </template>
+
+          <template #ui_environment="{ record }">
+            <a-tag v-if="record.ui_environment_name" color="arcoblue">
+              {{ record.ui_environment_name }}
+            </a-tag>
+            <span v-else class="action-placeholder">-</span>
+          </template>
+
           <template #actions="{ record }">
             <a-space v-if="hasTaskActions" :size="4">
               <a-button
@@ -238,6 +252,8 @@ const pageText = computed(() => (
         module: 'Module',
         schedule: 'Schedule',
         status: 'Status',
+        environment: 'API Environment',
+        uiEnvironment: 'UI Environment',
         creator: 'Created by',
         lastRun: 'Last Run',
         actions: 'Actions',
@@ -301,6 +317,8 @@ const pageText = computed(() => (
         module: '模块',
         schedule: '调度策略',
         status: '状态',
+        environment: 'API 环境',
+        uiEnvironment: 'UI 环境',
         creator: '创建人',
         lastRun: '最近执行',
         actions: '操作',
@@ -420,6 +438,8 @@ const columns = computed(() => [
   { title: pageText.value.module, slotName: 'module', width: 130, align: 'center' as const },
   { title: pageText.value.schedule, slotName: 'schedule', width: isEnglish.value ? 240 : 190, align: 'center' as const },
   { title: pageText.value.status, slotName: 'status', width: 100, align: 'center' as const },
+  { title: pageText.value.environment, slotName: 'environment', width: 140, align: 'center' as const },
+  { title: pageText.value.uiEnvironment, slotName: 'ui_environment', width: 140, align: 'center' as const },
   { title: pageText.value.creator, dataIndex: 'creator_name', width: 110, align: 'center' as const },
   { title: pageText.value.lastRun, slotName: 'last_run_at', width: 180, align: 'center' as const },
   { title: pageText.value.actions, slotName: 'actions', width: isEnglish.value ? 300 : 260, align: 'center' as const, fixed: 'right' as const },

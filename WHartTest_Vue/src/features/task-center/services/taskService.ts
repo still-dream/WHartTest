@@ -35,6 +35,10 @@ export interface ScheduledTask {
   test_suite_name: string | null;
   ui_testcase_ids: number[];
   actuator_id: string;
+  environment: number | null;
+  environment_name: string | null;
+  ui_environment: number | null;
+  ui_environment_name: string | null;
   created_at: string;
   updated_at: string;
 }
@@ -56,6 +60,8 @@ export interface TaskFormData {
   test_suite?: number | null;
   ui_testcase_ids?: number[];
   actuator_id?: string;
+  environment: number;
+  ui_environment?: number | null;
 }
 
 export interface TaskExecution {

@@ -30,9 +30,18 @@ class ScheduledTaskViewSet(viewsets.ModelViewSet):
             return ScheduledTask.objects.filter(project_id=project_pk)
         return ScheduledTask.objects.none()
 
+    def get_serializer_context(self):
+        context = super().get_serializer_context()
+        project_pk = self.kwargs.get('project_pk')
+        if project_pk:
+            context['project'] = get_object_or_404(Project, pk=project_pk)
+        return context
+
     def perform_create(self, serializer):
         project_pk = self.kwargs.get('project_pk')
         project = get_object_or_404(Project, pk=project_pk)
+
+        # 环境归属校验已在 serializer 的 validate_environment / validate_ui_environment 中完成
         instance = serializer.save(
             project=project,
             creator=self.request.user,
@@ -41,6 +50,7 @@ class ScheduledTaskViewSet(viewsets.ModelViewSet):
         register_periodic_task(instance)
 
     def perform_update(self, serializer):
+        # 环境归属校验已在 serializer 的 validate_environment / validate_ui_environment 中完成
         instance = serializer.save()
         if instance.status == ScheduledTask.TaskStatus.RUNNING:
             register_periodic_task(instance)

@@ -645,6 +645,7 @@ def trigger_batch_execution(request):
         actuator_id: str - 执行器 ID
         batch_name: str - 批次名称（可选）
         trigger_type: str - 触发类型（默认 scheduled）
+        ui_environment_id: int - UI 环境配置 ID（可选；用于将浏览器/视口等配置下发给执行器）
     """
     from .consumers import SocketUserManager
     from .socket_models import SocketDataModel, QueueModel, NoticeType, ResponseCode, UiSocketEnum
@@ -653,6 +654,7 @@ def trigger_batch_execution(request):
     actuator_id = request.data.get('actuator_id', '')
     batch_name = request.data.get('batch_name', '')
     trigger_type = request.data.get('trigger_type', 'scheduled')
+    ui_environment_id = request.data.get('ui_environment_id')
 
     if not case_ids:
         return Response({'error': '未提供用例 ID'}, status=status.HTTP_400_BAD_REQUEST)
@@ -668,6 +670,14 @@ def trigger_batch_execution(request):
             {'error': f'执行器 {actuator_id} 不在线' if actuator_id else '没有可用的执行器'},
             status=status.HTTP_503_SERVICE_UNAVAILABLE
         )
+
+    # 如果传了 UI 环境配置，做一次存在性校验；不通过直接 400 返回
+    if ui_environment_id:
+        if not UiEnvironmentConfig.objects.filter(pk=ui_environment_id).exists():
+            return Response(
+                {'error': f'UI 环境配置 {ui_environment_id} 不存在'},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
 
     # 创建批量执行记录
     from django.utils import timezone as tz
@@ -691,6 +701,9 @@ def trigger_batch_execution(request):
         'actuator_id': actuator_id,
         'batch_id': batch.id,
     }
+    if ui_environment_id:
+        # 执行器（actuator）约定使用 env_config_id 作为入参键名
+        args['env_config_id'] = ui_environment_id
 
     # 通过 WebSocket 发送给执行器
     async_to_sync(actuator.send_json)(SocketDataModel(

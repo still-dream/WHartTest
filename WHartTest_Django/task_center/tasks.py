@@ -40,6 +40,8 @@ def execute_scheduled_task(self, task_id: int, trigger_type: str = 'scheduled'):
         log_lines.append(f"[{timezone.now().isoformat()}] 开始执行任务: {task.name}")
         log_lines.append(f"[{timezone.now().isoformat()}] 模块: {task.get_module_display()}")
         log_lines.append(f"[{timezone.now().isoformat()}] 执行目标: {task.get_execution_target_display()}")
+        if task.environment_id:
+            log_lines.append(f"[{timezone.now().isoformat()}] 使用环境: {task.environment.name} (ID={task.environment_id})")
 
         # 根据模块类型执行不同逻辑
         if task.module == ScheduledTask.TaskModule.UI_AUTOMATION:
@@ -56,14 +58,23 @@ def execute_scheduled_task(self, task_id: int, trigger_type: str = 'scheduled'):
 
             # 使用任务创建者身份获取 token
             token = str(RefreshToken.for_user(task.creator).access_token)
+            trigger_payload = {
+                'case_ids': ui_case_ids,
+                'actuator_id': task.actuator_id,
+                'batch_name': f"定时任务-{task.name}",
+                'trigger_type': 'scheduled',
+            }
+            if task.ui_environment_id:
+                # 后端内部 API 字段名沿用 ui_environment_id；真正下发到执行器时
+                # 会在 trigger_batch_execution 中映射为 actuator 约定的 env_config_id
+                trigger_payload['ui_environment_id'] = task.ui_environment_id
+                log_lines.append(
+                    f"[{timezone.now().isoformat()}] 使用 UI 环境配置: {task.ui_environment.name} "
+                    f"(browser={task.ui_environment.browser}, headless={task.ui_environment.headless})"
+                )
             resp = requests.post(
                 f"{django_settings.BASE_URL}/api/ui-automation/trigger-batch/",
-                json={
-                    'case_ids': ui_case_ids,
-                    'actuator_id': task.actuator_id,
-                    'batch_name': f"定时任务-{task.name}",
-                    'trigger_type': 'scheduled',
-                },
+                json=trigger_payload,
                 headers={'Authorization': f'Bearer {token}'},
                 timeout=30,
             )

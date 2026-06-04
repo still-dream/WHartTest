@@ -63,6 +63,45 @@
           </a-form-item>
         </div>
 
+        <a-form-item
+          v-if="form.module !== 'ui_automation'"
+          :label="modalText.environment"
+          field="environment"
+          :rules="[{ required: true, message: modalText.selectEnvironmentRequired }]"
+        >
+          <a-select
+            v-model="form.environment"
+            :placeholder="modalText.selectEnvironment"
+            :loading="loadingEnvironments"
+            allow-search
+            @popup-visible-change="(v: boolean) => v && loadEnvironments()"
+          >
+            <a-option v-for="env in environments" :key="env.id" :value="env.id">
+              {{ env.name }} ({{ env.base_url }})
+            </a-option>
+          </a-select>
+        </a-form-item>
+
+        <a-form-item
+          :label="modalText.uiEnvironment"
+          field="ui_environment"
+          :rules="form.module === 'ui_automation'
+            ? [{ required: true, message: modalText.selectUiEnvironmentRequired }]
+            : []"
+        >
+          <a-select
+            v-model="form.ui_environment"
+            :placeholder="modalText.selectUiEnvironment"
+            :loading="loadingUiEnvironments"
+            allow-search
+            @popup-visible-change="(v: boolean) => v && loadUiEnvironments()"
+          >
+            <a-option v-for="uiEnv in uiEnvironments" :key="uiEnv.id" :value="uiEnv.id">
+              {{ uiEnv.name }} ({{ uiEnv.browser }})
+            </a-option>
+          </a-select>
+        </a-form-item>
+
         <div v-if="form.module === 'ui_automation'" class="form-row-3">
           <a-form-item
             :label="modalText.actuator"
@@ -199,6 +238,12 @@ const modalText = computed(() => (
         chooseCases: 'Choose cases',
         selectTestSuite: 'Select Test Suite',
         selectTestSuiteRequired: 'Select a test suite',
+        environment: 'API Environment',
+        selectEnvironment: 'Select API environment',
+        selectEnvironmentRequired: 'Select an API environment',
+        uiEnvironment: 'UI Environment',
+        selectUiEnvironment: 'Select UI environment',
+        selectUiEnvironmentRequired: 'Select a UI environment',
         actuator: 'Actuator',
         selectActuator: 'Select actuator',
         selectActuatorRequired: 'Select an actuator',
@@ -249,6 +294,12 @@ const modalText = computed(() => (
         chooseCases: '选择用例',
         selectTestSuite: '选择测试套件',
         selectTestSuiteRequired: '请选择测试套件',
+        environment: 'API 环境配置',
+        selectEnvironment: '请选择 API 环境配置',
+        selectEnvironmentRequired: '请选择 API 环境配置',
+        uiEnvironment: 'UI 环境配置',
+        selectUiEnvironment: '请选择 UI 环境配置',
+        selectUiEnvironmentRequired: '请选择 UI 环境配置',
         actuator: '执行器',
         selectActuator: '请选择执行器',
         selectActuatorRequired: '请选择执行器',
@@ -287,8 +338,12 @@ const formRef = ref();
 
 const loadingSuites = ref(false);
 const loadingActuators = ref(false);
+const loadingEnvironments = ref(false);
+const loadingUiEnvironments = ref(false);
 const testSuites = ref<{ id: number; name: string }[]>([]);
 const actuators = ref<ActuatorInfo[]>([]);
+const environments = ref<{ id: number; name: string; base_url: string }[]>([]);
+const uiEnvironments = ref<{ id: number; name: string; browser: string }[]>([]);
 const caseSelectModal = ref<InstanceType<typeof UiTestCaseSelectModal>>();
 
 const scheduleOptions = computed(() => [
@@ -325,6 +380,8 @@ const defaultForm = (): TaskFormData => ({
   test_suite: null,
   ui_testcase_ids: [],
   actuator_id: '',
+  environment: 0,
+  ui_environment: null,
 });
 
 const form = reactive<TaskFormData>(defaultForm());
@@ -338,6 +395,14 @@ const selectedUiCasesText = computed(() => (
     ? modalText.value.selectedUiCases(form.ui_testcase_ids.length)
     : modalText.value.chooseCases
 ));
+
+const environmentValidator = (value: unknown, callback: (error?: string) => void) => {
+  if (!value || value === 0) {
+    callback(modalText.value.selectEnvironmentRequired);
+    return;
+  }
+  callback();
+};
 
 const getHeaders = () => {
   const authStore = useAuthStore();
@@ -381,6 +446,66 @@ const loadActuators = async () => {
   }
 };
 
+const loadEnvironments = async () => {
+  loadingEnvironments.value = true;
+  try {
+    const response = await axios.get(
+      `${API_BASE_URL}/projects/${props.projectId}/api-environments/`,
+      { headers: getHeaders() }
+    );
+    const responseData = response.data;
+    let list: any[] = [];
+    if (responseData?.status === 'success') {
+      list = Array.isArray(responseData.data)
+        ? responseData.data
+        : responseData.data?.results || [];
+    } else {
+      list = responseData?.results || responseData?.data || [];
+    }
+    environments.value = list
+      .filter((env: any) => env.is_active !== false)
+      .map((env: any) => ({ id: env.id, name: env.name, base_url: env.base_url }));
+  } catch {
+    environments.value = [];
+  } finally {
+    loadingEnvironments.value = false;
+  }
+};
+
+const loadUiEnvironments = async () => {
+  loadingUiEnvironments.value = true;
+  try {
+    const response = await axios.get(
+      `${API_BASE_URL}/ui-automation/env-configs/`,
+      {
+        headers: getHeaders(),
+        params: { project: props.projectId, page_size: 200 },
+      }
+    );
+    const responseData = response.data;
+    let list: any[] = [];
+    if (responseData?.status === 'success' && responseData.data) {
+      list = Array.isArray(responseData.data)
+        ? responseData.data
+        : responseData.data?.results || [];
+    } else if (Array.isArray(responseData)) {
+      list = responseData;
+    } else if (responseData?.results) {
+      list = responseData.results;
+    }
+    // 全部展示，不再按 is_default 过滤
+    uiEnvironments.value = list.map((env: any) => ({
+      id: env.id,
+      name: env.name,
+      browser: env.browser,
+    }));
+  } catch {
+    uiEnvironments.value = [];
+  } finally {
+    loadingUiEnvironments.value = false;
+  }
+};
+
 const onModuleChange = () => {
   form.test_suite = null;
   form.ui_testcase_ids = [];
@@ -401,6 +526,8 @@ const onCaseSelected = (ids: number[]) => {
 
 const open = (task?: ScheduledTask) => {
   resetForm();
+  loadEnvironments();
+  loadUiEnvironments();
 
   if (task) {
     isEditing.value = true;
@@ -422,6 +549,8 @@ const open = (task?: ScheduledTask) => {
       test_suite: task.test_suite,
       ui_testcase_ids: task.ui_testcase_ids || [],
       actuator_id: task.actuator_id || '',
+      environment: task.environment ?? 0,
+      ui_environment: task.ui_environment ?? null,
     });
   } else {
     isEditing.value = false;
