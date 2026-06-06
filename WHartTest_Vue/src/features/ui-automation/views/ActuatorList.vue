@@ -56,12 +56,18 @@
         </a-table-column>
         <a-table-column title="OPEN" :width="80" align="center">
           <template #cell="{ record }">
-            <a-switch v-model="record.is_open" size="small" disabled />
+            <a-switch
+              v-model="record.is_open"
+              size="small"
+              @change="onToggleOpen(record)"
+            />
           </template>
         </a-table-column>
         <a-table-column title="DEBUG" :width="80" align="center">
           <template #cell="{ record }">
-            <a-switch v-model="record.debug" size="small" disabled />
+            <a-tag :color="record.debug ? 'orangered' : 'gray'" size="small">
+              {{ record.debug ? '是' : '否' }}
+            </a-tag>
           </template>
         </a-table-column>
         <a-table-column title="连接时间" :width="170">
@@ -79,11 +85,13 @@ import { ref, onMounted, onUnmounted } from 'vue'
 import { IconRefresh } from '@arco-design/web-vue/es/icon'
 import { actuatorApi, type ActuatorInfo } from '../api'
 import { extractResponseData } from '../types'
+import { Message } from '@arco-design/web-vue'
 
 void IconRefresh
 
 const actuators = ref<ActuatorInfo[]>([])
 const loading = ref(false)
+const togglingIds = ref<Set<string>>(new Set())
 let refreshTimer: ReturnType<typeof setInterval> | null = null
 
 const loadActuators = async () => {
@@ -97,6 +105,21 @@ const loadActuators = async () => {
     actuators.value = []
   } finally {
     loading.value = false
+  }
+}
+
+const onToggleOpen = async (record: ActuatorInfo) => {
+  if (togglingIds.value.has(record.id)) return
+  togglingIds.value.add(record.id)
+  try {
+    await actuatorApi.toggleState(record.id, record.is_open)
+    Message.success(`${record.is_open ? '开启' : '关闭'}成功`)
+  } catch (e: any) {
+    // 切换失败时回滚 UI
+    record.is_open = !record.is_open
+    Message.error(e?.message || '切换失败，执行器可能已离线')
+  } finally {
+    togglingIds.value.delete(record.id)
   }
 }
 

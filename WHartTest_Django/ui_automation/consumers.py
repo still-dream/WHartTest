@@ -89,6 +89,21 @@ class SocketUserManager:
             return getattr(consumer, 'actuator_info', {})
         return {}
 
+    @classmethod
+    async def send_to_actuator_by_id(cls, actuator_id: str, socket_data) -> bool:
+        """向指定执行器发送 WebSocket 消息（供视图调用）"""
+        actuator = cls._actuator_users.get(actuator_id)
+        if not actuator:
+            return False
+        await actuator.send_json(socket_data)
+        return True
+
+    @classmethod
+    async def broadcast_to_web_users(cls, socket_data):
+        """广播消息给所有 Web 前端"""
+        for consumer in list(cls._web_users.values()):
+            await consumer.send_json(socket_data)
+
 
 class UiAutomationConsumer(AsyncWebsocketConsumer):
     """UI自动化WebSocket消费者"""
@@ -111,6 +126,25 @@ class UiAutomationConsumer(AsyncWebsocketConsumer):
 
     def _localize(self, message: str) -> str:
         return translate_app_text(message, self.language)
+
+    def _get_real_client_ip(self) -> str:
+        """优先从 HTTP headers（X-Forwarded-For）获取真实客户端 IP，次用 scope.client"""
+        headers = dict(self.scope.get('headers', []))
+        x_forwarded_for = None
+        for k, v in headers.items():
+            if isinstance(k, bytes) and k.lower() == b'x-forwarded-for':
+                x_forwarded_for = v.decode() if isinstance(v, bytes) else v
+                break
+            elif isinstance(k, str) and k.lower() == 'x-forwarded-for':
+                x_forwarded_for = v
+                break
+        if x_forwarded_for:
+            ip = x_forwarded_for.split(',')[0].strip()
+            logger.info(f"[IP DEBUG] X-Forwarded-For='{x_forwarded_for}', resolved_ip='{ip}', scope.client={self.scope.get('client')}")
+            return ip
+        client = self.scope.get('client', ['unknown', 0])
+        logger.info(f"[IP DEBUG] No X-Forwarded-For, scope.client={client}, all_headers={[(k,v) for k,v in headers.items()]}")
+        return client[0] if client else 'unknown'
     
     async def connect(self):
         """建立连接"""
@@ -119,9 +153,8 @@ class UiAutomationConsumer(AsyncWebsocketConsumer):
         query_params = self._get_query_params()
         self.language = query_params.get('lang', ['zh-Hans'])[0]
 
-        # 获取客户端IP
-        client = self.scope.get('client', ['unknown', 0])
-        client_ip = client[0] if client else 'unknown'
+        # 获取客户端IP（优先从 X-Forwarded-For 获取真实 IP）
+        client_ip = self._get_real_client_ip()
         
         # 根据路径判断是前端还是执行器
         if '/actuator/' in path:
@@ -616,7 +649,10 @@ class UiAutomationConsumer(AsyncWebsocketConsumer):
             self.actuator_info['headless'] = args['headless']
         if 'version' in args:
             self.actuator_info['version'] = args['version']
-        
+        # 允许执行器主动上报 IP（如宿主机 IP）
+        if 'ip' in args and args['ip']:
+            self.actuator_info['ip'] = args['ip']
+
         logger.info(f"执行器 {self.user_id} 信息已更新: {self.actuator_info}")
         
         await self.send_json(SocketDataModel(

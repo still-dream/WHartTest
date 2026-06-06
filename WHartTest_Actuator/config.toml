@@ -1,12 +1,12 @@
 [server]
-ws_url = "ws://127.0.0.1:8000/ws/ui/actuator/"
-api_url = "http://127.0.0.1:8913"
+ws_url = "ws://127.0.0.1:8913/ws/ui/actuator/"
+api_url = "http://10.66.110.24:8913"
 use_gui = true
 api_username = "admin"
 api_password = "admin123456"
 
 [actuator]
-name = "SkillForgeTest-001"
+name = "wangguohao"
 
 [browser]
 browser_type = "chromium"

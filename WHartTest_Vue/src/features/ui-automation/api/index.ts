@@ -231,4 +231,10 @@ export const actuatorApi = {
     request.get<{ count: number; items: ActuatorInfo[] }>(`${BASE_URL}/actuators/list_actuators/`),
 
   status: () => request.get<ActuatorStatus>(`${BASE_URL}/actuators/status/`),
+
+  toggleState: (actuatorId: string, isOpen: boolean) =>
+    request.patch<{ id: string; is_open: boolean }>(
+      `${BASE_URL}/actuators/${actuatorId}/toggle_state/`,
+      { is_open: isOpen }
+    ),
 }

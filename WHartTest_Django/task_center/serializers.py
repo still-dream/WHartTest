@@ -62,7 +62,10 @@ class ScheduledTaskSerializer(serializers.ModelSerializer):
         return None
 
     def validate_environment(self, value):
-        """校验环境属于当前项目"""
+        """校验环境属于当前项目（仅在填写时校验）"""
+        # 处理空值：None、0、空字符串都视为未选择
+        if value is None or (hasattr(value, 'id') and value.id in (None, 0)):
+            return None
         project = self.context.get('project')
         if project is not None and value.project_id != project.id:
             raise serializers.ValidationError('所选环境不属于当前项目')

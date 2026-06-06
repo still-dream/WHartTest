@@ -2,14 +2,17 @@
 # 复制此文件为 config.toml 并修改配置
 
 [server]
-# WebSocket服务器地址
-ws_url = "ws://127.0.0.1:8000/ws/ui/actuator/"
-# API服务器地址
-api_url = "http://127.0.0.1:8000"
+# WebSocket 服务器地址（重要：必须通过 Nginx 端口连接，否则 IP 显示为 Docker 内部网关 IP）
+# Nginx 端口默认为 8913（见 docker-compose.yml frontend.ports）
+ws_url = "ws://127.0.0.1:8913/ws/ui/actuator/"
+# API 服务器地址（与 ws_url 端口保持一致）
+api_url = "http://127.0.0.1:8913"
 # 是否启用 GUI 登录窗口（需要安装 PySide6）
 # true = 使用图形界面登录（推荐）
 # false = 使用配置文件中的账号密码，适合服务器无头部署
 use_gui = true
+# 本机 IP 地址（自动检测并写入，可手动指定）
+actuator_ip = "192.168.x.x"
 # API认证用户名（仅 use_gui=false 时有效）
 api_username = "admin"
 # API认证密码（仅 use_gui=false 时有效）

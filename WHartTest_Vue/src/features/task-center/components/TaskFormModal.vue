@@ -64,7 +64,7 @@
         </div>
 
         <a-form-item
-          v-if="form.module !== 'ui_automation'"
+          v-if="form.module === 'api_automation'"
           :label="modalText.environment"
           field="environment"
           :rules="[{ required: true, message: modalText.selectEnvironmentRequired }]"
@@ -83,11 +83,10 @@
         </a-form-item>
 
         <a-form-item
+          v-if="form.module === 'ui_automation' || form.module === 'test_suite'"
           :label="modalText.uiEnvironment"
           field="ui_environment"
-          :rules="form.module === 'ui_automation'
-            ? [{ required: true, message: modalText.selectUiEnvironmentRequired }]
-            : []"
+          :rules="[{ required: true, message: modalText.selectUiEnvironmentRequired }]"
         >
           <a-select
             v-model="form.ui_environment"
@@ -380,7 +379,7 @@ const defaultForm = (): TaskFormData => ({
   test_suite: null,
   ui_testcase_ids: [],
   actuator_id: '',
-  environment: 0,
+  environment: null,
   ui_environment: null,
 });
 

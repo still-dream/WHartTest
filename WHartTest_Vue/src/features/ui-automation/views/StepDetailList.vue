@@ -4,13 +4,13 @@
       <span class="step-title">{{ stepText.stepListTitle }}</span>
       <a-space>
         <a-select v-model="selectedEnvConfig" :placeholder="stepText.executionEnv" size="small" style="width: 120px" allow-clear>
-          <a-option v-for="env in envConfigs" :key="env.id" :value="env.id">
+          <a-option v-for="env in envConfigs" :key="env.id" :value="env.id" :title="env.name">
             {{ env.name }}
             <a-tag v-if="env.is_default" size="small" color="arcoblue" style="margin-left: 4px">{{ stepText.default }}</a-tag>
           </a-option>
         </a-select>
         <a-select v-model="selectedActuator" :placeholder="stepText.selectActuator" size="small" style="width: 150px" allow-clear>
-          <a-option v-for="act in actuators" :key="act.id" :value="act.id" :disabled="!act.is_open">
+          <a-option v-for="act in actuators" :key="act.id" :value="act.id" :disabled="!act.is_open" :title="`${act.name || act.id}${act.ip ? ' (' + act.ip + ')' : ''}`">
             {{ act.name || act.id }}
             <a-tag v-if="!act.is_open" size="small" color="gray" style="margin-left: 4px">{{ stepText.offline }}</a-tag>
           </a-option>

@@ -31,6 +31,7 @@ class UiSocketEnum:
     STEP_RESULT = 'u_step_result'         # 步骤执行结果
     CASE_RESULT = 'u_case_result'         # 用例执行结果
     SET_ACTUATOR_INFO = 't_set_actuator_info'  # 设置执行器信息
+    SET_ACTUATOR_STATE = 't_set_actuator_state'  # 切换执行器状态（is_open 等）
 
 
 class QueueModel(BaseModel):
@@ -46,7 +47,7 @@ class SocketDataModel(BaseModel):
     user: Optional[str] = None
     is_notice: int = NoticeType.WEB
     data: Optional[QueueModel] = None
-    
+
     def success_response(self, msg: str = 'success', data: Optional[QueueModel] = None) -> 'SocketDataModel':
         """创建成功响应"""
         return SocketDataModel(
@@ -56,7 +57,7 @@ class SocketDataModel(BaseModel):
             is_notice=self.is_notice,
             data=data
         )
-    
+
     def error_response(self, msg: str = 'error') -> 'SocketDataModel':
         """创建错误响应"""
         return SocketDataModel(

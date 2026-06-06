@@ -261,22 +261,18 @@ class PlaywrightExecutor:
             logger.debug(f"步骤 {step.step_id}: {operation} 耗时 {time.time() - op_start:.2f}s")
             return True, f"页面操作 {operation} 执行成功", None
         
-        # 元素操作（需要定位器）- 先验证定位器是否有效
+        # 元素操作（需要定位器）
         if not step.locator_value or not step.locator_value.strip():
             return False, f"元素定位器为空，请在元素管理中配置定位表达式（步骤: {step.description or step.step_id}）", None
         
         locator_start = time.time()
         locator = self._get_locator(page, step.locator_type, step.locator_value)
         
-        # 先等待元素可见（更短的超时时间加快检测）
-        try:
-            await locator.wait_for(state="visible", timeout=5000)
-        except Exception:
-            # 5秒内没有可见，继续尝试操作（可能是 hidden 元素）
-            pass
+        # 不额外执行 wait_for，Playwright 的 click/fill 等操作已内置自动等待
+        # 这样可以避免每个步骤多 1-5 秒的延迟
         
         locator_time = time.time() - locator_start
-        logger.debug(f"步骤 {step.step_id}: 定位元素 [{step.locator_type}={step.locator_value}] 耗时 {locator_time:.2f}s")
+        logger.debug(f"步骤 {step.step_id}: 获取定位器 [{step.locator_type}={step.locator_value}] 耗时 {locator_time:.2f}s")
         
         element_operations = {
             'click': lambda: locator.click(),

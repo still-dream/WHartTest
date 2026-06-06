@@ -518,6 +518,46 @@ class ActuatorViewSet(viewsets.ViewSet):
             }
         })
 
+    @action(detail=True, methods=['patch'])
+    def toggle_state(self, request, pk=None):
+        """切换执行器的 is_open 状态"""
+        from .consumers import SocketUserManager
+        from .socket_models import SocketDataModel, QueueModel, NoticeType, ResponseCode, UiSocketEnum
+
+        actuator = SocketUserManager.get_actuator_by_id(pk)
+        if not actuator:
+            return Response({'error': f'执行器 {pk} 不在线'}, status=status.HTTP_404_NOT_FOUND)
+
+        is_open = request.data.get('is_open')
+        if is_open is None:
+            return Response({'error': '缺少 is_open 参数'}, status=status.HTTP_400_BAD_REQUEST)
+
+        # 更新内存中执行器的 actuator_info
+        actuator.actuator_info['is_open'] = bool(is_open)
+
+        # 通过 WebSocket 通知执行器
+        import asyncio
+        from asgiref.sync import async_to_sync
+
+        async def _send():
+            await actuator.send_json(SocketDataModel(
+                code=ResponseCode.SUCCESS,
+                msg='update_state',
+                user=request.user.username if hasattr(request.user, 'username') else 'web',
+                is_notice=NoticeType.ACTUATOR,
+                data=QueueModel(
+                    func_name=UiSocketEnum.SET_ACTUATOR_STATE,
+                    func_args={'is_open': bool(is_open)}
+                ),
+            ))
+
+        async_to_sync(_send)()
+
+        return Response({
+            'status': 'success',
+            'data': {'id': pk, 'is_open': bool(is_open)},
+        })
+
 
 class UiBatchExecutionRecordViewSet(viewsets.ModelViewSet):
     """批量执行记录管理视图"""

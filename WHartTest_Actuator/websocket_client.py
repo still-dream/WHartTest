@@ -1,11 +1,12 @@
+#!/usr/bin/env python
 """
 UI自动化执行器 - WebSocket客户端
-
 """
 
 import asyncio
 import json
 import logging
+import socket
 from typing import Optional, Callable, Any
 from urllib.parse import parse_qsl, urlencode, urlsplit, urlunsplit
 import websockets
@@ -14,6 +15,22 @@ from websockets.client import WebSocketClientProtocol
 from models import SocketDataModel, QueueModel, ResponseCode, NoticeType, UiSocketEnum
 
 logger = logging.getLogger('actuator')
+
+
+def get_local_ip() -> str:
+    """获取本机默认出口 IP（用于上报给服务端）"""
+    try:
+        s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+        s.settimeout(1.0)
+        # 连接到一个外部地址，不实际发送数据，只获取本机路由 IP
+        s.connect(("8.8.8.8", 53))
+        ip = s.getsockname()[0]
+        s.close()
+        logger.info(f"自动检测本机 IP: {ip}")
+        return ip
+    except Exception as e:
+        logger.warning(f"自动检测本机 IP 失败，使用 127.0.0.1: {e}")
+        return "127.0.0.1"
 
 
 def build_websocket_connect_url(url: str, actuator_id: str | None = None) -> str:
@@ -43,9 +60,9 @@ def build_websocket_origin(url: str) -> str | None:
 
 class WebSocketClient:
     """WebSocket客户端 - 连接Django后端"""
-    
+
     VERSION = '1.0.0'
-    
+
     def __init__(self, url: str, actuator_id: str = 'default', config: Any = None):
         self.url = url
         self.actuator_id = actuator_id
@@ -56,11 +73,11 @@ class WebSocketClient:
         self.max_reconnect_attempts = 0  # 0表示无限重试
         self._message_handler: Optional[Callable] = None
         self._stop_event = asyncio.Event()
-    
+
     def set_message_handler(self, handler: Callable[[SocketDataModel], Any]):
         """设置消息处理器"""
         self._message_handler = handler
-    
+
     async def connect(self) -> bool:
         """建立WebSocket连接"""
         try:
@@ -80,7 +97,7 @@ class WebSocketClient:
             )
             self.connected = True
             logger.info(f"已连接到服务器: {connect_url}")
-            
+
             # 连接成功后发送执行器信息
             await self._send_actuator_info()
             return True
@@ -88,22 +105,26 @@ class WebSocketClient:
             logger.error(f"连接失败: {e}")
             self.connected = False
             return False
-    
+
     async def _send_actuator_info(self):
         """发送执行器信息到服务端"""
+        # 优先使用配置中的 IP，否则自动检测本机 IP
+        actuator_ip = getattr(self.config, 'actuator_ip', None) or get_local_ip()
+
         actuator_info = {
             'name': getattr(self.config, 'actuator_name', None) or self.actuator_id,
             'type': 'web_ui',
+            'ip': actuator_ip,  # 上报本机 IP
             'is_open': True,
             'debug': False,
             'version': self.VERSION,
         }
-        
+
         # 从配置中获取浏览器相关设置
         if self.config:
             actuator_info['browser_type'] = getattr(self.config, 'browser_type', 'chromium')
             actuator_info['headless'] = getattr(self.config, 'headless', False)
-        
+
         await self.send(SocketDataModel(
             code=ResponseCode.SUCCESS,
             msg='设置执行器信息',
@@ -113,7 +134,7 @@ class WebSocketClient:
             )
         ))
         logger.info(f"已发送执行器信息: {actuator_info}")
-    
+
     async def disconnect(self):
         """断开连接"""
         self._stop_event.set()
@@ -122,13 +143,13 @@ class WebSocketClient:
             self.websocket = None
         self.connected = False
         logger.info("已断开连接")
-    
+
     async def send(self, data: SocketDataModel):
         """发送消息"""
         if not self.websocket or not self.connected:
             logger.error("未连接，无法发送消息")
             return False
-        
+
         try:
             await self.websocket.send(data.model_dump_json())
             return True
@@ -136,7 +157,7 @@ class WebSocketClient:
             logger.error(f"发送消息失败: {e}")
             self.connected = False
             return False
-    
+
     async def send_result(self, func_name: str, args: dict, user: Optional[str] = None):
         """发送执行结果"""
         await self.send(SocketDataModel(
@@ -146,7 +167,7 @@ class WebSocketClient:
             is_notice=NoticeType.WEB,
             data=QueueModel(func_name=func_name, func_args=args)
         ))
-    
+
     async def receive_loop(self):
         """接收消息循环"""
         while not self._stop_event.is_set():
@@ -154,7 +175,7 @@ class WebSocketClient:
                 # 尝试重连
                 await self._reconnect()
                 continue
-            
+
             try:
                 message = await asyncio.wait_for(
                     self.websocket.recv(),
@@ -169,30 +190,30 @@ class WebSocketClient:
             except Exception as e:
                 logger.error(f"接收消息错误: {e}")
                 self.connected = False
-    
+
     async def _reconnect(self):
         """重连逻辑"""
         attempts = 0
         while not self._stop_event.is_set():
             attempts += 1
             logger.info(f"尝试重连 ({attempts})...")
-            
+
             if await self.connect():
                 return
-            
+
             if self.max_reconnect_attempts > 0 and attempts >= self.max_reconnect_attempts:
                 logger.error("达到最大重连次数，停止重连")
                 self._stop_event.set()
                 return
-            
+
             await asyncio.sleep(self.reconnect_interval)
-    
+
     async def _handle_message(self, message: str):
         """处理接收到的消息"""
         try:
             data = json.loads(message)
             socket_data = SocketDataModel(**data)
-            
+
             if self._message_handler:
                 await self._message_handler(socket_data)
             else:
@@ -201,10 +222,10 @@ class WebSocketClient:
             logger.error(f"消息JSON解析错误: {e}")
         except Exception as e:
             logger.error(f"处理消息错误: {e}")
-    
+
     async def run(self):
         """运行客户端"""
         if not await self.connect():
             logger.error("初始连接失败")
-        
+
         await self.receive_loop()

@@ -51,9 +51,11 @@ class Config:
     """配置类"""
     
     def __init__(self):
+        self._config_path: str = "config.toml"
         # 默认配置
-        self.ws_url = "ws://127.0.0.1:8000/ws/ui/actuator/"
-        self.api_url = "http://127.0.0.1:8000"
+        # 重要：通过 Nginx 端口（默认 8913）连接，Nginx 会设置 X-Forwarded-For
+        self.ws_url = "ws://127.0.0.1:8913/ws/ui/actuator/"
+        self.api_url = "http://127.0.0.1:8913"
         # 打包成 exe 时默认启用 GUI 登录，开发模式默认关闭
         self.use_gui = getattr(sys, 'frozen', False)
         self.api_username = "admin"
@@ -61,6 +63,7 @@ class Config:
         self.actuator_id: str | None = None
         self.actuator_name: str | None = None
         self.actuator_description: str | None = None
+        self.actuator_ip: str | None = None  # 自动检测并上报的本机 IP
         
         # 浏览器配置
         self.browser_type = "chromium"
@@ -108,6 +111,7 @@ class Config:
             self.use_gui = data['server'].get('use_gui', self.use_gui)
             self.api_username = data['server'].get('api_username', self.api_username)
             self.api_password = data['server'].get('api_password', self.api_password)
+            self.actuator_ip = data['server'].get('actuator_ip', None)
         
         # 执行器配置
         if 'actuator' in data:
@@ -146,6 +150,41 @@ class Config:
             self.log_level = data['logging'].get('level', self.log_level)
             self.log_file = data['logging'].get('file')
     
+    def detect_and_save_ip(self, config_path: str | None = None) -> str:
+        """自动检测本机 IP 并保存到 config.toml，返回检测到的 IP"""
+        from websocket_client import get_local_ip
+        ip = get_local_ip()
+        self.actuator_ip = ip
+        path = Path(config_path) if config_path else Path(self._config_path)
+        if not path.exists():
+            return ip
+        try:
+            text = path.read_text(encoding='utf-8')
+            import re as _re
+            # 在 [server] 节中查找/替换 actuator_ip
+            def patch_section(section):
+                # 已有则替换
+                if _re.search(r'^actuator_ip\s*=', section, _re.MULTILINE):
+                    return _re.sub(r'^actuator_ip\s*=.*$', f'actuator_ip = "{ip}"', section, _re.MULTILINE)
+                # 没有则在 use_gui 后面追加
+                return _re.sub(
+                    r'^(\s*use_gui\s*=.*)$',
+                    r'\1\nactuator_ip = "' + ip + '"',
+                    section,
+                    flags=_re.MULTILINE
+                )
+            new_text = _re.sub(
+                r'(\n\[server\].*?)(?=\n\[|\n\w|\Z)',
+                lambda m: patch_section(m.group(1)),
+                text,
+                flags=_re.DOTALL
+            )
+            path.write_text(new_text, encoding='utf-8')
+            logging.getLogger('actuator').info(f"本机 IP 已保存到 config.toml: {ip}")
+        except Exception as e:
+            logging.getLogger('actuator').warning(f"保存 IP 到 config.toml 失败: {e}")
+        return ip
+
     def apply_args(self, args: argparse.Namespace) -> None:
         """应用命令行参数（覆盖配置文件）"""
         if args.server:
@@ -304,7 +343,10 @@ async def main():
     
     # 生成执行器ID
     actuator_id = config.actuator_id or f"actuator-{os.getpid()}"
-    
+
+    # 自动检测本机 IP 并保存到 config.toml，WebSocket 连接时会自动上报
+    config.detect_and_save_ip()
+
     logger.info("=" * 50)
     logger.info("UI自动化执行器启动")
     logger.info(f"执行器ID: {actuator_id}")

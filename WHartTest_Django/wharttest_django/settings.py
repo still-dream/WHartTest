@@ -631,6 +631,12 @@ LOGGING = {
             "level": "WARNING",
             "propagate": False,
         },
+        # UI 自动化日志（IP DEBUG 等调试信息需要 INFO 级别）
+        "ui_automation": {
+            "handlers": ["console", "app_file", "error_file"],
+            "level": "DEBUG",
+            "propagate": False,
+        },
     },
 }
 

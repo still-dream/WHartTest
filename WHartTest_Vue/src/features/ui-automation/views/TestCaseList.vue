@@ -46,7 +46,7 @@
               {{ pageText.noOnlineActuators }}
             </div>
           </template>
-          <a-option v-for="act in actuators" :key="act.id" :value="act.id" :disabled="!act.is_open">
+          <a-option v-for="act in actuators" :key="act.id" :value="act.id" :disabled="!act.is_open" :title="`${act.name || act.id}${act.ip ? ' (' + act.ip + ')' : ''}`">
             {{ act.name || act.id }}
             <a-tag v-if="act.is_open" color="green" size="small" style="margin-left: 4px">{{ pageText.online }}</a-tag>
             <a-tag v-else color="gray" size="small" style="margin-left: 4px">{{ pageText.offline }}</a-tag>
@@ -58,7 +58,7 @@
           allow-clear
           style="width: 150px"
         >
-          <a-option v-for="env in envConfigs" :key="env.id" :value="env.id">
+          <a-option v-for="env in envConfigs" :key="env.id" :value="env.id" :title="formatEnvLabel(env)">
             {{ formatEnvLabel(env) }}
           </a-option>
         </a-select>

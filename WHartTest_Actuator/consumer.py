@@ -59,6 +59,7 @@ class TaskConsumer:
         self.task_queue: asyncio.Queue[QueueModel] = asyncio.Queue()
         self._stop_event = asyncio.Event()
         self._current_user: Optional[str] = None
+        self.is_open: bool = True
 
         # 启动时清理过期文件（超过7天）
         self._cleanup_expired_files(
@@ -171,23 +172,59 @@ class TaskConsumer:
             logger.warning(f"截图编码失败: {e}")
             return None
     
+    async def _upload_screenshot(self, local_path: str) -> Optional[str]:
+        """通过 HTTP 上传截图到服务端，返回服务端存储路径
+        
+        替代 Base64 编码方式，减少数据传输量和内存占用
+        """
+        if not local_path or not os.path.exists(local_path):
+            logger.warning(f"截图文件不存在: {local_path}")
+            return None
+            
+        token = await self._get_api_token()
+        if not token:
+            logger.error("无法获取 API Token，跳过截图上传")
+            return None
+            
+        url = f"{self.api_base_url}/api/ui-automation/screenshots/upload/"
+        try:
+            async with httpx.AsyncClient() as client:
+                with open(local_path, 'rb') as f:
+                    files = {'file': f}
+                    response = await client.post(
+                        url,
+                        headers={"Authorization": f"Bearer {token}"},
+                        files=files,
+                        timeout=30.0
+                    )
+                    if response.status_code == 201:
+                        data = response.json()
+                        server_url = data.get('url')
+                        logger.debug(f"截图上传成功: {server_url}")
+                        return server_url
+                    else:
+                        logger.error(f"截图上传失败: {response.status_code}")
+                        return None
+        except Exception as e:
+            logger.error(f"截图上传异常: {e}")
+            return None
+    
     async def _process_result_screenshots(self, result: CaseResultModel) -> CaseResultModel:
-        """处理结果中的截图，转为 Base64 数据 URL，并清理本地文件"""
+        """处理结果中的截图，通过 HTTP 上传到服务端，返回存储路径"""
         import os
         for step in result.steps:
             if step.screenshot:
                 local_path = step.screenshot
-                base64_url = await self._encode_screenshot_base64(local_path)
-                if base64_url:
-                    step.screenshot = base64_url
+                server_url = await self._upload_screenshot(local_path)
+                if server_url:
+                    step.screenshot = server_url
                     # 清理本地截图文件
                     try:
                         abs_path = os.path.abspath(local_path) if local_path.startswith('./') else local_path
                         if os.path.exists(abs_path):
                             os.remove(abs_path)
-                            logger.debug(f"已清理本地截图: {abs_path}")
-                    except Exception as e:
-                        logger.warning(f"清理截图失败: {e}")
+                    except Exception:
+                        pass
                 else:
                     step.screenshot = None
         return result
@@ -210,6 +247,7 @@ class TaskConsumer:
             return None
 
         url = f"{self.api_base_url}/api/ui-automation/traces/upload/"
+        server_path = None
         try:
             async with httpx.AsyncClient() as client:
                 with open(trace_path, 'rb') as f:
@@ -222,23 +260,25 @@ class TaskConsumer:
                     )
                     if response.status_code == 201:
                         resp_data = response.json()
-                        # 响应被中间件包装，path 在 data 字段中
                         inner_data = resp_data.get('data', resp_data)
                         server_path = inner_data.get('path')
                         logger.info(f"Trace 上传成功: {server_path}")
-                        # 清理本地 Trace 文件
-                        try:
-                            os.remove(trace_path)
-                            logger.debug(f"已清理本地 Trace: {trace_path}")
-                        except Exception as e:
-                            logger.warning(f"清理 Trace 失败: {e}")
-                        return server_path
                     else:
                         logger.error(f"Trace 上传失败: {response.status_code}")
                         return None
         except Exception as e:
             logger.error(f"Trace 上传异常: {e}")
             return None
+        
+        # 上传成功后清理本地文件（必须在 with 块外面，确保文件句柄已关闭）
+        if server_path:
+            try:
+                os.remove(trace_path)
+                logger.debug(f"已清理本地 Trace: {trace_path}")
+            except Exception as e:
+                logger.warning(f"清理 Trace 失败: {e}")
+        
+        return server_path
 
     async def handle_message(self, socket_data: SocketDataModel):
         """处理接收到的消息"""
@@ -287,6 +327,7 @@ class TaskConsumer:
             UiSocketEnum.TEST_CASE: self.execute_test_case,
             UiSocketEnum.TEST_CASE_BATCH: self.execute_batch,
             UiSocketEnum.STOP_EXECUTION: self.stop_execution,
+            UiSocketEnum.SET_ACTUATOR_STATE: self.handle_set_actuator_state,
         }
         
         handler = handlers.get(task.func_name)
@@ -295,6 +336,18 @@ class TaskConsumer:
         else:
             logger.warning(f"未知任务类型: {task.func_name}")
     
+    async def handle_set_actuator_state(self, args: dict):
+        """处理执行器状态切换（is_open 等），并回应服务端"""
+        is_open = args.get('is_open')
+        if is_open is not None:
+            self.is_open = bool(is_open)
+            logger.info(f"执行器状态已更新: is_open={self.is_open}")
+        # 回应服务端确认
+        await self.ws_client.send_result(
+            func_name='actuator_state_updated',
+            args={'is_open': self.is_open}
+        )
+
     async def execute_page_steps(self, args: dict):
         """执行页面步骤"""
         page_step_id = args.get('page_step_id')
@@ -340,31 +393,24 @@ class TaskConsumer:
         passed_steps = sum(1 for r in step_results if r.status == 'success')
         failed_steps = len(step_results) - passed_steps
         
-        # 处理截图为 Base64 并发送步骤结果
+        # 处理截图（通过 HTTP 上传到服务端，返回存储路径，减少 WebSocket 数据量）
         import os
         for result in step_results:
             if result.screenshot:
                 local_path = result.screenshot
-                base64_url = await self._encode_screenshot_base64(local_path)
-                if base64_url:
-                    result.screenshot = base64_url
-                    # 清理本地截图文件
+                server_url = await self._upload_screenshot(local_path)
+                if server_url:
+                    result.screenshot = server_url
                     try:
                         abs_path = os.path.abspath(local_path) if local_path.startswith('./') else local_path
                         if os.path.exists(abs_path):
                             os.remove(abs_path)
-                            logger.debug(f"已清理本地截图: {abs_path}")
-                    except Exception as e:
-                        logger.warning(f"清理截图失败: {e}")
+                    except Exception:
+                        pass
+                else:
+                    result.screenshot = None
 
-            # 发送步骤结果
-            await self.ws_client.send_result(
-                UiSocketEnum.STEP_RESULT,
-                result.model_dump(),
-                self._current_user
-            )
-        
-        # 发送页面步骤执行汇总结果
+        # 发送页面步骤执行汇总结果（一次性发送，减少 WebSocket 往返）
         summary_result = {
             'page_step_id': page_step_id,
             'status': 'success' if failed_steps == 0 else 'failed',
@@ -375,9 +421,9 @@ class TaskConsumer:
             'duration': time.time() - start_time,
             'steps': [r.model_dump() for r in step_results],
         }
-        
+
         await self.ws_client.send_result(
-            'u_page_step_result',  # 新增的结果类型
+            'u_page_step_result',
             summary_result,
             self._current_user
         )
