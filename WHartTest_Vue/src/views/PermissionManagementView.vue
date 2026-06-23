@@ -312,10 +312,12 @@ onMounted(() => {
   border-radius: 8px;
   padding: 20px;
   box-shadow: var(--theme-card-shadow);
-  height: calc(100vh - 87px);
+  height: 100%;
+  min-height: 0;
   box-sizing: border-box;
   display: flex;
   flex-direction: column;
+  overflow: hidden;
 }
 
 .permission-content {

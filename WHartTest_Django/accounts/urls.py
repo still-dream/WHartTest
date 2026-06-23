@@ -22,4 +22,6 @@ urlpatterns = [
     path('', include(router.urls)),  # 挂载 ViewSet 自动路由。
     path('register/', UserCreateAPIView.as_view(), name='user-register'),  # 用户注册端点。
     path('me/', CurrentUserAPIView.as_view(), name='user-me'),  # 当前登录用户信息端点。
+    # 挂载操作日志路由（GET/列表、统计、清理旧日志等）。
+    path('', include('accounts.operation_logs.urls')),
 ]

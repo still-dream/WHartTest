@@ -20,6 +20,7 @@ from PySide6.QtWidgets import (
     QCheckBox,
     QComboBox,
     QDialog,
+    QDoubleSpinBox,
     QFrame,
     QGraphicsDropShadowEffect,
     QGridLayout,
@@ -38,6 +39,77 @@ import httpx
 import tomli
 import tomli_w
 from pathlib import Path
+from PySide6.QtWidgets import QAbstractSpinBox
+
+
+class NoWheelSpinBox(QSpinBox):
+    """禁用滚轮 + 隐藏步进按钮的 SpinBox, 只能手动输入数字
+
+    隐藏上下箭头按钮(避免 QSS 渲染问题), 仅保留 QLineEdit 输入区.
+    滚轮步进、上下按钮步进均关闭, 只能直接键入数字.
+    """
+
+    def __init__(self, parent=None):
+        super().__init__(parent)
+        # 隐藏右侧上下箭头按钮, 只保留左侧数字输入框
+        self.setButtonSymbols(QAbstractSpinBox.NoButtons)
+        # 给内置的 QLineEdit 子部件也装上事件过滤器
+        line_edit = self.lineEdit()
+        if line_edit is not None:
+            line_edit.installEventFilter(self)
+
+    def eventFilter(self, obj, event):
+        """拦截子 QLineEdit 上的滚轮事件, 防止步进"""
+        from PySide6.QtCore import QEvent
+        if obj is self.lineEdit() and event.type() == QEvent.Wheel:
+            # 吞掉事件, 不传给父 QScrollArea
+            return True
+        return super().eventFilter(obj, event)
+
+    def wheelEvent(self, event):
+        """禁用滚轮: 直接忽略(交给父控件的滚动条), 不触发 stepBy"""
+        event.ignore()
+
+
+class NoWheelDoubleSpinBox(QDoubleSpinBox):
+    """禁用滚轮 + 隐藏步进按钮的 DoubleSpinBox, 只能手动输入数字"""
+
+    def __init__(self, parent=None):
+        super().__init__(parent)
+        # 隐藏右侧上下箭头按钮
+        self.setButtonSymbols(QAbstractSpinBox.NoButtons)
+        line_edit = self.lineEdit()
+        if line_edit is not None:
+            line_edit.installEventFilter(self)
+
+    def eventFilter(self, obj, event):
+        from PySide6.QtCore import QEvent
+        if obj is self.lineEdit() and event.type() == QEvent.Wheel:
+            return True
+        return super().eventFilter(obj, event)
+
+    def wheelEvent(self, event):
+        event.ignore()
+
+
+class NoWheelComboBox(QComboBox):
+    """禁用滚轮切换的 ComboBox, 只能点击下拉按钮或方向键切换"""
+
+    def __init__(self, parent=None):
+        super().__init__(parent)
+        # 给弹出列表的视图也装上事件过滤器, 防止滚轮在弹层上切换
+        self.view().installEventFilter(self)
+
+    def eventFilter(self, obj, event):
+        from PySide6.QtCore import QEvent
+        if obj is self.view() and event.type() == QEvent.Wheel:
+            # 让弹层滚轮正常滚动(选项多时方便看), 但不切换当前选中
+            return False
+        return super().eventFilter(obj, event)
+
+    def wheelEvent(self, event):
+        # 关闭状态下滚轮不切换选项, 交给父控件(QScrollArea)滚动
+        event.ignore()
 
 
 class LoginWorker(QThread):
@@ -616,7 +688,6 @@ class LoginWindow(QDialog):
                 border: 1px solid #e0e0e0;
                 border-radius: 8px;
                 padding: 8px 12px;
-                padding-right: 36px;
                 font-size: 14px;
                 background-color: #fafafa;
                 color: #333;
@@ -627,52 +698,6 @@ class LoginWindow(QDialog):
             QSpinBox:focus {
                 border-color: #1976D2;
                 background-color: white;
-            }
-            QSpinBox::up-button {
-                subcontrol-origin: border;
-                subcontrol-position: top right;
-                width: 24px;
-                height: 18px;
-                background: #f5f5f5;
-                border: none;
-                border-left: 1px solid #e0e0e0;
-                border-top-right-radius: 7px;
-            }
-            QSpinBox::up-button:hover {
-                background: #e3f2fd;
-            }
-            QSpinBox::up-button:pressed {
-                background: #bbdefb;
-            }
-            QSpinBox::down-button {
-                subcontrol-origin: border;
-                subcontrol-position: bottom right;
-                width: 24px;
-                height: 18px;
-                background: #f5f5f5;
-                border: none;
-                border-left: 1px solid #e0e0e0;
-                border-bottom-right-radius: 7px;
-            }
-            QSpinBox::down-button:hover {
-                background: #e3f2fd;
-            }
-            QSpinBox::down-button:pressed {
-                background: #bbdefb;
-            }
-            QSpinBox::up-arrow {
-                width: 0;
-                height: 0;
-                border-left: 5px solid transparent;
-                border-right: 5px solid transparent;
-                border-bottom: 5px solid #666;
-            }
-            QSpinBox::down-arrow {
-                width: 0;
-                height: 0;
-                border-left: 5px solid transparent;
-                border-right: 5px solid transparent;
-                border-top: 5px solid #666;
             }
         """
 
@@ -749,7 +774,7 @@ class LoginWindow(QDialog):
         browser_label.setStyleSheet(label_style)
         scroll_layout.addWidget(browser_label)
 
-        self.browser_type_combo = QComboBox()
+        self.browser_type_combo = NoWheelComboBox()
         self.browser_type_combo.addItems(["chromium", "firefox", "webkit"])
         self.browser_type_combo.setStyleSheet(combo_style)
         self.browser_type_combo.setFixedHeight(40)
@@ -771,7 +796,7 @@ class LoginWindow(QDialog):
         timeout_label.setStyleSheet(label_style)
         scroll_layout.addWidget(timeout_label)
 
-        self.launch_timeout_spin = QSpinBox()
+        self.launch_timeout_spin = NoWheelSpinBox()
         self.launch_timeout_spin.setRange(10, 120)
         self.launch_timeout_spin.setValue(30)
         self.launch_timeout_spin.setStyleSheet(spinbox_style)
@@ -783,7 +808,7 @@ class LoginWindow(QDialog):
         action_timeout_label.setStyleSheet(label_style)
         scroll_layout.addWidget(action_timeout_label)
 
-        self.action_timeout_spin = QSpinBox()
+        self.action_timeout_spin = NoWheelSpinBox()
         self.action_timeout_spin.setRange(5, 60)
         self.action_timeout_spin.setValue(30)
         self.action_timeout_spin.setStyleSheet(spinbox_style)
@@ -802,7 +827,7 @@ class LoginWindow(QDialog):
         retry_label.setStyleSheet(label_style)
         scroll_layout.addWidget(retry_label)
 
-        self.retry_count_spin = QSpinBox()
+        self.retry_count_spin = NoWheelSpinBox()
         self.retry_count_spin.setRange(0, 10)
         self.retry_count_spin.setValue(3)
         self.retry_count_spin.setStyleSheet(spinbox_style)
@@ -810,12 +835,12 @@ class LoginWindow(QDialog):
         scroll_layout.addWidget(self.retry_count_spin)
 
         # 步骤间隔时间
-        step_interval_label = QLabel("步骤间隔（毫秒）")
+        step_interval_label = QLabel("步骤间隔（毫秒，每步成功后等待）")
         step_interval_label.setStyleSheet(label_style)
         scroll_layout.addWidget(step_interval_label)
 
-        self.step_interval_spin = QSpinBox()
-        self.step_interval_spin.setRange(0, 5000)
+        self.step_interval_spin = NoWheelSpinBox()
+        self.step_interval_spin.setRange(0, 60000)
         self.step_interval_spin.setValue(500)
         self.step_interval_spin.setSingleStep(100)
         self.step_interval_spin.setStyleSheet(spinbox_style)
@@ -827,12 +852,25 @@ class LoginWindow(QDialog):
         max_concurrent_label.setStyleSheet(label_style)
         scroll_layout.addWidget(max_concurrent_label)
 
-        self.max_concurrent_spin = QSpinBox()
+        self.max_concurrent_spin = NoWheelSpinBox()
         self.max_concurrent_spin.setRange(1, 10)
         self.max_concurrent_spin.setValue(3)
         self.max_concurrent_spin.setStyleSheet(spinbox_style)
         self.max_concurrent_spin.setFixedHeight(40)
         scroll_layout.addWidget(self.max_concurrent_spin)
+
+        # 用例结束浏览器等待(毫秒) - Trace 补抓最后帧
+        tail_wait_label = QLabel("用例结束浏览器等待（毫秒，用于 Trace 补帧）")
+        tail_wait_label.setStyleSheet(label_style)
+        scroll_layout.addWidget(tail_wait_label)
+
+        self.tail_wait_spin = NoWheelSpinBox()
+        self.tail_wait_spin.setRange(0, 10000)
+        self.tail_wait_spin.setSingleStep(500)
+        self.tail_wait_spin.setValue(1000)
+        self.tail_wait_spin.setStyleSheet(spinbox_style)
+        self.tail_wait_spin.setFixedHeight(40)
+        scroll_layout.addWidget(self.tail_wait_spin)
 
         scroll_layout.addSpacing(8)
 
@@ -877,7 +915,7 @@ class LoginWindow(QDialog):
         log_level_label.setStyleSheet(label_style)
         scroll_layout.addWidget(log_level_label)
 
-        self.log_level_combo = QComboBox()
+        self.log_level_combo = NoWheelComboBox()
         self.log_level_combo.addItems(["DEBUG", "INFO", "WARNING", "ERROR"])
         self.log_level_combo.setCurrentText("INFO")
         self.log_level_combo.setStyleSheet(combo_style)
@@ -1124,6 +1162,12 @@ class LoginWindow(QDialog):
         self.retry_count_spin.setValue(execution.get('retry_count', 3))
         self.step_interval_spin.setValue(execution.get('step_interval', 500))
         self.max_concurrent_spin.setValue(execution.get('max_concurrent', 3))
+        # 加载用例结束浏览器等待(毫秒); 兼容旧配置 tail_wait_seconds (秒)
+        _old_tail = execution.get('tail_wait_seconds')
+        _new_tail = execution.get('tail_wait_ms')
+        if _new_tail is None and _old_tail is not None:
+            _new_tail = int(float(_old_tail) * 1000)
+        self.tail_wait_spin.setValue(_new_tail if _new_tail is not None else 1000)
         
         # 加载 Trace 设置
         trace = self._config.get('trace', {})
@@ -1201,6 +1245,7 @@ class LoginWindow(QDialog):
         self._config['execution']['retry_count'] = self.retry_count_spin.value()
         self._config['execution']['step_interval'] = self.step_interval_spin.value()
         self._config['execution']['max_concurrent'] = self.max_concurrent_spin.value()
+        self._config['execution']['tail_wait_ms'] = self.tail_wait_spin.value()
         
         # 更新 Trace 配置
         if 'trace' not in self._config:
@@ -1329,6 +1374,11 @@ class LoginWindow(QDialog):
     def max_concurrent(self) -> int:
         """获取批量执行最大并发数"""
         return self.max_concurrent_spin.value()
+
+    @property
+    def tail_wait_ms(self) -> int:
+        """获取用例结束浏览器等待时间(毫秒)"""
+        return self.tail_wait_spin.value()
     
     @property
     def log_level(self) -> str:
@@ -1371,6 +1421,7 @@ def show_login_dialog(config_path: str = "config.toml") -> Optional[dict]:
             'retry_count': login_window.retry_count,
             'step_interval': login_window.step_interval,
             'max_concurrent': login_window.max_concurrent,
+            'tail_wait_ms': login_window.tail_wait_ms,
             'log_level': login_window.log_level,
         }
     return None

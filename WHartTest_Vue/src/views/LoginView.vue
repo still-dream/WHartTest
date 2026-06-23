@@ -362,9 +362,10 @@ onBeforeUnmount(() => {
 }
 
 .brand-logo {
+  display: block;
+  margin: 0 auto 16px;
   width: 72px;
   height: 72px;
-  margin-bottom: 16px;
   filter: drop-shadow(0 0 20px rgba(100, 180, 255, 0.4));
 }
 

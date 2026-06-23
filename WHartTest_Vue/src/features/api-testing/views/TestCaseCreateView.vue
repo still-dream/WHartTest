@@ -47,6 +47,7 @@ const handleSuccess = (payload: { id: number }) => {
 <style scoped>
 .api-testing-container {
   height: 100%;
+  min-height: 0;
   background: var(--tc-create-page-bg);
   border: 1px solid var(--tc-create-page-border);
   border-radius: 8px;

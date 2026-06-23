@@ -70,8 +70,18 @@ class UiPageStepsDetailedSerializer(serializers.ModelSerializer):
 class UiPageStepsDetailedExecuteSerializer(serializers.ModelSerializer):
     """步骤详情序列化器（含元素定位信息，用于执行器）"""
     element_name = serializers.CharField(source='element.name', read_only=True)
+    # 主定位
     locator_type = serializers.CharField(source='element.locator_type', read_only=True)
     locator_value = serializers.CharField(source='element.locator_value', read_only=True)
+    locator_index = serializers.IntegerField(source='element.locator_index', read_only=True)
+    # 备用定位 1
+    locator_type_2 = serializers.CharField(source='element.locator_type_2', read_only=True)
+    locator_value_2 = serializers.CharField(source='element.locator_value_2', read_only=True)
+    locator_index_2 = serializers.IntegerField(source='element.locator_index_2', read_only=True)
+    # 备用定位 2
+    locator_type_3 = serializers.CharField(source='element.locator_type_3', read_only=True)
+    locator_value_3 = serializers.CharField(source='element.locator_value_3', read_only=True)
+    locator_index_3 = serializers.IntegerField(source='element.locator_index_3', read_only=True)
     wait_time = serializers.IntegerField(source='element.wait_time', read_only=True)
 
     class Meta:

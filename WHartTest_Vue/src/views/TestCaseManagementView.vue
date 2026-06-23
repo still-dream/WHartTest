@@ -840,6 +840,7 @@ onBeforeUnmount(() => {
 .testcase-management-container {
   display: flex;
   height: 100%;
+  min-height: 0;
   background-color: var(--color-bg-1);
   overflow: hidden;
 }

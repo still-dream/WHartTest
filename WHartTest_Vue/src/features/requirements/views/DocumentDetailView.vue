@@ -1616,6 +1616,7 @@ onBeforeUnmount(() => {
   padding: 24px;
   background: transparent; /* 使用主布局的背景 */
   height: 100%;
+  min-height: 0;
   overflow-y: auto;
   overflow-x: hidden;
   box-sizing: border-box;

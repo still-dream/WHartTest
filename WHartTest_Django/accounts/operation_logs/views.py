@@ -5,6 +5,8 @@ from rest_framework.permissions import IsAuthenticated
 from django_filters.rest_framework import DjangoFilterBackend
 from django.utils import timezone
 from datetime import timedelta
+from wharttest_django.pagination import StandardPagination
+from .filters import OperationLogFilter
 from .models import OperationLog
 from .serializers import OperationLogSerializer
 
@@ -12,14 +14,17 @@ from .serializers import OperationLogSerializer
 class OperationLogViewSet(viewsets.ReadOnlyModelViewSet):
     """
     操作日志视图集
-    
+
     提供操作日志的查询、筛选功能
     """
     queryset = OperationLog.objects.all()
     serializer_class = OperationLogSerializer
     permission_classes = [IsAuthenticated]
+    # 服务端真分页：默认每页 20，前端可使用 ?page= 与 ?page_size= 控制。
+    pagination_class = StandardPagination
     filter_backends = [DjangoFilterBackend, filters.SearchFilter, filters.OrderingFilter]
-    filterset_fields = ['user', 'username', 'feature', 'created_at']
+    # 自定义筛选器，支持 created_at__gte / created_at__lte 范围查询
+    filterset_class = OperationLogFilter
     search_fields = ['username', 'feature', 'path']
     ordering_fields = ['created_at', 'username', 'feature']
     ordering = ['-created_at']

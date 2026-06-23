@@ -78,6 +78,7 @@ class Config:
         self.step_interval = 500
         self.screenshot_dir = "./data/screenshots"
         self.max_concurrent = 3  # 批量执行最大并发数
+        self.tail_wait_ms = 1000  # 用例结束后浏览器额外等待(毫秒), 用于 trace 补抓最后帧
         
         # Trace 配置
         self.trace_enabled = True
@@ -135,6 +136,13 @@ class Config:
             self.step_interval = execution.get('step_interval', self.step_interval)
             self.screenshot_dir = execution.get('screenshot_dir', self.screenshot_dir)
             self.max_concurrent = execution.get('max_concurrent', self.max_concurrent)
+            # tail_wait_ms (毫秒); 兼容旧配置 tail_wait_seconds (秒)
+            _old = execution.get('tail_wait_seconds')
+            _new = execution.get('tail_wait_ms')
+            if _new is None and _old is not None:
+                _new = int(float(_old) * 1000)
+            if _new is not None:
+                self.tail_wait_ms = _new
         
         # Trace 配置
         if 'trace' in data:
@@ -331,6 +339,7 @@ async def main():
         config.retry_count = login_result.get('retry_count', config.retry_count)
         config.step_interval = login_result.get('step_interval', config.step_interval)
         config.max_concurrent = login_result.get('max_concurrent', config.max_concurrent)
+        config.tail_wait_ms = login_result.get('tail_wait_ms', config.tail_wait_ms)
         # 更新 Trace 配置
         config.trace_enabled = login_result.get('trace_enabled', config.trace_enabled)
         config.trace_screenshots = login_result.get('trace_screenshots', config.trace_screenshots)

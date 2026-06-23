@@ -296,11 +296,12 @@ onBeforeRouteLeave(async () => {
 
 <style scoped>
 .docx-editor-page {
-  min-height: 100%;
+  min-height: 0;
   height: 100%;
   box-sizing: border-box;
   display: flex;
   flex-direction: column;
+  overflow: hidden;
 }
 
 .page-alert {

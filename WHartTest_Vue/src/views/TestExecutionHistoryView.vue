@@ -540,7 +540,10 @@ onUnmounted(() => {
 .test-execution-history-view {
   padding: 24px;
   background: transparent;
-  min-height: 100%;
+  height: 100%;
+  min-height: 0;
+  box-sizing: border-box;
+  overflow-y: auto;
 }
 
 .no-project-selected {

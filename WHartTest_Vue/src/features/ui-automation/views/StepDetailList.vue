@@ -134,25 +134,25 @@
             <a-form-item
               v-for="param in currentOpeParams"
               :key="param.field"
-              :field="'opeParams.' + param.field"
+              :field="param.field"
               :label="getParamLabel(param)"
               :required="param.required"
             >
               <a-input
                 v-if="param.type === 'input'"
-                v-model="opeParams[param.field]"
+                v-model="formData[param.field]"
                 :placeholder="getParamPlaceholder(param)"
               />
               <a-input-number
                 v-else-if="param.type === 'number'"
-                v-model="opeParams[param.field]"
+                v-model="formData[param.field]"
                 :placeholder="getParamPlaceholder(param)"
                 :min="param.min"
                 :max="param.max"
               />
               <a-textarea
                 v-else-if="param.type === 'textarea'"
-                v-model="opeParams[param.field]"
+                v-model="formData[param.field]"
                 :placeholder="getParamPlaceholder(param)"
                 :auto-size="{ minRows: 2, maxRows: 5 }"
               />
@@ -183,17 +183,18 @@
             <a-form-item
               v-for="param in currentOpeParams"
               :key="param.field"
+              :field="param.field"
               :label="getParamLabel(param)"
               :required="param.required"
             >
               <a-input
                 v-if="param.type === 'input'"
-                v-model="opeParams[param.field]"
+                v-model="formData[param.field]"
                 :placeholder="getParamPlaceholder(param)"
               />
               <a-input-number
                 v-else-if="param.type === 'number'"
-                v-model="opeParams[param.field]"
+                v-model="formData[param.field]"
                 :placeholder="getParamPlaceholder(param)"
                 :min="param.min"
                 :max="param.max"
@@ -508,7 +509,7 @@ const executing = ref(false)
 const envConfigs = ref<UiEnvironmentConfig[]>([])
 const selectedEnvConfig = ref<number | undefined>(undefined)
 
-const formData = reactive<Partial<UiPageStepsDetailed>>({
+const formData = reactive<Record<string, any>>({
   step_type: 0,
   element: null,
   ope_key: '',
@@ -519,8 +520,6 @@ const formData = reactive<Partial<UiPageStepsDetailed>>({
   func: '',
   description: '',
 })
-
-const opeParams = reactive<Record<string, any>>({})
 const sqlExecuteStr = ref('{}')
 const customStr = ref('{}')
 const conditionValueStr = ref('{}')
@@ -530,9 +529,12 @@ const currentOpeParams = computed(() => {
   return OPE_PARAMS_MAP[formData.ope_key || ''] || []
 })
 
+/** 动态参数字段名集合（用于清理 formData 上的扁平字段） */
+const currentParamFields = computed(() => currentOpeParams.value.map(p => p.field))
+
 /** 操作方法变更时重置参数 */
 const onOpeKeyChange = () => {
-  Object.keys(opeParams).forEach(k => delete opeParams[k])
+  currentParamFields.value.forEach(k => delete formData[k])
 }
 
 const rules = {
@@ -659,6 +661,11 @@ const fetchElements = async () => {
 }
 
 const resetForm = () => {
+  // 先清空所有动态参数（基于当前已定义的 OPE_PARAMS_MAP 全部字段）
+  const allParamFields = new Set<string>()
+  Object.values(OPE_PARAMS_MAP).forEach(arr => arr.forEach(p => allParamFields.add(p.field)))
+  allParamFields.forEach(k => delete formData[k])
+
   Object.assign(formData, {
     step_type: 0,
     element: null,
@@ -670,7 +677,6 @@ const resetForm = () => {
     func: '',
     description: '',
   })
-  Object.keys(opeParams).forEach(k => delete opeParams[k])
   sqlExecuteStr.value = '{}'
   customStr.value = '{}'
   conditionValueStr.value = '{}'
@@ -702,15 +708,17 @@ const editStep = (step: UiPageStepsDetailed) => {
     func: step.func || '',
     description: step.description || '',
   })
-  // 从 ope_value 还原参数到 opeParams
-  Object.keys(opeParams).forEach(k => delete opeParams[k])
+  // 从 ope_value 还原参数到 formData（动态参数字段已扁平化）
+  currentParamFields.value.forEach(k => delete formData[k])
   if (step.ope_value && typeof step.ope_value === 'object') {
-    Object.assign(opeParams, step.ope_value)
-    
+    Object.entries(step.ope_value).forEach(([k, v]) => {
+      formData[k] = v
+    })
+
     // 兼容性处理：如果 ope_value 使用 'value' 字段而不是 'text' 字段，进行转换
     if (step.ope_key === 'fill' && step.ope_value.value !== undefined && step.ope_value.text === undefined) {
       // 将 value 字段的内容复制到 text 字段，以兼容前端表单
-      opeParams.text = step.ope_value.value
+      formData.text = step.ope_value.value
     }
   }
   sqlExecuteStr.value = JSON.stringify(step.sql_execute || {}, null, 2)
@@ -727,21 +735,22 @@ const parseJson = (str: string, defaultVal: Record<string, unknown> = {}) => {
   }
 }
 
-/** 构建 ope_value：从 opeParams 中过滤空值 */
+/** 构建 ope_value：从 formData 的动态参数字段中过滤空值 */
 const buildOpeValue = () => {
   const result: Record<string, any> = {}
-  for (const [k, v] of Object.entries(opeParams)) {
+  for (const k of currentParamFields.value) {
+    const v = formData[k]
     if (v !== '' && v !== undefined && v !== null) {
       result[k] = v
     }
   }
-  
+
   // 兼容性处理：对于 fill 操作，如果存在 text 字段，也同步到 value 字段
   // 这样后端执行器可以正确识别两种格式
   if (formData.ope_key === 'fill' && result.text !== undefined) {
     result.value = result.text
   }
-  
+
   return Object.keys(result).length > 0 ? result : undefined
 }
 
@@ -753,11 +762,11 @@ const handleSubmit = async (done: (closed: boolean) => void) => {
     done(false)
     return
   }
-  
+
   // 额外的业务逻辑校验：对于 fill 操作，必须填写输入内容
   if (formData.ope_key === 'fill') {
-    const textValue = opeParams.text
-    if (!textValue || textValue.trim() === '') {
+    const textValue = formData.text
+    if (!textValue || String(textValue).trim() === '') {
       Message.warning(stepText.value.enterContent)
       done(false)
       return

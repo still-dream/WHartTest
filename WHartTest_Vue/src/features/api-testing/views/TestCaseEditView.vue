@@ -40,6 +40,7 @@ const goBackToTestCases = () => {
 <style scoped>
 .api-testing-container {
   height: 100%;
+  min-height: 0;
   background: var(--tc-edit-page-bg);
   border: 1px solid var(--tc-edit-page-border);
   border-radius: 8px;

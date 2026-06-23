@@ -690,6 +690,7 @@ onMounted(() => {
 <style scoped>
 .task-center {
   height: 100%;
+  min-height: 0;
   display: flex;
   flex-direction: column;
   padding: 20px;

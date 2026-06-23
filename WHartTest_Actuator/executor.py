@@ -26,10 +26,19 @@ class StepConfig:
     operation_type: str      # click, fill, goto, wait, assert等
     locator_type: str        # xpath, css, id等
     locator_value: str
+    locator_index: int = 0   # 元素下标(0=不取nth, 1=nth(1)...)
+    # 备用定位 1(主定位失败时回退)
+    locator_type_2: str = ''
+    locator_value_2: str = ''
+    locator_index_2: int = 0
+    # 备用定位 2(备用1失败时再回退)
+    locator_type_3: str = ''
+    locator_value_3: str = ''
+    locator_index_3: int = 0
     input_value: str = ''
     description: str = ''
     wait_time: float = 0
-    
+
     # 步骤详情(公共步骤)
     details: list['StepConfig'] = field(default_factory=list)
 
@@ -69,6 +78,12 @@ class PlaywrightExecutor:
         trace_screenshots: bool = True,
         trace_snapshots: bool = True,
         trace_sources: bool = False,
+        # 元素操作失败后的重试次数(0 = 不重试)
+        retry_count: int = 0,
+        # 步骤间隔(毫秒), 每步操作成功后等待
+        step_interval: int = 0,
+        # 用例结束后浏览器额外等待(毫秒), 用于 trace 补抓最后帧
+        tail_wait_ms: int = 1000,
     ):
         self.browser_type = browser_type
         self.headless = headless
@@ -84,6 +99,10 @@ class PlaywrightExecutor:
         self.trace_screenshots = trace_screenshots
         self.trace_snapshots = trace_snapshots
         self.trace_sources = trace_sources
+        # 执行配置
+        self.retry_count = retry_count
+        self.step_interval = step_interval
+        self.tail_wait_ms = tail_wait_ms
         
         self._playwright: Optional[Playwright] = None
         self._browser: Optional[Browser] = None
@@ -176,7 +195,15 @@ class PlaywrightExecutor:
             
         finally:
             # 停止 Trace 并保存
+            # 停止前等 1 秒, 让 trace 多抓最后一帧截图(避免最后 1-2 秒画面缺失)
             if self.trace_enabled and self._context:
+                try:
+                    if self._page and not self._page.is_closed():
+                        logger.debug(f"Trace 停止前等待 {self.tail_wait_ms}ms, 以抓取最后帧")
+                        await self._page.wait_for_timeout(self.tail_wait_ms)
+                except Exception as e:
+                    logger.warning(f"Trace 尾部等待失败(忽略): {e}")
+
                 try:
                     timestamp = int(time.time() * 1000)
                     trace_path = f"{self.trace_dir}/{trace_name}_{timestamp}.zip"
@@ -185,7 +212,7 @@ class PlaywrightExecutor:
                     logger.info(f"Trace 已保存: {trace_path}")
                 except Exception as e:
                     logger.error(f"保存 Trace 失败: {e}")
-            
+
             await self.close()
     
     def get_current_trace_path(self) -> Optional[str]:
@@ -196,8 +223,15 @@ class PlaywrightExecutor:
         """请求停止执行"""
         self._stop_requested = True
     
-    def _get_locator(self, page: Page, locator_type: str, locator_value: str):
-        """根据定位类型获取元素定位器"""
+    def _get_locator(self, page: Page, locator_type: str, locator_value: str, locator_index: int = 0):
+        """根据定位类型获取元素定位器
+        
+        Args:
+            page: Playwright Page 对象
+            locator_type: 定位类型 (xpath/css/id/name/text/role/placeholder/label/testid)
+            locator_value: 定位表达式
+            locator_index: 元素下标, 0=不取 nth(默认第一个匹配); >0 时调用 .nth(n)
+        """
         locator_map = {
             'xpath': lambda: page.locator(f"xpath={locator_value}"),
             'css': lambda: page.locator(locator_value),
@@ -209,7 +243,39 @@ class PlaywrightExecutor:
             'label': lambda: page.get_by_label(locator_value),
             'testid': lambda: page.get_by_test_id(locator_value),
         }
-        return locator_map.get(locator_type, lambda: page.locator(locator_value))()
+        loc = locator_map.get(locator_type, lambda: page.locator(locator_value))()
+        # 当 index > 0 时,取第 index 个匹配元素
+        if locator_index and locator_index > 0:
+            loc = loc.nth(locator_index)
+        return loc
+
+    def _build_locator_chain(self, page: Page, step: StepConfig) -> list[tuple[str, object]]:
+        """构建定位器回退链: [(描述, locator), ...]
+        
+        按 主定位 → 备用1 → 备用2 的顺序构造。
+        备用定位只有在 type 和 value 都不为空时才会加入链。
+        """
+        chain: list[tuple[str, object]] = []
+
+        if step.locator_value and step.locator_value.strip():
+            chain.append((
+                f"主定位[{step.locator_type}={step.locator_value}, index={step.locator_index}]",
+                self._get_locator(page, step.locator_type, step.locator_value, step.locator_index)
+            ))
+
+        if step.locator_type_2 and step.locator_value_2 and step.locator_value_2.strip():
+            chain.append((
+                f"备用1[{step.locator_type_2}={step.locator_value_2}, index={step.locator_index_2}]",
+                self._get_locator(page, step.locator_type_2, step.locator_value_2, step.locator_index_2 or 0)
+            ))
+
+        if step.locator_type_3 and step.locator_value_3 and step.locator_value_3.strip():
+            chain.append((
+                f"备用2[{step.locator_type_3}={step.locator_value_3}, index={step.locator_index_3}]",
+                self._get_locator(page, step.locator_type_3, step.locator_value_3, step.locator_index_3 or 0)
+            ))
+
+        return chain
     
     async def _execute_step(self, page: Page, step: StepConfig) -> tuple[bool, str, str | None]:
         """执行单个步骤
@@ -261,61 +327,116 @@ class PlaywrightExecutor:
             logger.debug(f"步骤 {step.step_id}: {operation} 耗时 {time.time() - op_start:.2f}s")
             return True, f"页面操作 {operation} 执行成功", None
         
-        # 元素操作（需要定位器）
+        # 元素操作（需要定位器, 支持主定位→备用1→备用2 的回退）
         if not step.locator_value or not step.locator_value.strip():
             return False, f"元素定位器为空，请在元素管理中配置定位表达式（步骤: {step.description or step.step_id}）", None
-        
+
+        locator_chain = self._build_locator_chain(page, step)
+        if not locator_chain:
+            return False, f"元素定位器为空，请在元素管理中配置定位表达式（步骤: {step.description or step.step_id}）", None
+
         locator_start = time.time()
-        locator = self._get_locator(page, step.locator_type, step.locator_value)
-        
-        # 不额外执行 wait_for，Playwright 的 click/fill 等操作已内置自动等待
-        # 这样可以避免每个步骤多 1-5 秒的延迟
-        
-        locator_time = time.time() - locator_start
-        logger.debug(f"步骤 {step.step_id}: 获取定位器 [{step.locator_type}={step.locator_value}] 耗时 {locator_time:.2f}s")
-        
-        element_operations = {
-            'click': lambda: locator.click(),
-            'dblclick': lambda: locator.dblclick(),
-            'fill': lambda: locator.fill(step.input_value),
-            'type': lambda: locator.type(step.input_value),
-            'clear': lambda: locator.fill(""),
-            'check': lambda: locator.check(),
-            'uncheck': lambda: locator.uncheck(),
-            'select': lambda: locator.select_option(step.input_value),
-            'hover': lambda: locator.hover(),
-            'focus': lambda: locator.focus(),
-            'press': lambda: locator.press(step.input_value),
-            'upload': lambda: locator.set_input_files(step.input_value),
+        chain_desc = " → ".join(desc for desc, _ in locator_chain)
+        logger.debug(f"步骤 {step.step_id}: 定位器链 [{chain_desc}] 耗时 {time.time() - locator_start:.2f}s")
+
+        # 元素操作闭包: 给定一个 locator, 返回对应的 Playwright 异步操作
+        def _click_loc(loc):    return loc.click()
+        def _dblclick_loc(loc): return loc.dblclick()
+        def _fill_loc(loc):     return loc.fill(step.input_value)
+        def _type_loc(loc):     return loc.type(step.input_value)
+        def _clear_loc(loc):    return loc.fill("")
+        def _check_loc(loc):    return loc.check()
+        def _uncheck_loc(loc):  return loc.uncheck()
+        def _select_loc(loc):   return loc.select_option(step.input_value)
+        def _hover_loc(loc):    return loc.hover()
+        def _focus_loc(loc):    return loc.focus()
+        def _press_loc(loc):    return loc.press(step.input_value)
+        def _upload_loc(loc):   return loc.set_input_files(step.input_value)
+
+        element_op_map = {
+            'click':    _click_loc,
+            'dblclick': _dblclick_loc,
+            'fill':     _fill_loc,
+            'type':     _type_loc,
+            'clear':    _clear_loc,
+            'check':    _check_loc,
+            'uncheck':  _uncheck_loc,
+            'select':   _select_loc,
+            'hover':    _hover_loc,
+            'focus':    _focus_loc,
+            'press':    _press_loc,
+            'upload':   _upload_loc,
         }
-        
-        if operation in element_operations:
+
+        if operation in element_op_map:
             action_start = time.time()
-            await element_operations[operation]()
-            action_time = time.time() - action_start
-            logger.debug(f"步骤 {step.step_id}: {operation} 操作耗时 {action_time:.2f}s (总计 {time.time() - op_start:.2f}s)")
-            return True, f"元素操作 {operation} 执行成功", None
-        
-        # 断言操作
+            op_fn = element_op_map[operation]
+            # 元素操作层重试: 总尝试次数 = retry_count + 1
+            total_attempts = max(1, self.retry_count + 1)
+            last_error: Exception | None = None
+            for attempt in range(1, total_attempts + 1):
+                for idx, (desc, loc) in enumerate(locator_chain):
+                    try:
+                        await op_fn(loc)
+                        action_time = time.time() - action_start
+                        used = "主定位" if idx == 0 else f"备用{idx}"
+                        logger.debug(f"步骤 {step.step_id}: {operation} 使用 {used} 成功 ({desc}) 第{attempt}/{total_attempts}次尝试 耗时 {action_time:.2f}s (总计 {time.time() - op_start:.2f}s)")
+                        # 成功后, 等待 step_interval 毫秒(给页面渲染留缓冲)
+                        if self.step_interval and self.step_interval > 0:
+                            await page.wait_for_timeout(self.step_interval)
+                        return True, f"元素操作 {operation} 执行成功", None
+                    except Exception as e:
+                        last_error = e
+                        if idx + 1 < len(locator_chain):
+                            logger.warning(f"步骤 {step.step_id}: {operation} 第{attempt}/{total_attempts}次: {desc} 失败: {e}, 尝试下一个定位器")
+                # 一轮回退链都失败, 如果还有重试次数则等 500ms 再来
+                if attempt < total_attempts:
+                    logger.warning(f"步骤 {step.step_id}: {operation} 第{attempt}轮所有定位器失败, 500ms 后重试")
+                    await page.wait_for_timeout(500)
+            logger.error(f"步骤 {step.step_id}: {operation} 重试{self.retry_count}次后仍失败, 最后错误: {last_error}")
+            return False, f"元素操作 {operation} 失败(重试{self.retry_count}次): {last_error}", None
+
+        # 断言操作(同样走回退链)
         if operation.startswith('assert_'):
             assert_type = operation.replace('assert_', '')
-            assert_operations = {
-                'visible': lambda: expect(locator).to_be_visible(),
-                'hidden': lambda: expect(locator).to_be_hidden(),
-                'enabled': lambda: expect(locator).to_be_enabled(),
-                'disabled': lambda: expect(locator).to_be_disabled(),
-                'checked': lambda: expect(locator).to_be_checked(),
-                'text': lambda: expect(locator).to_have_text(step.input_value),
-                'value': lambda: expect(locator).to_have_value(step.input_value),
-                'contain_text': lambda: expect(locator).to_contain_text(step.input_value),
-                'url': lambda: expect(page).to_have_url(step.input_value),
+            assert_op_map = {
+                'visible':       lambda loc: expect(loc).to_be_visible(),
+                'hidden':        lambda loc: expect(loc).to_be_hidden(),
+                'enabled':       lambda loc: expect(loc).to_be_enabled(),
+                'disabled':      lambda loc: expect(loc).to_be_disabled(),
+                'checked':       lambda loc: expect(loc).to_be_checked(),
+                'text':          lambda loc: expect(loc).to_have_text(step.input_value),
+                'value':         lambda loc: expect(loc).to_have_value(step.input_value),
+                'contain_text':  lambda loc: expect(loc).to_contain_text(step.input_value),
+            }
+            # url/title 是页面级断言, 不走回退
+            page_assert_map = {
+                'url':   lambda: expect(page).to_have_url(step.input_value),
                 'title': lambda: expect(page).to_have_title(step.input_value),
             }
-            if assert_type in assert_operations:
-                await assert_operations[assert_type]()
+
+            if assert_type in page_assert_map:
+                await page_assert_map[assert_type]()
                 logger.debug(f"步骤 {step.step_id}: assert_{assert_type} 耗时 {time.time() - op_start:.2f}s")
                 return True, f"断言 {assert_type} 通过", None
-        
+
+            if assert_type in assert_op_map:
+                assert_fn = assert_op_map[assert_type]
+                last_error: Exception | None = None
+                for idx, (desc, loc) in enumerate(locator_chain):
+                    try:
+                        await assert_fn(loc)
+                        used = "主定位" if idx == 0 else f"备用{idx}"
+                        logger.debug(f"步骤 {step.step_id}: assert_{assert_type} 使用 {used} 成功 ({desc}) 耗时 {time.time() - op_start:.2f}s")
+                        return True, f"断言 {assert_type} 通过", None
+                    except Exception as e:
+                        last_error = e
+                        if idx + 1 < len(locator_chain):
+                            logger.warning(f"步骤 {step.step_id}: assert_{assert_type} 使用 {desc} 失败: {e}, 尝试下一个定位器")
+                        else:
+                            logger.error(f"步骤 {step.step_id}: assert_{assert_type} 全部定位器均失败, 最后错误: {e}")
+                return False, f"断言 {assert_type} 失败: {last_error}", None
+
         return False, f"未知操作类型: {operation}", None
     
     async def execute_step(self, step: StepConfig, page_url: str = '') -> StepResultModel:

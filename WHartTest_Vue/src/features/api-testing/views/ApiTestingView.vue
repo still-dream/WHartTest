@@ -112,6 +112,7 @@ const tabItems = computed(() => isEnglish.value ? [
 <style scoped>
 .api-testing-container {
   height: 100%;
+  min-height: 0;
   display: flex;
   flex-direction: column;
   overflow: hidden;

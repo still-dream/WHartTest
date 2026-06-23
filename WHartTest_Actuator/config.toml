@@ -21,6 +21,7 @@ retry_count = 3
 step_interval = 100
 screenshot_dir = "./data/screenshots"
 max_concurrent = 3
+tail_wait_ms = 1000
 
 [trace]
 enabled = true

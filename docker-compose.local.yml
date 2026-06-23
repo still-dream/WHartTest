@@ -54,12 +54,14 @@ services:
       context: ./WHartTest_Django
       dockerfile: Dockerfile
       args:
-        PYTHON_BASE_IMAGE: ${DOCKER_PYTHON_BASE_IMAGE:-python:3.11-slim}
+        # 基础镜像走 DaoCloud 镜像代理，绕开 daemon 的 registry-mirrors（sjtug）抽风。
+        PYTHON_BASE_IMAGE: ${DOCKER_PYTHON_BASE_IMAGE:-docker.m.daocloud.io/library/python:3.11-slim}
         APT_BASE_URL: ${DOCKER_APT_BASE_URL:-http://deb.debian.org}
         PIP_INDEX_URL: ${DOCKER_PIP_INDEX_URL:-https://pypi.org/simple}
         PIP_INDEX_FALLBACKS: ${DOCKER_PIP_INDEX_FALLBACKS:-}
         HF_ENDPOINT: ${DOCKER_HF_ENDPOINT:-https://huggingface.co}
-        NPM_REGISTRY: ${DOCKER_NPM_REGISTRY:-https://registry.npmjs.org}
+        # 后端虽不直接跑 npm，保留镜像代理以防 supervisord 流程中触发。
+        NPM_REGISTRY: ${DOCKER_NPM_REGISTRY:-https://registry.npmmirror.com}
         PLAYWRIGHT_DOWNLOAD_HOST: ${DOCKER_PLAYWRIGHT_DOWNLOAD_HOST:-}
     container_name: wharttest-backend
     # 启动逻辑已移至 Dockerfile 的 ENTRYPOINT 和 supervisord.conf
@@ -130,8 +132,10 @@ services:
       context: ./WHartTest_WeixinPluginHost
       dockerfile: Dockerfile
       args:
-        NODE_BASE_IMAGE: ${DOCKER_NODE_22_BASE_IMAGE:-node:22-alpine}
-        NPM_REGISTRY: ${DOCKER_NPM_REGISTRY:-https://registry.npmjs.org}
+        # 基础镜像走 DaoCloud 镜像代理，绕开 daemon 的 registry-mirrors（sjtug）抽风。
+        NODE_BASE_IMAGE: ${DOCKER_NODE_22_BASE_IMAGE:-docker.m.daocloud.io/library/node:22-alpine}
+        # npm 包源走 npmmirror，国内拉包更稳。
+        NPM_REGISTRY: ${DOCKER_NPM_REGISTRY:-https://registry.npmmirror.com}
     container_name: wharttest-weixin-plugin-host
     ports:
       - "0.0.0.0:8922:3001"
@@ -167,9 +171,11 @@ services:
       context: ./WHartTest_Vue
       dockerfile: Dockerfile
       args:
-        NODE_BASE_IMAGE: ${DOCKER_NODE_BASE_IMAGE:-node:20-alpine}
-        NGINX_BASE_IMAGE: ${DOCKER_NGINX_BASE_IMAGE:-nginx:alpine}
-        NPM_REGISTRY: ${DOCKER_NPM_REGISTRY:-https://registry.npmjs.org}
+        # 基础镜像走 DaoCloud 镜像代理，避免 daemon 的 registry-mirrors（sjtug 等）抽风时拖垮构建。
+        NODE_BASE_IMAGE: ${DOCKER_NODE_BASE_IMAGE:-docker.m.daocloud.io/library/node:20-alpine}
+        NGINX_BASE_IMAGE: ${DOCKER_NGINX_BASE_IMAGE:-docker.m.daocloud.io/library/nginx:alpine}
+        # npm 包源走 npmmirror，国内拉包更稳。
+        NPM_REGISTRY: ${DOCKER_NPM_REGISTRY:-https://registry.npmmirror.com}
     container_name: wharttest-frontend
     ports:
       - "0.0.0.0:8913:80"
@@ -192,7 +198,8 @@ services:
       context: ./WHartTest_MCP
       dockerfile: Dockerfile
       args:
-        PYTHON_BASE_IMAGE: ${DOCKER_PYTHON_BASE_IMAGE:-python:3.11-slim}
+        # 基础镜像走 DaoCloud 镜像代理，绕开 daemon 的 registry-mirrors（sjtug）抽风。
+        PYTHON_BASE_IMAGE: ${DOCKER_PYTHON_BASE_IMAGE:-docker.m.daocloud.io/library/python:3.11-slim}
         APT_BASE_URL: ${DOCKER_APT_BASE_URL:-http://deb.debian.org}
         PIP_INDEX_URL: ${DOCKER_PIP_INDEX_URL:-https://pypi.org/simple}
         PIP_INDEX_FALLBACKS: ${DOCKER_PIP_INDEX_FALLBACKS:-}

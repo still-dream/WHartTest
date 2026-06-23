@@ -168,6 +168,7 @@ MIDDLEWARE = [
     "django.contrib.auth.middleware.AuthenticationMiddleware",  # 将用户对象绑定到 request。
     "django.contrib.messages.middleware.MessageMiddleware",  # 消息框架中间件。
     "django.middleware.clickjacking.XFrameOptionsMiddleware",  # 防点击劫持响应头。
+    "accounts.operation_logs.middleware.OperationLogMiddleware",  # 操作日志中间件：自动记录已登录用户的 API 访问。
 ]
 
 # 指定项目根路由模块。

@@ -49,6 +49,7 @@ onMounted(async () => {
 <style scoped>
 .api-testing-container {
   height: 100%;
+  min-height: 0;
   background: var(--tt-history-page-bg);
   border: 1px solid var(--tt-history-page-border);
   border-radius: 8px;

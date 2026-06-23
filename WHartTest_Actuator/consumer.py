@@ -4,6 +4,7 @@ UI自动化执行器 - 任务消费者
 
 import asyncio
 import logging
+import os
 import time
 from typing import Optional, Any
 import httpx
@@ -54,6 +55,10 @@ class TaskConsumer:
                 'trace_screenshots': getattr(config, 'trace_screenshots', True),
                 'trace_snapshots': getattr(config, 'trace_snapshots', True),
                 'trace_sources': getattr(config, 'trace_sources', False),
+                # 执行配置
+                'retry_count': getattr(config, 'retry_count', 0),
+                'step_interval': getattr(config, 'step_interval', 0),
+                'tail_wait_ms': getattr(config, 'tail_wait_ms', 1000),
             }
         self.executor = PlaywrightExecutor(**executor_config)
         self.task_queue: asyncio.Queue[QueueModel] = asyncio.Queue()
@@ -174,7 +179,7 @@ class TaskConsumer:
     
     async def _upload_screenshot(self, local_path: str) -> Optional[str]:
         """通过 HTTP 上传截图到服务端，返回服务端存储路径
-        
+
         替代 Base64 编码方式，减少数据传输量和内存占用
         """
         if not local_path or not os.path.exists(local_path):
@@ -698,19 +703,27 @@ class TaskConsumer:
             
             # 定位器值也可能包含变量
             locator_value = detail.get('locator_value', '')
-            
-            # 变量替换：替换 input_value 和 locator_value 中的 ${{变量名}}
+            locator_value_2 = detail.get('locator_value_2') or ''
+            locator_value_3 = detail.get('locator_value_3') or ''
+
+            # 变量替换：替换 input_value 和定位器中的 ${{变量名}}
             if data_processor:
                 original_input = input_value
                 input_value = data_processor.replace(input_value)
                 if original_input != input_value:
                     logger.info(f"变量替换: '{original_input}' -> '{input_value}'")
-                
-                original_locator = locator_value
-                locator_value = data_processor.replace(locator_value)
-                if original_locator != locator_value:
-                    logger.info(f"变量替换 (定位器): '{original_locator}' -> '{locator_value}'")
-                
+
+                for field_name, original in [('主定位', locator_value), ('备用1', locator_value_2), ('备用2', locator_value_3)]:
+                    replaced = data_processor.replace(original)
+                    if original != replaced:
+                        logger.info(f"变量替换 ({field_name}): '{original}' -> '{replaced}'")
+                    if field_name == '主定位':
+                        locator_value = str(replaced)
+                    elif field_name == '备用1':
+                        locator_value_2 = str(replaced)
+                    else:
+                        locator_value_3 = str(replaced)
+
                 # 确保替换后的值是字符串类型
                 if not isinstance(input_value, str):
                     input_value = str(input_value)
@@ -718,12 +731,21 @@ class TaskConsumer:
                     locator_value = str(locator_value)
             else:
                 logger.warning(f"data_processor 为 None，跳过变量替换")
-            
+
             steps.append(StepConfig(
                 step_id=detail.get('id', 0),
                 operation_type=detail.get('ope_key', ''),  # 操作类型如 click, type
-                locator_type=detail.get('locator_type', 'xpath'),  # 定位方式
-                locator_value=locator_value,  # 定位表达式
+                locator_type=detail.get('locator_type', 'xpath'),  # 主定位方式
+                locator_value=locator_value,  # 主定位表达式
+                locator_index=detail.get('locator_index') or 0,  # 主定位下标(>0时取第n个)
+                # 备用定位 1
+                locator_type_2=detail.get('locator_type_2') or '',
+                locator_value_2=locator_value_2,
+                locator_index_2=detail.get('locator_index_2') or 0,
+                # 备用定位 2
+                locator_type_3=detail.get('locator_type_3') or '',
+                locator_value_3=locator_value_3,
+                locator_index_3=detail.get('locator_index_3') or 0,
                 input_value=input_value,  # 输入值
                 description=detail.get('element_name', ''),  # 元素名称作为描述
                 wait_time=detail.get('wait_time', 0),

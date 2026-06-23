@@ -18,6 +18,7 @@ const isDarkTheme = computed(() => themeStore.isBlack)
 <style scoped>
 .api-testing-container {
   height: 100%;
+  min-height: 0;
   background: var(--tt-form-page-bg);
   border: 1px solid var(--tt-form-page-border);
   border-radius: 8px;

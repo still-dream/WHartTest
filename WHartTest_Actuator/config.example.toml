@@ -39,14 +39,16 @@ launch_timeout = 30
 action_timeout = 30
 
 [execution]
-# 失败重试次数
+# 元素操作失败后的重试次数(0 = 不重试, 建议 0~3)
 retry_count = 3
-# 步骤间隔时间（毫秒）
+# 步骤间隔时间(毫秒), 每步操作成功后等待
 step_interval = 500
 # 截图保存目录
 screenshot_dir = "./data/screenshots"
-# 批量执行最大并发数（同时运行的用例数）
+# 批量执行最大并发数(同时运行的用例数)
 max_concurrent = 3
+# 用例结束后浏览器额外等待(毫秒), 用于 Trace 补抓最后帧(0 = 不等)
+tail_wait_ms = 1000
 
 [trace]
 # 是否启用 Playwright Trace（用于调试回放）

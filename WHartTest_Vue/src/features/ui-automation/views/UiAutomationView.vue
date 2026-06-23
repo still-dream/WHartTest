@@ -107,6 +107,7 @@ const onModuleUpdated = () => {
   display: flex;
   width: 100%;
   height: 100%;
+  min-height: 0;
   gap: 10px;
   overflow: hidden;
   background-color: var(--color-bg-1);

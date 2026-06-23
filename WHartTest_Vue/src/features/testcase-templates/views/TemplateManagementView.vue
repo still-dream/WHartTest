@@ -210,8 +210,11 @@ onMounted(() => {
 <style scoped>
 .template-management-view {
   padding: 20px 24px;
-  min-height: 100%;
+  height: 100%;
+  min-height: 0;
+  box-sizing: border-box;
   background: var(--color-bg-1);
+  overflow-y: auto;
 }
 
 .template-list-card {

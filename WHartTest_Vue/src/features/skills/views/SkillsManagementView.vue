@@ -44,6 +44,10 @@ const pageText = computed(() => (
 <style scoped>
 .skills-management-view {
   padding: 24px;
+  height: 100%;
+  min-height: 0;
+  box-sizing: border-box;
+  overflow-y: auto;
 }
 
 .page-header {

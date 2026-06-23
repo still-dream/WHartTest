@@ -962,6 +962,10 @@ projectStore.$subscribe((_mutation, state) => {
 .requirement-management {
   padding: 24px;
   background: transparent; /* 使用主布局的背景 */
+  height: 100%;
+  min-height: 0;
+  box-sizing: border-box;
+  overflow-y: auto;
 }
 
 .filter-section {

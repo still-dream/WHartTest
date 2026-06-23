@@ -39,6 +39,7 @@ const handleViewReport = (report: { id: number }) => {
 <style scoped>
 .api-testing-container {
   height: 100%;
+  min-height: 0;
   border-radius: 8px;
   overflow: hidden;
 }

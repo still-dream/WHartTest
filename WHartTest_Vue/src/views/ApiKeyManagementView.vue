@@ -673,6 +673,10 @@ const toggleKeyVisibility = (record: ApiKeyItem) => {
 <style scoped>
 .apikey-management {
   padding: 20px;
+  height: 100%;
+  min-height: 0;
+  box-sizing: border-box;
+  overflow-y: auto;
 }
 
 .page-header {

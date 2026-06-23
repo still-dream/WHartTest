@@ -221,6 +221,10 @@
               <template #icon><icon-apps /></template>
               <a href="#" @click="checkProjectAndNavigate($event, '/skills')">{{ skillsMenuLabel }}</a>
             </a-menu-item>
+            <a-menu-item key="operation-logs" v-if="hasOperationLogsPermission">
+              <template #icon><icon-history /></template>
+              <a href="#" @click="checkProjectAndNavigate($event, '/operation-logs')">{{ operationLogsMenuLabel }}</a>
+            </a-menu-item>
           </a-sub-menu>
         </a-menu>
         <!-- 侧边栏底部收起/展开按钮 -->
@@ -341,6 +345,7 @@ const permissionsMenuLabel = computed(() => (locale.value === 'en-US' ? 'Access'
 const modelsMenuLabel = computed(() => (locale.value === 'en-US' ? 'Models' : tl('LLM配置')));
 const mcpMenuLabel = computed(() => (locale.value === 'en-US' ? 'MCP' : tl('MCP配置')));
 const skillsMenuLabel = computed(() => (locale.value === 'en-US' ? 'Skills' : tl('Skills管理')));
+const operationLogsMenuLabel = computed(() => (locale.value === 'en-US' ? 'Logs' : tl('操作日志')));
 
 // 更新说明预览（显示完整内容）
 const releaseNotesPreview = computed(() => {
@@ -486,6 +491,10 @@ const hasSkillsPermission = computed(() => {
   return authStore.hasPermission('skills.view_skill');
 });
 
+const hasOperationLogsPermission = computed(() => {
+  return authStore.hasPermission('accounts.view_operation_logs');
+});
+
 // 检查是否有测试管理菜单项的权限
 const hasTestManagementMenuItems = computed(() => {
   return hasTestcasesPermission.value ||
@@ -501,7 +510,8 @@ const hasSystemMenuItems = computed(() => {
          hasLlmConfigsPermission.value ||
          hasApiKeysPermission.value ||
          hasMcpConfigsPermission.value ||
-         hasSkillsPermission.value;
+         hasSkillsPermission.value ||
+         hasOperationLogsPermission.value;
 });
 
 // 切换侧边栏收起状态
@@ -1074,18 +1084,26 @@ onMounted(async () => {
   height: 100vh;
   background-color: var(--theme-page-bg);
   overflow: hidden;
+  /* 显式声明 flex 行为，确保子项高度被父级约束 */
+  display: flex;
+  flex-direction: column;
 }
 
 .inner-layout {
-  height: calc(100vh - 71px); /* Header(56px) + header-margin-top(10px) + header-margin-bottom(5px) = 71px */
+  /* 用 flex: 1 占据 main-layout 剩余高度，min-height: 0 覆盖 flex item 默认的 min-height: auto，
+     防止子项（sider/content）撑破父级高度 */
+  flex: 1 1 0;
+  min-height: 0;
 }
 
 .content {
   padding: 0;
   background-color: var(--theme-page-bg);
-  height: calc(100vh - 86px); /* inner-layout(100vh-71px) - content-margin-top(5px) - content-margin-bottom(10px) = 100vh-86px */
+  /* min-height: 0 让 flex item 高度严格受父级约束，触发 overflow-y: auto 出滚动条。
+     否则子视图过长时会把 .content 撑高，滚动条不会生效。 */
+  min-height: 0;
   margin: 5px 10px 10px 5px;
-  overflow: hidden; /* 让子组件自行控制滚动 */
+  overflow-y: auto;
   border-radius: 8px;
   box-shadow: 0 0 12px rgba(0, 0, 0, 0.25), 0 0 4px rgba(0, 0, 0, 0.15);
 }

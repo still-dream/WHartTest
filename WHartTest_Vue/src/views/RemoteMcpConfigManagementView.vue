@@ -521,6 +521,10 @@ onMounted(() => {
 <style scoped>
 .remote-mcp-management {
   padding: 16px;
+  height: 100%;
+  min-height: 0;
+  box-sizing: border-box;
+  overflow-y: auto;
 }
 
 .page-header {

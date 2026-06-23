@@ -293,6 +293,10 @@ onMounted(() => {
 <style scoped>
 .llm-config-management {
   padding: 20px 20px;
+  height: 100%;
+  min-height: 0;
+  box-sizing: border-box;
+  overflow-y: auto;
 }
 
 .page-header {

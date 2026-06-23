@@ -487,6 +487,7 @@ onMounted(() => {
 <style scoped>
 .dashboard-view {
   height: 100%;
+  min-height: 0;
   background-color: var(--theme-page-bg);
   padding: 10px;
   box-sizing: border-box;

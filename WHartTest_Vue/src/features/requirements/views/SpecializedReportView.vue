@@ -401,6 +401,7 @@ onMounted(() => {
   padding: 24px;
   background: transparent;
   height: 100%;
+  min-height: 0;
   display: flex;
   flex-direction: column;
   overflow: hidden;
