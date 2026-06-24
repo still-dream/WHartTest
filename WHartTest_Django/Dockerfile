@@ -119,6 +119,7 @@ ARG HF_ENDPOINT=https://huggingface.co
 ARG NPM_REGISTRY=https://registry.npmjs.org
 ARG PLAYWRIGHT_DOWNLOAD_HOST=
 ARG CHROME_FOR_TESTING_MIRROR=
+ARG CHROME_VERSION=stable
 
 WORKDIR /app
 
@@ -229,11 +230,34 @@ RUN set -eux; \
     if [ -n "${CHROME_FOR_TESTING_MIRROR}" ]; then \
       echo "Using Chrome for Testing mirror: ${CHROME_FOR_TESTING_MIRROR}"; \
       mkdir -p /opt/chrome-for-testing; \
-      chrome_version="stable"; \
-      chrome_url="${CHROME_FOR_TESTING_MIRROR}/${chrome_version}/linux64/chrome-linux64.zip"; \
+      # 解析实际版本号：若 CHROME_VERSION 为 stable/beta/dev/canary，则从镜像的
+      # last-known-good-versions.json 里查出版本号；否则按字面量使用（用于钉版本）。
+      chrome_version_resolved="${CHROME_VERSION}"; \
+      case "${CHROME_VERSION}" in \
+        stable|beta|dev|canary) \
+          channel="$(printf '%s' "${CHROME_VERSION}" | tr '[:lower:]' '[:upper:]')"; \
+          echo "Resolving channel '${channel}' from mirror metadata..."; \
+          metadata_url="${CHROME_FOR_TESTING_MIRROR%/}/last-known-good-versions.json"; \
+          echo "Fetching: ${metadata_url}"; \
+          if metadata="$(curl -fsSL --retry 5 --retry-delay 5 --max-time 60 "${metadata_url}")"; then \
+            # 简单粗暴地用 grep 抓出对应 channel 的 version 字段。
+            chrome_version_resolved="$(printf '%s' "${metadata}" | tr -d '\n' | grep -oE "\"${channel}\":\\{[^}]*\"version\":\"[0-9.]+\"" | grep -oE '[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+' | head -n1)"; \
+            if [ -z "${chrome_version_resolved}" ]; then \
+              echo "Warning: failed to parse ${channel} version from metadata, falling back to CHROME_VERSION=${CHROME_VERSION}"; \
+              chrome_version_resolved="${CHROME_VERSION}"; \
+            else \
+              echo "Resolved ${channel} version: ${chrome_version_resolved}"; \
+            fi; \
+          else \
+            echo "Warning: failed to fetch metadata from ${metadata_url}, falling back to CHROME_VERSION=${CHROME_VERSION}"; \
+            chrome_version_resolved="${CHROME_VERSION}"; \
+          fi; \
+          ;; \
+      esac; \
+      chrome_url="${CHROME_FOR_TESTING_MIRROR%/}/${chrome_version_resolved}/linux64/chrome-linux64.zip"; \
       echo "Downloading Chrome from: $chrome_url"; \
       for i in 1 2 3; do \
-        if curl -fsSL --retry 5 --retry-delay 10 --max-time 300 "$chrome_url" -o /tmp/chrome.zip; then \
+        if curl -fsSL --retry 5 --retry-delay 10 --max-time 1200 "$chrome_url" -o /tmp/chrome.zip; then \
           echo "Chrome downloaded successfully on attempt $i"; \
           break; \
         fi; \

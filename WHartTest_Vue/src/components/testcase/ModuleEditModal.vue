@@ -104,24 +104,24 @@ const handleSubmit = async () => {
     Message.error('项目ID不存在，无法提交');
     return;
   }
-  try {
-    const validation = await moduleFormRef.value?.validate();
-    if (!validation) {
-      return; // 验证失败
-    }
+  if (!moduleFormRef.value) {
+    Message.error('表单未就绪，请重试');
+    return;
+  }
 
-    formLoading.value = true;
-    let response;
+  formLoading.value = true;
+  try {
+    // validate() 失败时会 reject，成功时 resolve —— 用 try/catch 而不是 if(!result)
+    await moduleFormRef.value.validate();
+
     const payload: CreateTestCaseModuleRequest | UpdateTestCaseModuleRequest = {
       name: formState.name,
       parent: formState.parent || undefined,
     };
 
-    if (isEditing.value && formState.id) {
-      response = await updateTestCaseModule(projectId.value, formState.id, payload);
-    } else {
-      response = await createTestCaseModule(projectId.value, payload as CreateTestCaseModuleRequest);
-    }
+    const response = isEditing.value && formState.id
+      ? await updateTestCaseModule(projectId.value, formState.id, payload)
+      : await createTestCaseModule(projectId.value, payload as CreateTestCaseModuleRequest);
 
     if (response.success) {
       Message.success(isEditing.value ? '模块更新成功' : '模块添加成功');
@@ -130,7 +130,12 @@ const handleSubmit = async () => {
       Message.error(response.error || (isEditing.value ? '更新模块失败' : '添加模块失败'));
       emit('submit', false);
     }
-  } catch (error) {
+  } catch (error: any) {
+    // validate 失败时 Arco 会把错误 reject 出来，error?.errors 里有字段级错误
+    if (error?.errors) {
+      // 表单校验失败，不弹通用错误提示（Arco 已在字段上展示）
+      return;
+    }
     console.error('模块操作失败:', error);
     Message.error('模块操作时发生错误');
     emit('submit', false);
