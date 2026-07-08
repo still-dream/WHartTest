@@ -24,6 +24,7 @@ import SpecializedReportView from '@/features/requirements/views/SpecializedRepo
 import SkillsManagementView from '@/features/skills/views/SkillsManagementView.vue'; // 导入 Skills 管理页面组件。
 import TemplateManagementView from '@/features/testcase-templates/views/TemplateManagementView.vue'; // 导入用例模板管理页面组件。
 import UiAutomationView from '@/features/ui-automation/views/UiAutomationView.vue'; // 导入 UI 自动化页面组件。
+import AppUiAutomationView from '@/features/app-ui-automation/views/AppUiAutomationView.vue'; // 导入 APPUI 自动化页面组件。
 import ApiTestingView from '@/features/api-testing/views/ApiTestingView.vue'; // 导入接口自动化页面组件。
 import TraceDetailView from '@/features/ui-automation/views/TraceDetail.vue'; // 导入 UI 自动化 Trace 详情页面组件。
 import TaskCenterView from '@/features/task-center/views/TaskCenterView.vue'; // 导入任务中心视图
@@ -206,6 +207,11 @@ const routes: Array<RouteRecordRaw> = [ // 声明路由表数组，类型约束�
         path: 'ui-automation', // 定义 UI 自动化子路径。
         name: 'UiAutomation', // 定义 UI 自动化路由名称。
         component: UiAutomationView, // 指定 UI 自动化页面组件。
+      },
+      {
+        path: 'app-ui-automation', // 定义 APPUI 自动化子路径。
+        name: 'AppUiAutomation', // 定义 APPUI 自动化路由名称。
+        component: AppUiAutomationView, // 指定 APPUI 自动化页面组件。
       },
       {
         path: 'ui-automation/trace/:id', // 定义 Trace 详情动态路径，:id 为 trace 记录标识。
