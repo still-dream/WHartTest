@@ -65,3 +65,49 @@ class AppUiScriptModelTest(TestCase):
         self.assertEqual(script.name, 'Test Script')
         self.assertEqual(script.status, 'idle')
         self.assertTrue(script.script_file.name.startswith('app_ui_scripts/'))
+
+
+from app_ui_automation.models import AppUiDevice, AppUiExecutionRecord, AppUiBatchExecutionRecord
+
+
+class AppUiDeviceModelTest(TestCase):
+    def setUp(self):
+        self.user = User.objects.create_user(username='testuser', password='testpass')
+        self.project = Project.objects.create(name='Test Project', creator=self.user)
+
+    def test_create_device(self):
+        device = AppUiDevice.objects.create(
+            project=self.project, name='小米12',
+            connection_type='adb_tcp', platform='android',
+            device_uri='android://127.0.0.1:5037/118f492e',
+            device_serial='118f492e', creator=self.user
+        )
+        self.assertEqual(device.status, 'offline')
+        self.assertFalse(device.is_default)
+
+
+class AppUiExecutionRecordModelTest(TestCase):
+    def setUp(self):
+        self.user = User.objects.create_user(username='testuser2', password='testpass')
+        self.project = Project.objects.create(name='Test Project 2', creator=self.user)
+        self.module = AppUiModule.objects.create(project=self.project, name='M', creator=self.user)
+        self.script = AppUiScript.objects.create(
+            project=self.project, module=self.module, name='S',
+            script_file=SimpleUploadedFile('t.zip', b'fake', content_type='application/zip'),
+            creator=self.user
+        )
+
+    def test_create_execution_record(self):
+        record = AppUiExecutionRecord.objects.create(
+            script=self.script, trigger_type='debug', executor=self.user
+        )
+        self.assertEqual(record.status, 0)
+
+    def test_batch_update_statistics(self):
+        batch = AppUiBatchExecutionRecord.objects.create(name='B', total_scripts=2, executor=self.user)
+        AppUiExecutionRecord.objects.create(batch=batch, script=self.script, status=2)
+        AppUiExecutionRecord.objects.create(batch=batch, script=self.script, status=3)
+        batch.update_statistics()
+        self.assertEqual(batch.passed_scripts, 1)
+        self.assertEqual(batch.failed_scripts, 1)
+        self.assertEqual(batch.status, 3)
