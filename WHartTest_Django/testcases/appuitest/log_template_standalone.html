@@ -1,0 +1,1553 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta http-equiv="X-UA-Compatible" content="IE=edge">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta http-equiv="Content-Type" content="text/html; charset=utf-8" />
+    <title>J&T 自动化测试报告 {{info.title}}</title>
+    <!--[if lt IE 9]>
+    <script src="https://css3-mediaqueries-js.googlecode.com/svn/trunk/css3-mediaqueries.js"></script>
+    <script src="http://html5shiv.googlecode.com/svn/trunk/html5.js"></script>
+    <![endif]-->
+    <!-- 保留原生样式，后续用自定义CSS覆盖 -->
+    <link href="{{static_root}}css/report.css" rel="stylesheet">
+
+    <style>
+        /* ========== 品牌变量 ========== */
+        :root {
+            --jt-red: #D32F2F;
+            --jt-light-red: #FDF2F2;
+            --jt-border: #F8E0E0;
+            --jt-text-main: #2A2A2A;
+            --jt-text-sub: #666666;
+            --jt-bg: #FFFFFF;
+            --jt-radius: 12px;
+            --jt-shadow: 0 4px 16px rgba(211, 47, 47, 0.06);
+        }
+
+        /* ========== 全局基础覆盖 ========== */
+        html, body {
+            background: var(--jt-bg) !important;
+            color: var(--jt-text-main) !important;
+            font-family: "Microsoft YaHei", Arial, sans-serif !important;
+            font-size: 14px;
+            line-height: 1.6;
+            position: relative;
+            min-height: 100vh;
+        }
+
+        /* 背景水印：透明度 0.14（更不透明），并叠加一层浅色蒙层增加层次 */
+        body::before {
+            content: "";
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: url("{{static_root}}image/JT.jpg") no-repeat center center / cover fixed;
+            opacity: 0.14;
+            z-index: 0;
+            pointer-events: none;
+            image-rendering: -webkit-optimize-contrast;
+            image-rendering: crisp-edges;
+        }
+        body::after {
+            content: "";
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100;
+            width: 100%;
+            height: 100%;
+            background: linear-gradient(180deg, rgba(255,255,255,0.55) 0%, rgba(253,242,242,0.35) 100%);
+            z-index: 0;
+            pointer-events: none;
+        }
+
+        /* ========== 主容器 ========== */
+        .container-fluid {
+            max-width: 1280px;
+            margin: 0 auto;
+            padding: 36px 24px 40px;
+            position: relative;
+            z-index: 1;
+            background: transparent !important;
+        }
+
+        .row {
+            background: transparent !important;
+        }
+
+        #main {
+            background: transparent !important;
+        }
+
+        /* ========== 标题 ========== */
+        .title {
+            font-size: 28px;
+            font-weight: 700;
+            color: var(--jt-red) !important;
+            padding-bottom: 14px;
+            margin-bottom: 28px;
+            border-bottom: 2px solid var(--jt-light-red) !important;
+            background: transparent !important;
+        }
+
+        /* ========== 核心：所有模块清除深色背景 ========== */
+        #main .summary,
+        #main .gallery,
+        #main .steps {
+            background: var(--jt-bg) !important;
+            border: 1px solid var(--jt-border) !important;
+            border-radius: var(--jt-radius) !important;
+            padding: 22px 26px !important;
+            margin-bottom: 24px !important;
+            box-shadow: var(--jt-shadow) !important;
+            color: var(--jt-text-main) !important;
+        }
+
+        /* 信息卡片内部 */
+        #main .summary .info {
+            background: var(--jt-bg) !important;
+            border: 1px solid var(--jt-border) !important;
+            border-radius: var(--jt-radius) !important;
+            padding: 20px 24px !important;
+            box-shadow: none !important;
+            margin-bottom: 0 !important;
+        }
+
+        .info-title {
+            font-size: 17px;
+            font-weight: 600;
+            color: var(--jt-red) !important;
+            margin-bottom: 16px;
+            background: transparent !important;
+        }
+
+        /* ========== 执行概览：合并为统一卡片 ========== */
+        .show-horizontal {
+            display: block;
+        }
+
+        /* 单卡片 = 横幅 + 双栏内容 */
+        #main .summary .info,
+        #main .summary .info-merged {
+            display: block !important;
+            padding: 0 !important;
+            overflow: hidden;
+            box-shadow:
+                0 1px 2px rgba(0,0,0,0.02),
+                0 6px 20px rgba(211,47,47,0.06),
+                0 20px 50px rgba(211,47,47,0.04) !important;
+            border-radius: 14px !important;
+        }
+
+        /* —— 顶部横幅 —— */
+        .info-banner {
+            display: grid;
+            grid-template-columns: 84px 1fr auto;
+            align-items: center;
+            gap: 22px;
+            padding: 26px 32px 24px;
+            background:
+                radial-gradient(circle at 100% 0%, rgba(211,47,47,0.07) 0%, transparent 55%),
+                radial-gradient(circle at 0% 100%, rgba(211,47,47,0.04) 0%, transparent 50%),
+                linear-gradient(135deg, var(--jt-light-red) 0%, #FFF8F8 60%, #FFF7F7 100%);
+            border-bottom: 1px solid var(--jt-border);
+            position: relative;
+        }
+        .info-banner::after {
+            content: "";
+            position: absolute;
+            left: 32px;
+            right: 32px;
+            bottom: -1px;
+            height: 1px;
+            background: linear-gradient(90deg, var(--jt-red) 0%, rgba(211,47,47,0.4) 30%, transparent 70%);
+            opacity: 0.5;
+        }
+        .info-banner::before {
+            content: "";
+            position: absolute;
+            top: 12px;
+            right: 18px;
+            width: 60px;
+            height: 60px;
+            background: radial-gradient(circle, rgba(211,47,47,0.06) 0%, transparent 70%);
+            border-radius: 50%;
+            pointer-events: none;
+        }
+        .banner-avatar {
+            width: 64px;
+            height: 64px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            background: #fff;
+            border: 1px solid var(--jt-border);
+            border-radius: 16px;
+            box-shadow:
+                0 6px 18px rgba(211,47,47,0.10),
+                inset 0 0 0 4px var(--jt-light-red);
+            position: relative;
+            flex-shrink: 0;
+        }
+        .banner-avatar::after {
+            content: "";
+            position: absolute;
+            bottom: -2px;
+            right: -2px;
+            width: 14px;
+            height: 14px;
+            background: #fff;
+            border-radius: 50%;
+            box-shadow: 0 1px 4px rgba(0,0,0,0.08);
+        }
+        #result-img {
+            height: 36px !important;
+            width: 36px !important;
+            max-width: 36px;
+            filter: drop-shadow(0 1px 2px rgba(0,0,0,0.05));
+        }
+        .banner-meta {
+            min-width: 0;
+            overflow: hidden;
+        }
+        .banner-meta .info-title {
+            display: flex !important;
+            align-items: center;
+            flex-wrap: wrap;
+            gap: 10px;
+            margin: 0 0 8px 0 !important;
+            padding: 0 !important;
+            border: none !important;
+            font-size: 20px !important;
+            font-weight: 700 !important;
+            color: var(--jt-text-main) !important;
+            letter-spacing: 0.3px;
+            line-height: 1.3;
+        }
+        .banner-meta .info-title span[lang='en'] {
+            color: var(--jt-text-main) !important;
+            position: relative;
+            padding-left: 14px;
+            white-space: nowrap;
+        }
+        .banner-meta .info-title span[lang='en']::before {
+            content: "";
+            position: absolute;
+            left: 0;
+            top: 50%;
+            transform: translateY(-50%);
+            width: 4px;
+            height: 18px;
+            background: linear-gradient(180deg, var(--jt-red), #E55353);
+            border-radius: 2px;
+        }
+        .banner-meta .info-title #result-desc {
+            font-size: 12.5px;
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
+            margin-left: 2px;
+            font-weight: 700;
+            letter-spacing: 0.3px;
+        }
+        /* 修正 [Passed] 文字里的方括号样式：用 data 替换不太可能，做样式隐藏 */
+        .banner-meta .info-title #result-desc::before,
+        .banner-meta .info-title #result-desc::after {
+            display: none;
+        }
+        /* 抽出 label 内的 [] 符号 */
+        .banner-meta .info-title #result-desc {
+            font-variant-numeric: tabular-nums;
+        }
+        .info-content.info-subline {
+            line-height: 1.6 !important;
+            color: var(--jt-text-sub) !important;
+            font-size: 13px;
+            display: flex;
+            align-items: center;
+            flex-wrap: wrap;
+            gap: 4px;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+        }
+        .info-subline .info-sub {
+            color: var(--jt-text-sub) !important;
+        }
+        .info-divider {
+            margin: 0 8px;
+            color: #DDD;
+        }
+        #result-desc.green {
+            color: #2E7D32 !important;
+            font-size: 13px;
+            font-weight: 600;
+            background: rgba(46,125,50,0.10);
+            padding: 3px 12px;
+            border-radius: 999px;
+            letter-spacing: 0.3px;
+            display: inline-block;
+            white-space: nowrap;
+        }
+        #result-desc.red {
+            color: #fff !important;
+            font-size: 13px;
+            font-weight: 600;
+            background: linear-gradient(135deg, var(--jt-red), #E55353);
+            padding: 3px 12px;
+            border-radius: 999px;
+            letter-spacing: 0.3px;
+            box-shadow: 0 2px 6px rgba(211,47,47,0.25);
+            display: inline-block;
+            white-space: nowrap;
+        }
+
+        /* 极兔品牌 status 胶囊 - jt-pass / jt-fail */
+        #result-desc.jt-pass,
+        #result-desc.jt-fail {
+            display: inline-flex !important;
+            align-items: center;
+            gap: 6px;
+            font-size: 12.5px;
+            font-weight: 700;
+            letter-spacing: 0.5px;
+            padding: 4px 12px 4px 10px;
+            border-radius: 999px;
+            line-height: 1;
+            vertical-align: middle;
+            background: #fff;
+        }
+        #result-desc.jt-pass {
+            color: #2E7D32;
+            border: 1px solid rgba(46,125,50,0.18);
+            box-shadow: 0 2px 6px rgba(46,125,50,0.10);
+        }
+        #result-desc.jt-pass .status-dot {
+            width: 8px;
+            height: 8px;
+            border-radius: 50%;
+            background: #4CAF50;
+            box-shadow: 0 0 0 3px rgba(76,175,80,0.18);
+            animation: jt-pulse 1.6s ease-in-out infinite;
+        }
+        #result-desc.jt-fail {
+            color: #fff;
+            background: linear-gradient(135deg, var(--jt-red), #E55353);
+            border: 1px solid rgba(211,47,47,0.3);
+            box-shadow: 0 2px 8px rgba(211,47,47,0.30);
+        }
+        #result-desc.jt-fail .status-dot {
+            width: 8px;
+            height: 8px;
+            border-radius: 50%;
+            background: #fff;
+            box-shadow: 0 0 0 3px rgba(255,255,255,0.4);
+        }
+        @keyframes jt-pulse {
+            0%, 100% { transform: scale(1); opacity: 1; }
+            50% { transform: scale(1.15); opacity: 0.85; }
+        }
+
+        /* 横幅右侧：J&T 团队 */
+        .banner-team {
+            display: flex;
+            align-items: center;
+            gap: 14px;
+            padding-left: 24px;
+            border-left: 1px dashed var(--jt-border);
+            position: relative;
+            flex-shrink: 0;
+        }
+        .team-badge {
+            width: 50px;
+            height: 50px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            background: linear-gradient(135deg, var(--jt-red) 0%, #E55353 100%);
+            color: #fff;
+            font-size: 17px;
+            font-weight: 700;
+            letter-spacing: 1.2px;
+            border-radius: 14px;
+            box-shadow:
+                0 6px 16px rgba(211,47,47,0.30),
+                inset 0 1px 0 rgba(255,255,255,0.2);
+            position: relative;
+            flex-shrink: 0;
+        }
+        .team-badge::after {
+            content: "";
+            position: absolute;
+            top: -3px;
+            right: -3px;
+            width: 12px;
+            height: 12px;
+            background: #4CAF50;
+            border: 2px solid #fff;
+            border-radius: 50%;
+            box-shadow: 0 1px 3px rgba(0,0,0,0.2);
+        }
+        .team-text {
+            display: flex;
+            flex-direction: column;
+            line-height: 1.25;
+            min-width: 0;
+        }
+        .team-title {
+            font-size: 15px;
+            font-weight: 700;
+            color: var(--jt-text-main);
+            letter-spacing: 0.2px;
+            white-space: nowrap;
+        }
+        .team-sub {
+            font-size: 11.5px;
+            color: var(--jt-text-sub);
+            margin-top: 3px;
+            letter-spacing: 0.3px;
+            white-space: nowrap;
+        }
+
+        /* —— 下方双栏 —— */
+        .info-body {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 0;
+            background: #fff;
+        }
+        .info-col {
+            padding: 26px 32px 24px;
+            min-width: 0;
+        }
+        .info-col-stats {
+            border-right: 1px dashed var(--jt-border);
+        }
+        .col-title {
+            font-size: 11.5px;
+            font-weight: 700;
+            color: var(--jt-red);
+            letter-spacing: 1.8px;
+            text-transform: uppercase;
+            margin-bottom: 16px;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            padding-bottom: 10px;
+            border-bottom: 1px solid #f8eded;
+        }
+        .col-title::before {
+            content: "";
+            width: 18px;
+            height: 2px;
+            background: linear-gradient(90deg, var(--jt-red), transparent);
+            border-radius: 2px;
+            flex-shrink: 0;
+        }
+        .col-title::after {
+            content: "";
+            flex: 1;
+            height: 1px;
+            background: linear-gradient(90deg, rgba(211,47,47,0.10), transparent);
+        }
+
+        .info-toal {
+            margin: 0 !important;
+            padding: 0 !important;
+            border: none !important;
+        }
+        .info-toal > div {
+            display: flex !important;
+            align-items: center;
+            height: auto !important;
+            min-width: 0 !important;
+            margin: 0 !important;
+            padding: 11px 0 !important;
+            border-bottom: 1px dashed #f4eaea;
+            gap: 6px;
+        }
+        .info-toal > div:last-child {
+            border-bottom: none;
+        }
+        .info-toal > div:first-child {
+            padding-top: 0 !important;
+        }
+
+        /* 字段名 - 统一 86px 宽度 */
+        .info-name {
+            color: var(--jt-text-sub) !important;
+            min-width: 86px !important;
+            width: 86px !important;
+            display: inline-block !important;
+            font-size: 13px;
+        }
+        .info-value {
+            color: var(--jt-text-main) !important;
+            font-weight: 600;
+            font-size: 14px;
+            flex: 1;
+        }
+        .info-value.log a {
+            color: var(--jt-red) !important;
+            text-decoration: none;
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
+        }
+        .info-value.log a img {
+            width: 14px;
+            height: 14px;
+            opacity: 0.8;
+        }
+        .info-console img#show-console {
+            width: 22px;
+            height: 22px;
+            margin-left: 4px;
+            vertical-align: middle;
+            cursor: pointer;
+            transition: transform 0.2s;
+        }
+        .info-console img#show-console:hover {
+            transform: scale(1.12);
+        }
+
+        /* 执行信息列 */
+        .info-execute {
+            display: flex !important;
+            align-items: center;
+            margin: 0 !important;
+            padding: 11px 0 !important;
+            border-bottom: 1px dashed #f4eaea;
+            gap: 4px;
+        }
+        .info-execute:last-child {
+            border-bottom: none;
+        }
+        .info-execute:first-child {
+            padding-top: 0 !important;
+        }
+        .summary .circle-img {
+            background: linear-gradient(135deg, var(--jt-red), #E55353) !important;
+            width: 7px !important;
+            height: 7px !important;
+            border-radius: 50% !important;
+            display: inline-block !important;
+            margin-right: 14px !important;
+            box-shadow: 0 0 0 4px var(--jt-light-red);
+            flex-shrink: 0;
+        }
+        .info-line {
+            flex: 1;
+            display: flex;
+            align-items: center;
+            min-width: 0;
+        }
+        .info-line .info-name {
+            color: var(--jt-text-sub) !important;
+            min-width: 70px !important;
+            width: 70px !important;
+        }
+        .info-line .info-value {
+            font-size: 13.5px;
+            word-break: break-all;
+        }
+        .copy-img {
+            width: 14px !important;
+            height: 14px;
+            margin-left: 6px;
+            opacity: 0.55;
+            cursor: pointer;
+            vertical-align: middle;
+        }
+        .copy-img:hover {
+            opacity: 1;
+        }
+
+        /* ========== 截图快览区：清除深色背景 + 禁止冻结 ========== */
+        #main .gallery .placeholder,
+        #main .gallery .placeholder .content {
+            background: #fff !important;
+            min-height: 140px;
+        }
+        /* 关键：覆盖 report.js 中 setImgAffix 设置的内联 position: fixed */
+        .gallery .content,
+        .gallery .placeholder .content {
+            position: relative !important;
+            top: 0 !important;
+            left: 0 !important;
+            right: auto !important;
+            max-width: 100% !important;
+            width: auto !important;
+            white-space: normal !important;
+            overflow-x: auto !important;
+            background: #fff !important;
+        }
+
+        .gallery .placeholder img {
+            height: 120px;
+            border-radius: 6px;
+            border: 2px solid transparent;
+            cursor: pointer;
+            transition: all 0.2s ease;
+            image-rendering: -webkit-optimize-contrast;
+            image-rendering: crisp-edges;
+        }
+
+        .gallery .placeholder img:hover {
+            border-color: var(--jt-red);
+            transform: translateY(-2px);
+            box-shadow: 0 4px 12px rgba(211, 47, 47, 0.15);
+        }
+
+        /* ========== 步骤表头 ========== */
+        #main .steps-head {
+            background: var(--jt-light-red) !important;
+            padding: 14px 20px !important;
+            border-radius: 8px !important;
+            color: var(--jt-text-main) !important;
+        }
+
+        .head-left .order {
+            color: var(--jt-text-main) !important;
+            cursor: pointer;
+            font-weight: 500;
+            background: transparent !important;
+        }
+
+        .head-left .order:hover {
+            color: var(--jt-red) !important;
+        }
+
+        .head-right {
+            color: var(--jt-text-sub) !important;
+        }
+
+        /* 清除跳转失败按钮的深色背景 */
+        #jump-wrong {
+            color: var(--jt-red) !important;
+            font-weight: 600;
+            cursor: pointer;
+            background: transparent !important;
+            padding: 0 !important;
+            border: none !important;
+        }
+
+        /* 筛选按钮 */
+        .filter {
+            padding: 5px 14px;
+            border: 1px solid var(--jt-red);
+            border-radius: 6px;
+            color: var(--jt-red) !important;
+            background: #fff !important;
+            cursor: pointer;
+            transition: all 0.2s ease;
+            font-size: 13px;
+        }
+
+        .filter:hover,
+        .filter.active {
+            background: var(--jt-red) !important;
+            color: #fff !important;
+        }
+
+        /* ========== 步骤详情区：清除深色背景 ========== */
+        .steps-content {
+            background: transparent !important;
+        }
+
+        .step-left {
+            border-right: 1px solid #f0f0f0 !important;
+            padding-right: 16px;
+            background: transparent !important;
+        }
+
+        .step-list .step-item {
+            color: var(--jt-text-main) !important;
+            background: transparent !important;
+            border-left: 3px solid transparent;
+            border-radius: 6px;
+            padding: 10px 12px;
+            margin-bottom: 6px;
+            cursor: pointer;
+            transition: background 0.2s ease;
+        }
+
+        .step-list .step-item:hover,
+        .step-list .step-item.active {
+            background: var(--jt-light-red) !important;
+            border-left-color: var(--jt-red);
+        }
+
+        .step-list .step-item.fail {
+            background: #FFF1F0 !important;
+            border-left-color: var(--jt-red);
+        }
+
+        /* 右侧详情面板：纯白背景 + 精致排版 */
+        .step-right {
+            background: #fff !important;
+            border: 1px solid var(--jt-border) !important;
+            border-radius: 10px !important;
+            padding: 24px 28px !important;
+            color: var(--jt-text-main) !important;
+            box-shadow: 0 2px 8px rgba(211,47,47,0.04);
+        }
+        .step-right .step-head {
+            font-size: 18px !important;
+            font-weight: 600 !important;
+            color: var(--jt-text-main) !important;
+            margin-bottom: 18px !important;
+            padding-bottom: 14px;
+            border-bottom: 1px dashed var(--jt-border);
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            flex-wrap: wrap;
+        }
+        .step-right .step-status {
+            margin-right: 0 !important;
+            border-radius: 999px !important;
+            font-size: 13px !important;
+            font-weight: 600 !important;
+            padding: 4px 14px !important;
+            letter-spacing: 0.5px;
+        }
+        .step-right .step-infos {
+            display: grid;
+            grid-template-columns: repeat(2, 1fr);
+            gap: 10px 24px;
+            line-height: 1.8;
+            background: var(--jt-light-red) !important;
+            border: 1px solid var(--jt-border);
+            border-radius: 8px;
+            padding: 14px 18px;
+            margin-bottom: 18px;
+        }
+        .step-right .step-infos .infos-li {
+            display: flex;
+            align-items: center;
+            gap: 6px;
+            color: var(--jt-text-sub) !important;
+        }
+        .step-right .step-infos .content-val {
+            font-weight: 500;
+            color: var(--jt-text-main) !important;
+        }
+        .step-right .step-infos .bold {
+            font-size: 14px !important;
+            font-weight: 600 !important;
+        }
+        .step-right .step-args {
+            width: 100% !important;
+            border-top: 1px dashed var(--jt-border) !important;
+            margin-top: 6px !important;
+            padding-top: 18px !important;
+            padding-bottom: 8px !important;
+            display: grid;
+            grid-template-columns: 1fr 1.4fr;
+            gap: 20px;
+        }
+        .step-right .step-args .bold {
+            grid-column: 1 / -1;
+            font-size: 15px !important;
+            font-weight: 600 !important;
+            color: var(--jt-red) !important;
+            margin-bottom: 4px;
+        }
+        .step-right .step-args .fluid.infos {
+            min-width: 0 !important;
+            word-break: break-word;
+        }
+        .step-right .step-args .fluid.screens,
+        .step-right .step-args .fluid.traces {
+            width: 100% !important;
+            max-width: 100% !important;
+            min-width: 0 !important;
+        }
+        .step-right .fluid.screens {
+            display: flex;
+            justify-content: center;
+        }
+        .step-right .step-args .desc {
+            margin-left: 0 !important;
+            color: var(--jt-text-sub) !important;
+            font-size: 13px;
+            line-height: 1.8;
+        }
+        .step-right .step-args .crop_image {
+            margin-top: 0 !important;
+            max-width: 100% !important;
+            border-radius: 6px;
+            border: 1px solid var(--jt-border);
+            background: #fff;
+            padding: 4px;
+        }
+        .fancybox {
+            margin: 0 !important;
+            position: relative;
+            max-width: 100% !important;
+            display: inline-block;
+            text-align: center;
+        }
+        .fancybox .screen {
+            max-width: 100% !important;
+            border: solid 1px var(--jt-border) !important;
+            border-radius: 8px;
+            max-height: 560px;
+            background: #fff;
+        }
+
+        /* ========== 页脚：极兔红底 + LOGO 清晰展示 ========== */
+        .footer {
+            background: var(--jt-red) !important;
+            color: #fff !important;
+            padding: 28px 0 !important;
+            border-radius: var(--jt-radius) !important;
+            margin-top: 24px !important;
+            text-align: center;
+            box-shadow: var(--jt-shadow);
+        }
+
+        .footer .corp {
+            display: flex;
+            align-items: center;
+            gap: 16px;
+            justify-content: center;
+        }
+
+        /* LOGO 加白色胶囊底 + 阴影 + 留白，与红底分离 */
+        .footer .corp img {
+            max-height: 44px !important;
+            height: 44px !important;
+            width: auto;
+            background: #fff !important;
+            padding: 8px 16px !important;
+            border-radius: 10px !important;
+            box-shadow: 0 4px 14px rgba(0,0,0,0.18) !important;
+            filter: none !important;
+            vertical-align: middle;
+            transition: transform 0.25s ease, box-shadow 0.25s ease;
+        }
+        .footer .corp img:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 6px 20px rgba(0,0,0,0.25) !important;
+        }
+        .footer .corp span {
+            font-size: 14px;
+            letter-spacing: 0.5px;
+            font-weight: 500;
+            color: #fff !important;
+        }
+
+        /* 隐藏原生网易多余图标 */
+        .footer .interfaces,
+        .footer .apps {
+            display: none !important;
+        }
+
+        /* ========== 录屏区域 ========== */
+        .embed-responsive {
+            border-radius: 8px;
+            overflow: hidden;
+            background: #f5f5f5 !important;
+        }
+
+        /* ========== 控制台代码区 ========== */
+        .hljs {
+            background: #fafafa !important;
+            border: 1px solid var(--jt-border);
+            border-radius: 8px;
+            color: #333 !important;
+        }
+
+        /* ========== 滚动条美化 ========== */
+        ::-webkit-scrollbar {
+            width: 6px;
+            height: 6px;
+        }
+        ::-webkit-scrollbar-track {
+            background: #f5f5f5;
+            border-radius: 3px;
+        }
+        ::-webkit-scrollbar-thumb {
+            background: #E5B0B0;
+            border-radius: 3px;
+        }
+        ::-webkit-scrollbar-thumb:hover {
+            background: var(--jt-red);
+        }
+
+        /* 全局图片高清渲染 */
+        img {
+            image-rendering: -webkit-optimize-contrast;
+            image-rendering: crisp-edges;
+        }
+
+        /* ========== 录屏模块：无录屏时彻底隐藏 ========== */
+        #main .gif-wrap,
+        .row.gif-wrap,
+        .row.gif-wrap.show {
+            display: none !important;
+        }
+        .gif-wrap,
+        .gif-wrap.show {
+            display: none !important;
+            visibility: hidden !important;
+            height: 0 !important;
+            width: 0 !important;
+            margin: 0 !important;
+            padding: 0 !important;
+            overflow: hidden !important;
+        }
+        /* device 容器为空时隐藏 */
+        #main .device:empty {
+            display: none !important;
+        }
+
+        /* 响应式适配 */
+        @media (max-width: 900px) {
+            .info-banner {
+                grid-template-columns: 60px 1fr;
+                padding: 18px 20px;
+                gap: 16px;
+            }
+            .banner-avatar {
+                width: 52px;
+                height: 52px;
+            }
+            .banner-meta .info-title {
+                font-size: 17px !important;
+            }
+            .team-badge {
+                width: 42px;
+                height: 42px;
+                font-size: 15px;
+            }
+            .banner-team {
+                grid-column: 1 / -1;
+                padding-left: 0;
+                border-left: none;
+                border-top: 1px dashed var(--jt-border);
+                padding-top: 12px;
+                margin-top: 4px;
+            }
+            .info-body {
+                grid-template-columns: 1fr;
+            }
+            .info-col-stats {
+                border-right: none;
+                border-bottom: 1px dashed var(--jt-border);
+            }
+            .info-col {
+                padding: 18px 20px;
+            }
+            .info-name {
+                min-width: 70px !important;
+                width: 70px !important;
+            }
+            .steps-content {
+                grid-template-columns: 1fr;
+                gap: 16px;
+            }
+            .step-left {
+                border-right: none;
+                border-bottom: 1px solid #f0f0f0;
+                padding-right: 0;
+                padding-bottom: 16px;
+                max-height: 300px;
+            }
+            .title {
+                font-size: 24px;
+            }
+            .step-right .step-args {
+                grid-template-columns: 1fr;
+            }
+        }
+
+        /* ========== 终极深色块清除（覆盖 report.css 中的深蓝/深绿/黑色） ========== */
+        /* 步骤列表 - JS 实际生成 class="step"，不是 step-item */
+        .step-list .step {
+            color: var(--jt-text-main) !important;
+            background: transparent !important;
+            border-left: 3px solid transparent !important;
+            border-radius: 6px !important;
+            padding: 10px 12px !important;
+            margin-bottom: 6px !important;
+            line-height: 1.6 !important;
+            position: relative !important;
+            cursor: pointer;
+            transition: background 0.2s ease;
+        }
+        .step-list .step:hover,
+        .step-list .step.active {
+            background: var(--jt-light-red) !important;
+            border-left-color: var(--jt-red) !important;
+            color: var(--jt-red) !important;
+        }
+        .step-left {
+            background: transparent !important;
+            color: var(--jt-text-main) !important;
+        }
+        .step-list {
+            background: transparent !important;
+        }
+        .step-list .step .step_title,
+        .step-list .step .step-time,
+        .step-list .step .order {
+            color: inherit !important;
+        }
+        .step-list .step .step-context {
+            opacity: 0.55 !important;
+        }
+        .step-list .step .step-context:hover {
+            opacity: 1 !important;
+        }
+
+        /* 步骤表头 - 极兔红浅底 */
+        .steps-head,
+        #main .steps-head {
+            background: var(--jt-light-red) !important;
+            color: var(--jt-text-main) !important;
+            border: 1px solid var(--jt-border) !important;
+        }
+        .steps-head .order {
+            color: var(--jt-text-main) !important;
+            background: transparent !important;
+        }
+        .steps-head .order:hover {
+            color: var(--jt-red) !important;
+        }
+
+        /* 筛选按钮 / 跳转失败 - 去除深蓝深棕 */
+        .head-right .jump-wrong,
+        .head-right .filter,
+        .filter {
+            background: #fff !important;
+            color: var(--jt-text-main) !important;
+            border: 1px solid var(--jt-border) !important;
+            padding: 4px 12px !important;
+            border-radius: 6px !important;
+            cursor: pointer;
+            margin: 0 3px !important;
+        }
+        .head-right .jump-wrong:hover,
+        .head-right .filter:hover,
+        .filter:hover {
+            background: var(--jt-light-red) !important;
+            color: var(--jt-red) !important;
+            border-color: var(--jt-red) !important;
+        }
+        .head-right .filter.active,
+        .filter.active {
+            background: var(--jt-red) !important;
+            color: #fff !important;
+            border-color: var(--jt-red) !important;
+        }
+
+        /* 截图快览 active 边框 - 极兔红 */
+        .gallery .thumbnail.active {
+            border: solid 2px var(--jt-red) !important;
+            box-shadow: 0 4px 12px rgba(211,47,47,0.2);
+        }
+        .gallery .thumbnail {
+            background: transparent !important;
+        }
+
+        /* 录屏区 - 清除黑色菜单 */
+        .row.gif-wrap .menu {
+            background: rgba(211,47,47,0.88) !important;
+            border-radius: 8px 8px 0 0 !important;
+        }
+        .row.gif-wrap .embed-responsive .open_in_new_tab {
+            background: rgba(211,47,47,0.88) !important;
+            border: none !important;
+        }
+        .row.gif-wrap .embed-responsive {
+            background: #f5f5f5 !important;
+        }
+
+        /* 页脚 - 清除深色边框 */
+        .footer {
+            border-top: none !important;
+            color: #fff !important;
+            background: var(--jt-red) !important;
+            min-width: 0 !important;
+            height: auto !important;
+            position: relative !important;
+            bottom: auto !important;
+        }
+        .footer-content {
+            color: #fff !important;
+        }
+        .footer a, .footer .corp span {
+            color: #fff !important;
+        }
+
+        /* 分页 - 极兔红系 */
+        #pageTool .ui-paging-container li {
+            color: var(--jt-text-main) !important;
+            background: #fff !important;
+            border: 1px solid var(--jt-border) !important;
+        }
+        #pageTool .ui-paging-container li.ui-pager:hover,
+        #pageTool .ui-paging-container li.focus {
+            background: var(--jt-red) !important;
+            color: #fff !important;
+            border-color: var(--jt-red) !important;
+        }
+        #pageTool .ui-pager-disabled,
+        #pageTool li.ui-pager-disabled:hover {
+            color: #ccc !important;
+            background: #fafafa !important;
+            border: 1px solid #eee !important;
+        }
+        #pageTool .steps-total {
+            color: var(--jt-text-sub) !important;
+        }
+        #pageTool .ui-select-pagesize,
+        #pageTool .ui-paging-count {
+            background: #fff !important;
+            color: var(--jt-text-main) !important;
+            border: 1px solid var(--jt-border) !important;
+        }
+
+        /* 滚动条 - 极兔浅红系 */
+        ::-webkit-scrollbar-track,
+        ::-webkit-scrollbar-track-piece {
+            background: #f5f5f5 !important;
+        }
+        ::-webkit-scrollbar-thumb,
+        ::-webkit-scrollbar-thumb:vertical,
+        ::-webkit-scrollbar-thumb:horizontal {
+            background: #E5B0B0 !important;
+            outline: none !important;
+            border: none !important;
+        }
+        ::-webkit-scrollbar-thumb:hover {
+            background: var(--jt-red) !important;
+        }
+
+        /* 代码区 - 浅色覆盖 monokai 深色 */
+        pre.trace,
+        .hljs,
+        .hljs * {
+            background: #fafafa !important;
+            color: var(--jt-text-main) !important;
+        }
+        pre.trace {
+            border: 1px solid var(--jt-border) !important;
+            border-radius: 8px !important;
+            padding: 14px 16px !important;
+        }
+
+        /* 步骤参数分割线 / 截图边框 - 浅色 */
+        .step-right .step-args {
+            border-top: solid 1px var(--jt-border) !important;
+        }
+        .fancybox .screen {
+            border: solid 1px var(--jt-border) !important;
+        }
+        .step-right {
+            border-left: none !important;
+        }
+
+        /* 步骤状态徽标 - 极兔红 + 绿 */
+        .step-right .step-status.success {
+            background: #E8F5E9 !important;
+            color: #2E7D32 !important;
+            border: 1px solid #C8E6C9;
+        }
+        .step-right .step-status.fail {
+            background: var(--jt-red) !important;
+            color: #fff !important;
+            border: 1px solid var(--jt-red);
+        }
+        .step-right .step-infos .content-val.success {
+            color: #2E7D32 !important;
+        }
+        .step-right .step-infos .content-val.fail {
+            color: var(--jt-red) !important;
+        }
+
+        /* info-value - 去除蓝色 */
+        .summary .info-toal .info-value,
+        .summary .info-toal .info-value a,
+        .info-value {
+            color: var(--jt-text-main) !important;
+        }
+        .summary .info-title .green {
+            color: #2E7D32 !important;
+        }
+        .summary .info-title .red {
+            color: var(--jt-red) !important;
+        }
+
+        /* 步骤描述 / 加粗文字 */
+        .step-right .step-head,
+        .step-right .bold {
+            color: var(--jt-text-main) !important;
+        }
+        .step-right .desc {
+            color: var(--jt-text-sub) !important;
+        }
+
+        /* 多设备区 */
+        #device {
+            background: #fff !important;
+            color: var(--jt-text-main) !important;
+        }
+        #back_multi .back {
+            border: solid 1px var(--jt-border) !important;
+            background: #fff !important;
+        }
+        #back_multi .back:hover {
+            background: var(--jt-light-red) !important;
+            border-color: var(--jt-red) !important;
+        }
+
+        /* 大图查看弹窗 - 保持浅色蒙层 */
+        #magnify.mask {
+            background: rgba(255,255,255,0.92) !important;
+        }
+
+        /* 控制台弹窗 */
+        #console.mask {
+            background: rgba(0,0,0,0.45) !important;
+        }
+        #console .content,
+        #console .hljs.content {
+            background: #fff !important;
+            border-radius: 12px !important;
+            box-shadow: 0 12px 40px rgba(0,0,0,0.2) !important;
+            border: 1px solid var(--jt-border) !important;
+        }
+        #close-console {
+            border: solid 1px var(--jt-border) !important;
+            background: var(--jt-light-red) !important;
+        }
+        #close-console:hover {
+            background: var(--jt-red) !important;
+        }
+
+        /* steps-content 透明（避免深色透出） */
+        .steps-content,
+        .steps .content,
+        .steps,
+        #main .steps {
+            background: transparent !important;
+        }
+        .steps {
+            background: #fff !important;
+            border: 1px solid var(--jt-border) !important;
+            border-radius: var(--jt-radius) !important;
+            padding: 22px 26px !important;
+            box-shadow: var(--jt-shadow) !important;
+        }
+    </style>
+
+    <!-- 原生JS引用，路径全部保留模板变量，确保正常加载 -->
+    <script src="{{static_root}}js/jquery-1.10.2.min.js"></script>
+    <script src="{{static_root}}js/jquery-lang.js" charset="utf-8" type="text/javascript"></script>
+    <script src="{{static_root}}js/langpack/zh_CN.js" charset="utf-8" type="text/javascript"></script>
+    <script src="{{static_root}}js/lazyload.js" charset="utf-8" type="text/javascript"></script>
+    <script type="text/javascript">
+      // 保留原生动态数据注入，绝不写死数据
+      lang = new Lang();
+      lang.init({
+        defaultLang: 'en',
+        currentLang: '{{ lang }}'
+      });
+
+      // 强制取消截图快览的滚动冻结（覆盖 report.js 的 setImgAffix）
+      (function(){
+        function unfreezeGallery(){
+          var gc = document.querySelector('.gallery .content');
+          if (gc) {
+            gc.style.position = 'relative';
+            gc.style.top = '0px';
+            gc.style.left = '';
+            gc.style.right = 'auto';
+            gc.style.width = 'auto';
+            gc.style.maxWidth = '100%';
+          }
+          // 同时释放 placeholder 的 min-height 强约束
+          var ph = document.querySelector('.gallery .placeholder');
+          if (ph) {
+            ph.style.minHeight = '';
+          }
+        }
+        window.addEventListener('scroll', unfreezeGallery, true);
+        window.addEventListener('load', unfreezeGallery);
+        document.addEventListener('DOMContentLoaded', unfreezeGallery);
+      })();
+
+      // 默认展示"全部"步骤（覆盖 report.js init 中默认 filterAssertSteps 的行为）
+      (function(){
+        function applyAllFilter(){
+          try {
+            if (typeof stepPanel !== 'undefined' && stepPanel && stepPanel.original_steps) {
+              stepPanel.steps = [].concat(stepPanel.original_steps);
+              if (typeof stepPanel.filterSteps === 'function') {
+                stepPanel.filterSteps(document.querySelector('.filter#all') || $('.filter#all')[0]);
+              }
+              if (typeof stepPanel.setSteps === 'function') {
+                stepPanel.setSteps();
+              }
+            }
+          } catch (e) { /* 静默 */ }
+        }
+        // 等待 report.js 中 $(function(){...}) 初始化完成后切换
+        if (document.readyState === 'loading') {
+          document.addEventListener('DOMContentLoaded', function(){
+            setTimeout(applyAllFilter, 0);
+          });
+        } else {
+          setTimeout(applyAllFilter, 0);
+        }
+        window.addEventListener('load', function(){
+          setTimeout(applyAllFilter, 50);
+        });
+      })();
+
+      /* 美化 status 徽章: 把 [Passed]/[Failed] 改成胶囊 */
+      (function(){
+        function beautifyStatus(){
+          try {
+            var el = document.getElementById('result-desc');
+            if (!el) return;
+            var raw = (el.textContent || el.innerText || '').trim();
+            var m = raw.match(/\[?\s*(Passed|Failed|Success|Fail|成功|失败)\s*\]?/i);
+            if (!m) return;
+            var status = m[1].toLowerCase();
+            var passed = /pass|success|成功/i.test(status);
+            // 中文本地化
+            var label = passed ? '运行成功' : '运行失败';
+            // 清空内容, 改为带圆点胶囊
+            el.innerHTML = '<span class="status-dot"></span><span class="status-text">' + label + '</span>';
+            el.classList.add(passed ? 'jt-pass' : 'jt-fail');
+          } catch (e) { /* 静默 */ }
+        }
+        // 反复尝试（report.js 可能稍后才填入 result-desc）
+        function tryBeautify(times){
+          beautifyStatus();
+          if (times > 0) setTimeout(function(){ tryBeautify(times - 1); }, 100);
+        }
+        if (document.readyState === 'loading') {
+          document.addEventListener('DOMContentLoaded', function(){ tryBeautify(20); });
+        } else {
+          tryBeautify(20);
+        }
+        window.addEventListener('load', function(){ tryBeautify(20); });
+      })();
+    </script>
+</head>
+<body>
+<div class="container-fluid">
+    <div class="row">
+        <div id="main" class="main col-md-12">
+            <div id="back_multi"></div>
+            <h1 class="title">J&T 自动化测试报告 {{info.title}}</h1>
+
+            {% if not steps %}
+            <h2 lang="en" class="empty-report">暂无执行记录，日志文件为空</h2>
+            {% endif %}
+
+            <div class="summary">
+                <div class="show-{{'vertical' if info.desc else 'horizontal'}}">
+                    <div class="info info-merged">
+                        <div class="info-banner">
+                            <div class="banner-avatar">
+                                <img id='result-img' />
+                            </div>
+                            <div class="banner-meta">
+                                <div class="info-title"><span lang='en'>执行概览</span>
+                                    <label id='result-desc' lang="en"></label>
+                                </div>
+                                <div class="info-content info-subline">
+                                    <span class='info-sub start'></span>
+                                    <span class="info-divider">·</span>
+                                    <span class='info-sub time'></span>
+                                </div>
+                            </div>
+                            <div class="banner-team">
+                                <div class="team-badge">JT</div>
+                                <div class="team-text">
+                                    <div class="team-title">J&amp;T 测试团队</div>
+                                    <div class="team-sub">自动化测试平台</div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div class="info-body">
+                            <div class="info-col info-col-stats">
+                                <div class="col-title">本次执行</div>
+                                <div class="info-toal">
+                                    <div class="info-step">
+                                        <span class="info-name" lang="en">步骤总数</span>
+                                        <span class="info-value">{{steps|length}}</span>
+                                    </div>
+                                    <div class="info-time">
+                                        <span class="info-name" lang="en">执行耗时</span>
+                                        <span class="info-value duration">xxx</span>
+                                    </div>
+                                    {% if console %}
+                                    <div class="info-console">
+                                        <span class="info-name" lang="en">控制台</span>
+                                        <img id='show-console' src="{{static_root}}image/console_normal.svg" />
+                                        <div id='console' class="mask hide">
+                                            <div class="hljs content">
+                                                <img id='close-console' src="{{static_root}}image/close.svg" />
+                                                <div class="console-content"><pre class="trace">{{console}}</pre></div>
+                                            </div>
+                                        </div>
+                                    </div>
+                                    {% endif %}
+                                </div>
+                            </div>
+
+                            <div class="info-col info-col-team">
+                                <div class="col-title">执行信息</div>
+                                <div class="info-execute">
+                                    <div class="circle-img"></div>
+                                    {% if info.author %}
+                                    <div class="info-line"><span class="info-name" lang="en">执行人员</span><span class="info-value">{{info.author}}</span></div>
+                                    {% else %}
+                                    <div class="info-line"><span class="info-name" lang="en">执行人员</span><span class="info-value">Anonymous</span></div>
+                                    {% endif %}
+                                </div>
+                                <div class="info-execute">
+                                    <div class="circle-img"></div>
+                                    <div class="info-line" title="{{info.path}}">
+                                        <span class="info-name">脚本文件</span><span class="info-value">{{info.name}}</span>
+                                    </div>
+                                </div>
+                                {% if info.devices %}
+                                <div class="info-execute">
+                                    <div class="circle-img"></div>
+                                    {% set devices_str=info.devices.values() | join(',') %}
+                                    <div class="info-line" title="{{ devices_str }}">
+                                        <span class="info-name">测试设备</span><span class="info-value">{{info.devices.keys() | join(',') }}</span>
+                                    </div>
+                                </div>
+                                {% endif %}
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                {% if info.desc %}
+                <div class="info info3">
+                    <div class="info-title" lang="en">用例描述：</div>
+                    <div class="airdesc-wrap">
+                        <div class="airdesc">
+                            <div class="desc-content">{{ info.desc|safe }}</div>
+                            <div class="show-more"></div>
+                        </div>
+                    </div>
+                </div>
+                {% endif %}
+            </div>
+
+            <div class="device" id='device'></div>
+            {{ extra_block|safe }}
+
+            <div class="gallery">
+                <div class="info-title"><span lang="en">执行截图快览</span></div>
+                <div class='placeholder'>
+                    <div class="content"></div>
+                </div>
+            </div>
+
+            {% if steps|length >0 %}
+            <div class="steps">
+                <div class="content">
+                    <div class="steps-head">
+                        <div class="head-left">
+                            <div class="order" id='order'><span lang="en">顺序</span></div>
+                            <div class="order" id='duration'><span lang="en">耗时</span></div>
+                            <div class="order" id='status'><span lang="en">状态</span></div>
+                        </div>
+                        <div class="head-right">
+                            <span lang="en" class="jump-wrong" id='jump-wrong'>跳转至失败步骤</span>
+                            <span lang="en">筛选：</span>
+                            <span class="filters">
+                                <span lang="en" class="filter" id="all" alt="show all steps">全部</span>
+                                <span lang="en" class="filter" id='success' alt="show success steps only">成功</span>
+                                <span lang="en" class="filter" id='fail' alt="show failed steps only">失败</span>
+                                <span lang="en" class="filter" id="assert" alt="show steps with assertion only">断言</span>
+                            </span>
+                        </div>
+                    </div>
+                    <div class="steps-content">
+                        <div class="step-left" id='step-left'>
+                            <div class="step-list"></div>
+                            <div id="pageTool"></div>
+                        </div>
+                        <div class="step-right" id='step-right'></div>
+                    </div>
+                </div>
+            </div>
+            {% endif %}
+        </div>
+
+        {% block footer %}
+        <div class="footer">
+            <div class="footer-content">
+                <div class="corp">
+                    <img src="{{static_root}}image/company_logo.png" alt="J&T 极兔速递">
+                    <span>© 2026 J&T 测试团队 · 自动化测试平台</span>
+                </div>
+            </div>
+        </div>
+        {% endblock %}
+    </div>
+
+    <!-- 录屏模块：条件渲染，无录屏不生成 -->
+    {% if records %}
+    <div class="row gif-wrap show">
+        <div class="menu">
+            <div class="pattern pattern1">
+                <div class="minimize">
+                    <img title="最小化" src="{{static_root}}image/minimize.svg" />
+                </div>
+                <div class="close">
+                    <img title="关闭" src="{{static_root}}image/close.svg" />
+                </div>
+            </div>
+            <div class="pattern pattern2">
+                <div class="maximize">
+                    <img title="最大化" src="{{static_root}}image/maximize.svg" />
+                </div>
+            </div>
+        </div>
+        <div class="col-md-6">
+            {% for r in records %}
+            <div align="center" class="embed-responsive embed-responsive-16by9">
+                <a href="{{ r }}" target="_blank" class="open_in_new_tab">
+                    <img title="在新窗口打开" src="{{static_root}}image/open_in_new_tab.svg" />
+                </a>
+                <video class="embed-responsive-item" controls>
+                    <source src="{{ r }}" type="video/mp4">
+                </video>
+            </div>
+            {% endfor %}
+        </div>
+    </div>
+    {% endif %}
+
+    <!-- 大图查看弹窗 -->
+    <div id='magnify' class="mask hide">
+        <div class="content"></div>
+    </div>
+</div>
+
+<link href="{{static_root}}css/monokai_sublime.min.css" rel="stylesheet">
+<script src="{{static_root}}js/highlight.min.js"></script>
+<script type="text/javascript" src="{{static_root}}js/paging.js"></script>
+<script src="{{static_root}}js/report.js"></script>
+</body>
+</html>
