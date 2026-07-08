@@ -101,6 +101,35 @@ def execute_scheduled_task(self, task_id: int, trigger_type: str = 'scheduled'):
             run_suite.delay(suite_execution.id)
             log_lines.append(f"[{timezone.now().isoformat()}] 套件执行已提交: execution_id={suite_execution.id}")
 
+        if task.module == ScheduledTask.TaskModule.APP_UI_AUTOMATION:
+            from app_ui_automation.models import AppUiBatchExecutionRecord
+            from app_ui_automation.tasks import execute_app_ui_batch
+
+            scripts = task.app_ui_scripts.all()
+            if not scripts:
+                execution.log += 'No scripts selected for APPUI task\n'
+                execution.save()
+                return
+
+            batch = AppUiBatchExecutionRecord.objects.create(
+                name=f"定时任务-{task.name}",
+                total_scripts=scripts.count(),
+                trigger_type='scheduled',
+                executor=task.creator,
+                start_time=timezone.now(),
+            )
+
+            script_ids = list(scripts.values_list('id', flat=True))
+            device_id = task.app_ui_device_id if task.app_ui_device else None
+
+            # 串行执行
+            execute_app_ui_batch(batch.id, script_ids, device_id)
+
+            execution.log += f'APPUI batch {batch.id} completed\n'
+            execution.status = 'success'
+            execution.save()
+            return
+
         log_lines.append(f"[{timezone.now().isoformat()}] 任务执行完成")
 
         execution.status = TaskExecution.ExecutionStatus.SUCCESS

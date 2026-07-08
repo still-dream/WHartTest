@@ -24,6 +24,7 @@ class ScheduledTask(models.Model):
     class TaskModule(models.TextChoices):
         UI_AUTOMATION = 'ui_automation', _('UI 自动化')
         TEST_SUITE = 'test_suite', _('测试套件')
+        APP_UI_AUTOMATION = 'app_ui_automation', _('APPUI 自动化')
 
     class ExecutionTarget(models.TextChoices):
         ACTUATOR = 'actuator', _('执行器')
@@ -74,6 +75,20 @@ class ScheduledTask(models.Model):
         UiTestCase, blank=True, related_name='scheduled_tasks',
         verbose_name=_('关联UI用例'),
         help_text=_('模块为"UI自动化"时选择要执行的用例')
+    )
+
+    # APPUI 自动化相关
+    app_ui_scripts = models.ManyToManyField(
+        'app_ui_automation.AppUiScript', blank=True,
+        related_name='scheduled_tasks',
+        verbose_name=_('关联APPUI脚本'),
+        help_text=_('模块为"APPUI自动化"时选择要执行的脚本（串行执行）')
+    )
+    app_ui_device = models.ForeignKey(
+        'app_ui_automation.AppUiDevice', on_delete=models.SET_NULL,
+        null=True, blank=True, related_name='scheduled_tasks',
+        verbose_name=_('APPUI 执行设备'),
+        help_text=_('APPUI自动化执行时使用的设备')
     )
 
     # 调度配置
