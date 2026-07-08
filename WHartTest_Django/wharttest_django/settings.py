@@ -131,6 +131,7 @@ INSTALLED_APPS = [
     "skills",  # Skill 管理应用。
     "testcase_templates",  # 用例模板应用。
     "ui_automation",  # UI 自动化应用。
+    "app_ui_automation",  # APPUI 自动化应用（Airtest）。
     "weixin_integration",  # 微信扫码登录与消息集成。
     'task_center', # 任务中心应用
     'django_celery_beat', # Celery Beat 数据库调度器
