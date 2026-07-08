@@ -727,3 +727,16 @@ SKILL_STORE_ALLOW_CUSTOM_SOURCE = os.environ.get(
 SKILL_STORE_MAX_ZIP_SIZE = int(os.environ.get("SKILL_STORE_MAX_ZIP_SIZE", str(10 * 1024 * 1024)))
 # 通过 zip URL 下载的超时时间（秒）
 SKILL_STORE_DOWNLOAD_TIMEOUT = int(os.environ.get("SKILL_STORE_DOWNLOAD_TIMEOUT", "60"))
+
+# ============================== Airtest 配置 ==============================
+# AirtestIDE 安装路径（仅用于报告生成 reporter 命令）
+AIRTEST_IDE_PATH = os.environ.get(
+    'AIRTEST_IDE_PATH',
+    r'C:\Program Files\AirtestIDE-win-1.2.17\AirtestIDE\AirtestIDE'
+)
+# Airtest 报告语言
+AIRTEST_REPORT_LANG = 'zh'
+# 自定义报告模板路径
+AIRTEST_REPORT_TEMPLATE = os.path.join(
+    BASE_DIR, 'testcases', 'appuitest', 'log_template.html'
+)

@@ -167,6 +167,8 @@ urlpatterns = [
     path("api/", include("testcase_templates.urls")),
     # 挂载 UI 自动化路由。
     path("api/ui-automation/", include("ui_automation.urls")),
+    # 挂载 APPUI 自动化路由。
+    path("api/app-ui-automation/", include("app_ui_automation.urls")),
     # 挂载微信集成路由。
     path("api/weixin/", include("weixin_integration.urls")),
     # 挂载 OpenAPI schema 接口。
