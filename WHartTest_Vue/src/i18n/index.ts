@@ -434,6 +434,7 @@ const LEGACY_EXACT_EN_MAP: Record<string, string> = {
   '项目管理': 'Projects',
   '需求管理': 'Requirements',
   'UI自动化': 'UI Automation',
+  'APPUI自动化': 'APP UI Automation',
   '任务中心': 'Task Center',
   '测试管理': 'Test Management',
   '用例管理': 'Case Management',

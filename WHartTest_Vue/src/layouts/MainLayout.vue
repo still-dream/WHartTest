@@ -152,6 +152,11 @@
             <a href="#" @click="checkProjectAndNavigate($event, '/ui-automation')">{{ automationMenuLabel }}</a>
           </a-menu-item>
 
+          <a-menu-item key="app-ui-automation" v-if="hasAppUiAutomationPermission">
+            <template #icon><icon-mobile /></template>
+            <a href="#" @click="checkProjectAndNavigate($event, '/app-ui-automation')">{{ appUiAutomationMenuLabel }}</a>
+          </a-menu-item>
+
           <a-menu-item key="task-center" v-if="hasTaskCenterPermission">
             <template #icon><icon-schedule /></template>
             <a href="#" @click="checkProjectAndNavigate($event, '/task-center')">{{ tasksMenuLabel }}</a>
@@ -303,6 +308,7 @@ import {
   IconHome,
   IconComputer,
   IconSchedule,
+  IconMobile,
   IconSunFill,
   IconMoonFill,
 } from '@arco-design/web-vue/es/icon';
@@ -330,6 +336,7 @@ const projectsMenuLabel = computed(() => (locale.value === 'en-US' ? 'Projects' 
 const requirementsMenuLabel = computed(() => (locale.value === 'en-US' ? 'Requirements' : tl('需求管理')));
 const apiTestingMenuLabel = computed(() => (locale.value === 'en-US' ? 'API Testing' : tl('接口自动化')));
 const automationMenuLabel = computed(() => (locale.value === 'en-US' ? 'Automation' : tl('UI自动化')));
+const appUiAutomationMenuLabel = computed(() => (locale.value === 'en-US' ? 'APP UI' : tl('APPUI自动化')));
 const tasksMenuLabel = computed(() => (locale.value === 'en-US' ? 'Tasks' : tl('任务中心')));
 const knowledgeMenuLabel = computed(() => (locale.value === 'en-US' ? 'RAG' : tl('知识库管理')));
 const apiKeysMenuLabel = computed(() => (locale.value === 'en-US' ? 'Keys' : tl('KEY管理')));
@@ -391,6 +398,7 @@ const activeMenu = computed(() => {
   if (path.startsWith('/requirements')) return 'requirements'; // 添加对需求管理路由的识别
   if (path.startsWith('/api-testing')) return 'api-testing';
   if (path.startsWith('/ui-automation')) return 'ui-automation';
+  if (path.startsWith('/app-ui-automation')) return 'app-ui-automation';
   if (path.startsWith('/testsuites')) return 'testsuites'; // 添加对测试套件路由的识别
   if (path.startsWith('/test-executions')) return 'test-executions'; // 添加对执行历史路由的识别
   if (path.startsWith('/testcases')) return 'testcases';
@@ -450,6 +458,12 @@ const hasUiAutomationPermission = computed(() => {
   return authStore.hasPermission('ui_automation.view_uimodule') ||
          authStore.hasPermission('ui_automation.view_uipage') ||
          authStore.hasPermission('ui_automation.view_uitestcase');
+});
+
+const hasAppUiAutomationPermission = computed(() => {
+  return authStore.hasPermission('app_ui_automation.view_appuimodule') ||
+         authStore.hasPermission('app_ui_automation.view_appuiscript') ||
+         authStore.hasPermission('app_ui_automation.view_appuidevice');
 });
 
 const hasKnowledgePermission = computed(() => {
