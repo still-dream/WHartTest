@@ -729,10 +729,12 @@ SKILL_STORE_MAX_ZIP_SIZE = int(os.environ.get("SKILL_STORE_MAX_ZIP_SIZE", str(10
 SKILL_STORE_DOWNLOAD_TIMEOUT = int(os.environ.get("SKILL_STORE_DOWNLOAD_TIMEOUT", "60"))
 
 # ============================== Airtest 配置 ==============================
-# AirtestIDE 安装路径（仅用于报告生成 reporter 命令）
+# AirtestIDE / airtest CLI 路径（仅用于报告生成 reporter 命令）
+# Docker 环境使用 airtest Python 包自带的 CLI 命令
+# Windows 本地开发可设置为 AirtestIDE.exe 的完整路径
 AIRTEST_IDE_PATH = os.environ.get(
     'AIRTEST_IDE_PATH',
-    r'C:\Program Files\AirtestIDE-win-1.2.17\AirtestIDE\AirtestIDE'
+    'airtest'  # Docker/Linux 环境默认使用 airtest CLI
 )
 # Airtest 报告语言
 AIRTEST_REPORT_LANG = 'zh'

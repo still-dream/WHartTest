@@ -170,6 +170,8 @@ RUN if [ "$APT_BASE_URL" != "http://deb.debian.org" ]; then \
     # 旧版Word文档(.doc)解析支持
     antiword \
     catdoc \
+    # ADB (Android Debug Bridge) - APPUI 自动化连接 Android 设备
+    adb \
     && rm -rf /var/lib/apt/lists/* \
     && apt-get clean \
     && fc-cache -fv
@@ -321,6 +323,7 @@ COPY requirements/ /app/requirements/
 COPY skills/ /app/skills/
 COPY task_center/ /app/task_center/
 COPY ui_automation/ /app/ui_automation/
+COPY app_ui_automation/ /app/app_ui_automation/
 COPY weixin_integration/ /app/weixin_integration/
 COPY testcase_templates/ /app/testcase_templates/
 COPY testcases/ /app/testcases/
