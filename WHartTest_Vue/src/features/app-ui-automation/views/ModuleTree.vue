@@ -69,6 +69,7 @@ import { ref, reactive, watch } from 'vue'
 import { Message, Modal } from '@arco-design/web-vue'
 import { IconPlus, IconEdit, IconDelete, IconMore } from '@arco-design/web-vue/es/icon'
 import { moduleApi } from '../api'
+import { extractResponseData } from '../types'
 import type { AppUiModule, AppUiModuleForm } from '../types'
 
 const props = defineProps<{
@@ -104,7 +105,7 @@ const fetchModules = async () => {
   loading.value = true
   try {
     const res = await moduleApi.tree(props.projectId)
-    treeData.value = res.data || []
+    treeData.value = extractResponseData<AppUiModule[]>(res) || []
   } catch {
     Message.error('获取模块树失败')
   } finally {

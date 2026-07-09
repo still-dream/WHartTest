@@ -95,6 +95,7 @@
       v-model:visible="modalVisible"
       :title="isEdit ? '编辑脚本' : '上传脚本'"
       :ok-loading="submitting"
+      :ok-text="uploadSuccess ? '关闭' : (isEdit ? '更新' : '上传')"
       :width="560"
       @before-ok="handleSubmit"
       @cancel="handleCancel"
@@ -127,22 +128,26 @@
         <a-form-item field="description" label="描述">
           <a-textarea v-model="formData.description" placeholder="请输入描述" :auto-size="{ minRows: 2 }" />
         </a-form-item>
-        <a-form-item field="script_file" label="Airtest 脚本包 (.zip)" :required="!isEdit">
-          <a-upload
-            :auto-upload="false"
-            :limit="1"
-            accept=".zip"
-            :file-list="fileList"
-            @change="onFileChange"
-          >
-            <template #upload-button>
-              <a-button type="primary">
-                <template #icon><icon-upload /></template>
-                选择 zip 文件
-              </a-button>
-            </template>
-          </a-upload>
-          <div v-if="isEdit && currentScript?.script_file" class="file-hint">
+        <a-form-item field="script_file" label="Airtest 脚本" :required="!isEdit">
+          <div class="upload-buttons">
+            <a-button type="primary" @click="triggerFileSelect">
+              <template #icon><icon-upload /></template>
+              选择文件 (.zip/.py)
+            </a-button>
+            <a-button :loading="zippingAir" @click="triggerAirDirSelect">
+              <template #icon><icon-folder /></template>
+              选择 .air 目录
+            </a-button>
+          </div>
+          <input ref="fileInputRef" type="file" accept=".zip,.py" style="display:none" @change="onFileSelect" />
+          <input ref="airDirInputRef" type="file" webkitdirectory style="display:none" @change="onAirDirChange" />
+          <div v-if="selectedFileName" class="selected-file">
+            <span class="selected-file-name">{{ selectedFileName }}</span>
+            <a-button v-if="!uploadSuccess" type="text" size="mini" status="danger" @click="clearSelectedFile">
+              <template #icon><icon-delete /></template>
+            </a-button>
+          </div>
+          <div v-if="isEdit && currentScript?.script_file && !selectedFileName" class="file-hint">
             当前文件：{{ currentScript.script_file }}（重新上传将覆盖）
           </div>
         </a-form-item>
@@ -189,8 +194,9 @@
 import { ref, reactive, computed, watch } from 'vue'
 import { Message } from '@arco-design/web-vue'
 import {
-  IconPlus, IconEdit, IconDelete, IconEye, IconUpload, IconPlayArrow,
+  IconPlus, IconEdit, IconDelete, IconEye, IconUpload, IconPlayArrow, IconFolder,
 } from '@arco-design/web-vue/es/icon'
+import JSZip from 'jszip'
 import { useProjectStore } from '@/store/projectStore'
 import { scriptApi, moduleApi, deviceApi } from '../api'
 import type {
@@ -217,7 +223,12 @@ const executeVisible = ref(false)
 const isEdit = ref(false)
 const currentScript = ref<AppUiScript | null>(null)
 const formRef = ref()
-const fileList = ref<any[]>([])
+const selectedFile = ref<File | null>(null)
+const selectedFileName = ref('')
+const fileInputRef = ref<HTMLInputElement>()
+const airDirInputRef = ref<HTMLInputElement>()
+const zippingAir = ref(false)
+const uploadSuccess = ref(false)
 
 const filters = reactive({
   module: undefined as number | undefined,
@@ -350,8 +361,60 @@ const onPageSizeChange = (pageSize: number) => {
   fetchScripts()
 }
 
-const onFileChange = (currentFileList: any[]) => {
-  fileList.value = currentFileList
+const triggerFileSelect = () => {
+  fileInputRef.value?.click()
+}
+
+const onFileSelect = (e: Event) => {
+  const input = e.target as HTMLInputElement
+  if (!input.files || !input.files.length) return
+  selectedFile.value = input.files[0]
+  selectedFileName.value = input.files[0].name
+  uploadSuccess.value = false
+  input.value = ''
+}
+
+const clearSelectedFile = () => {
+  selectedFile.value = null
+  selectedFileName.value = ''
+}
+
+const triggerAirDirSelect = () => {
+  airDirInputRef.value?.click()
+}
+
+const onAirDirChange = async (e: Event) => {
+  const input = e.target as HTMLInputElement
+  if (!input.files || !input.files.length) return
+
+  // 校验选中的是 .air 目录
+  const firstFile = input.files[0]
+  const dirName = firstFile.webkitRelativePath.split('/')[0]
+  if (!dirName.endsWith('.air')) {
+    Message.warning('请选择 .air 目录')
+    input.value = ''
+    return
+  }
+
+  zippingAir.value = true
+  try {
+    const zip = new JSZip()
+    Array.from(input.files).forEach(file => {
+      zip.file(file.webkitRelativePath, file)
+    })
+    const blob = await zip.generateAsync({ type: 'blob' })
+    const zipFile = new File([blob], `${dirName}.zip`, { type: 'application/zip' })
+
+    selectedFile.value = zipFile
+    selectedFileName.value = `${dirName}.zip`
+    uploadSuccess.value = false
+    Message.success(`已打包 ${dirName} 目录`)
+  } catch {
+    Message.error('打包 .air 目录失败')
+  } finally {
+    zippingAir.value = false
+    input.value = ''
+  }
 }
 
 const resetForm = () => {
@@ -363,7 +426,9 @@ const resetForm = () => {
     level: 'P2',
     description: '',
   })
-  fileList.value = []
+  selectedFile.value = null
+  selectedFileName.value = ''
+  uploadSuccess.value = false
   formRef.value?.clearValidate()
 }
 
@@ -391,7 +456,9 @@ const editScript = async (record: AppUiScript) => {
     level: record.level,
     description: record.description || '',
   })
-  fileList.value = []
+  selectedFile.value = null
+  selectedFileName.value = ''
+  uploadSuccess.value = false
   if (!moduleOptions.value.length) {
     await fetchModules()
   }
@@ -408,14 +475,19 @@ const buildFormData = (): FormData => {
   if (formData.description) {
     fd.append('description', formData.description)
   }
-  const file = fileList.value?.[0]?.file
-  if (file) {
-    fd.append('script_file', file as File)
+  if (selectedFile.value) {
+    fd.append('script_file', selectedFile.value)
   }
   return fd
 }
 
 const handleSubmit = async (done: (closed: boolean) => void) => {
+  // 已上传成功后，点击"关闭"直接关闭弹窗
+  if (uploadSuccess.value) {
+    done(true)
+    return
+  }
+
   try {
     await formRef.value?.validate()
   } catch {
@@ -423,22 +495,24 @@ const handleSubmit = async (done: (closed: boolean) => void) => {
     done(false)
     return
   }
-  if (!isEdit.value && !fileList.value?.[0]?.file) {
-    Message.warning('请上传脚本 zip 文件')
+  if (!isEdit.value && !selectedFile.value) {
+    Message.warning('请上传脚本文件')
     done(false)
     return
   }
+  // 编辑时若未选择新文件，也允许提交（仅修改基本信息）
   submitting.value = true
   try {
     const fd = buildFormData()
     if (isEdit.value && currentScript.value) {
       await scriptApi.update(currentScript.value.id, fd)
-      Message.success('更新成功')
+      Message.success('更新成功，可点击关闭')
     } else {
       await scriptApi.create(fd)
-      Message.success('上传成功')
+      Message.success('上传成功，可点击关闭')
     }
-    done(true)
+    uploadSuccess.value = true
+    done(false)  // 不自动关闭，用户手动点击关闭
     fetchScripts()
   } catch (error: unknown) {
     const err = error as { errors?: Record<string, string[]>; error?: string }
@@ -566,6 +640,27 @@ watch(() => props.selectedModuleId, (val) => {
   margin-top: 4px;
   font-size: 12px;
   color: var(--color-text-3);
+}
+.upload-buttons {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+}
+.selected-file {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 8px;
+  padding: 6px 12px;
+  background: var(--color-fill-1);
+  border-radius: 4px;
+  font-size: 13px;
+}
+.selected-file-name {
+  flex: 1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 .exec-hint {
   margin-bottom: 12px;

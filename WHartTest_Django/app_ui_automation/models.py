@@ -75,7 +75,7 @@ class AppUiScript(models.Model):
     platform = models.CharField(_('目标平台'), max_length=10,
         choices=PLATFORM_CHOICES, default='android')
     script_file = models.FileField(_('Airtest脚本包'), upload_to=app_ui_script_path,
-        help_text=_('上传 .air 目录打包的 zip 文件'))
+        help_text=_('上传 .zip、.air 或 .py 脚本文件'))
     script_dir = models.CharField(_('脚本目录路径'), max_length=500, blank=True, default='')
     script_entry = models.CharField(_('脚本入口文件'), max_length=255, blank=True, default='')
     level = models.CharField(_('用例等级'), max_length=2, choices=LEVEL_CHOICES, default='P2')

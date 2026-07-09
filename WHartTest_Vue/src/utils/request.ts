@@ -56,8 +56,14 @@ service.interceptors.request.use(
     }
 
     // 如果是 FormData，删除默认的 Content-Type，让浏览器自动设置（包含 boundary）
+    // 注意：AxiosHeaders 内部以小写存储 header 名，必须用 delete() 方法（大小写不敏感）
     if (config.data instanceof FormData) {
-      delete config.headers['Content-Type'];
+      if (config.headers && typeof config.headers.delete === 'function') {
+        config.headers.delete('Content-Type');
+      } else if (config.headers) {
+        delete config.headers['content-type'];
+        delete config.headers['Content-Type'];
+      }
     }
 
     return config;

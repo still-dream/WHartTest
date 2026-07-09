@@ -3,6 +3,8 @@
  */
 
 import request from '@/utils/request'
+import { useAuthStore } from '@/store/authStore'
+import { getCurrentServerLanguage } from '@/utils/installLocaleAdapters'
 import type {
   AppUiModule,
   AppUiModuleForm,
@@ -18,6 +20,42 @@ import type {
 } from '../types'
 
 const BASE_URL = '/app-ui-automation'
+
+/**
+ * 使用原生 fetch 上传 FormData，绕过 axios 的 Content-Type 干扰。
+ * 浏览器会自动为 FormData 设置正确的 multipart/form-data（含 boundary）。
+ */
+async function uploadViaFetch(url: string, method: string, data: FormData): Promise<any> {
+  const baseURL = (request as any).defaults?.baseURL || '/api'
+  const token = useAuthStore().getAccessToken
+  const headers: Record<string, string> = {
+    'Accept-Language': getCurrentServerLanguage(),
+  }
+  if (token) headers['Authorization'] = `Bearer ${token}`
+
+  const resp = await fetch(`${baseURL}${url}`, { method, body: data, headers })
+
+  let result: any
+  try {
+    result = await resp.json()
+  } catch {
+    throw {
+      success: false,
+      status: resp.status,
+      error: `请求失败 (${resp.status} ${resp.statusText})`,
+    }
+  }
+
+  if (!resp.ok) {
+    throw {
+      success: false,
+      status: resp.status,
+      error: result.message || '操作失败',
+      errors: result.errors,
+    }
+  }
+  return { success: true, data: result.data, message: result.message }
+}
 
 // 拼接可直接在浏览器中打开的完整 URL（基于 axios 实例的 baseURL）
 function buildUrl(path: string): string {
@@ -50,17 +88,11 @@ export const scriptApi = {
 
   get: (id: number) => request.get<AppUiScript>(`${BASE_URL}/scripts/${id}/`),
 
-  /** 创建脚本（FormData 上传 zip 文件） */
-  create: (data: FormData) =>
-    request.post<AppUiScript>(`${BASE_URL}/scripts/`, data, {
-      headers: { 'Content-Type': 'multipart/form-data' },
-    }),
+  /** 创建脚本（FormData 上传脚本文件，使用 fetch 绕过 axios Content-Type 问题） */
+  create: (data: FormData) => uploadViaFetch(`${BASE_URL}/scripts/`, 'POST', data),
 
-  /** 更新脚本（FormData 上传 zip 文件） */
-  update: (id: number, data: FormData) =>
-    request.patch<AppUiScript>(`${BASE_URL}/scripts/${id}/`, data, {
-      headers: { 'Content-Type': 'multipart/form-data' },
-    }),
+  /** 更新脚本（FormData 上传脚本文件，使用 fetch 绕过 axios Content-Type 问题） */
+  update: (id: number, data: FormData) => uploadViaFetch(`${BASE_URL}/scripts/${id}/`, 'PATCH', data),
 
   delete: (id: number) => request.delete(`${BASE_URL}/scripts/${id}/`),
 

@@ -1,6 +1,8 @@
 # -*- coding: utf-8 -*-
 """APPUI 自动化序列化器"""
 
+import os
+
 from rest_framework import serializers
 from .models import (
     AppUiModule, AppUiScript, AppUiDevice,
@@ -37,6 +39,13 @@ class AppUiScriptSerializer(serializers.ModelSerializer):
                   'created_at', 'updated_at']
         read_only_fields = ['script_dir', 'script_entry', 'status',
                             'creator', 'created_at', 'updated_at']
+
+    def validate_script_file(self, value):
+        """验证脚本文件格式，支持 .zip/.air/.py"""
+        ext = os.path.splitext(value.name)[1].lower()
+        if ext not in ('.zip', '.air', '.py'):
+            raise serializers.ValidationError('不支持的文件格式，请上传 .zip、.air 或 .py 文件')
+        return value
 
 
 class AppUiDeviceSerializer(serializers.ModelSerializer):

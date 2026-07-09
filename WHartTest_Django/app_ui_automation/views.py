@@ -79,22 +79,37 @@ class AppUiScriptViewSet(viewsets.ModelViewSet):
             self._extract_and_parse(instance)
 
     def _extract_and_parse(self, instance):
-        """解压 zip 包并识别 .py 入口文件"""
+        """解析脚本文件并识别 .py 入口文件，支持 .zip/.air/.py 格式"""
         if not instance.script_file:
             return
-        zip_path = instance.script_file.path
-        extract_dir = os.path.join(
-            settings.MEDIA_ROOT,
-            f'app_ui_scripts/{instance.project.id}/{instance.id}'
-        )
+        file_path = instance.script_file.path
+        file_ext = os.path.splitext(file_path)[1].lower()
+        script_base_dir = f'app_ui_scripts/{instance.project.id}/{instance.id}'
+        extract_dir = os.path.join(settings.MEDIA_ROOT, script_base_dir)
         os.makedirs(extract_dir, exist_ok=True)
-        with zipfile.ZipFile(zip_path, 'r') as zf:
-            zf.extractall(extract_dir)
+
+        if file_ext == '.py':
+            # 单个 .py 脚本，直接作为入口文件
+            instance.script_dir = script_base_dir
+            instance.script_entry = os.path.basename(file_path)
+            instance.save()
+            return
+
+        # .zip 或 .air 文件，按 zip 解压
+        try:
+            with zipfile.ZipFile(file_path, 'r') as zf:
+                zf.extractall(extract_dir)
+        except zipfile.BadZipFile:
+            instance.status = 'failed'
+            instance.save()
+            return
+
         # 查找 .air 目录
-        air_dirs = [d for d in os.listdir(extract_dir) if d.endswith('.air')]
+        air_dirs = [d for d in os.listdir(extract_dir)
+                    if d.endswith('.air') and os.path.isdir(os.path.join(extract_dir, d))]
         if air_dirs:
             air_dir = air_dirs[0]
-            instance.script_dir = f'app_ui_scripts/{instance.project.id}/{instance.id}/{air_dir}'
+            instance.script_dir = f'{script_base_dir}/{air_dir}'
             py_name = air_dir.replace('.air', '.py')
             py_path = os.path.join(extract_dir, air_dir, py_name)
             if os.path.isfile(py_path):
@@ -104,6 +119,18 @@ class AppUiScriptViewSet(viewsets.ModelViewSet):
                     if f.endswith('.py'):
                         instance.script_entry = f
                         break
+            instance.save()
+            return
+
+        # 没有 .air 目录，查找解压目录下的 .py 文件
+        py_files = [f for f in os.listdir(extract_dir)
+                    if f.endswith('.py') and os.path.isfile(os.path.join(extract_dir, f))]
+        if py_files:
+            instance.script_dir = script_base_dir
+            instance.script_entry = py_files[0]
+            instance.save()
+        else:
+            instance.status = 'failed'
             instance.save()
 
     @action(detail=True, methods=['get'])
