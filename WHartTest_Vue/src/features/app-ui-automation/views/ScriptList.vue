@@ -129,26 +129,28 @@
           <a-textarea v-model="formData.description" placeholder="请输入描述" :auto-size="{ minRows: 2 }" />
         </a-form-item>
         <a-form-item field="script_file" label="Airtest 脚本" :required="!isEdit">
-          <div class="upload-buttons">
-            <a-button type="primary" @click="triggerFileSelect">
-              <template #icon><icon-upload /></template>
-              选择文件 (.zip/.py)
-            </a-button>
-            <a-button :loading="zippingAir" @click="triggerAirDirSelect">
-              <template #icon><icon-folder /></template>
-              选择 .air 目录
-            </a-button>
-          </div>
-          <input ref="fileInputRef" type="file" accept=".zip,.py" style="display:none" @change="onFileSelect" />
-          <input ref="airDirInputRef" type="file" webkitdirectory style="display:none" @change="onAirDirChange" />
-          <div v-if="selectedFileName" class="selected-file">
-            <span class="selected-file-name">{{ selectedFileName }}</span>
-            <a-button v-if="!uploadSuccess" type="text" size="mini" status="danger" @click="clearSelectedFile">
-              <template #icon><icon-delete /></template>
-            </a-button>
-          </div>
-          <div v-if="isEdit && currentScript?.script_file && !selectedFileName" class="file-hint">
-            当前文件：{{ currentScript.script_file }}（重新上传将覆盖）
+          <div class="script-file-field">
+            <div class="upload-buttons">
+              <a-button type="primary" @click="triggerFileSelect">
+                <template #icon><icon-upload /></template>
+                选择文件 (.zip/.py)
+              </a-button>
+              <a-button :loading="zippingAir" @click="triggerAirDirSelect">
+                <template #icon><icon-folder /></template>
+                选择 .air 目录
+              </a-button>
+            </div>
+            <input ref="fileInputRef" type="file" accept=".zip,.py" style="display:none" @change="onFileSelect" />
+            <input ref="airDirInputRef" type="file" webkitdirectory style="display:none" @change="onAirDirChange" />
+            <div v-if="selectedFileName" class="selected-file">
+              <span class="selected-file-name">{{ selectedFileName }}</span>
+              <a-button v-if="!uploadSuccess" type="text" size="mini" status="danger" @click="clearSelectedFile">
+                <template #icon><icon-delete /></template>
+              </a-button>
+            </div>
+            <div v-if="isEdit && currentScript?.script_file && !selectedFileName" class="file-hint">
+              当前文件：{{ currentScript.script_file }}（重新上传将覆盖）
+            </div>
           </div>
         </a-form-item>
       </a-form>
@@ -641,10 +643,14 @@ watch(() => props.selectedModuleId, (val) => {
   font-size: 12px;
   color: var(--color-text-3);
 }
+.script-file-field {
+  width: 100%;
+}
 .upload-buttons {
   display: flex;
   align-items: flex-start;
   gap: 12px;
+  width: 100%;
 }
 .selected-file {
   display: flex;

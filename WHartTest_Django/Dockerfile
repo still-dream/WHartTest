@@ -55,13 +55,15 @@ RUN set -eux; \
 COPY requirements.txt .
 
 # 使用 uv 直接安装到虚拟环境（主镜像失败时自动切换到后备源）
-RUN set -eux; \
+# --mount=type=cache: 跨构建缓存 uv 下载的包，requirements.txt 变更时只需下载新增包
+RUN --mount=type=cache,target=/root/.cache/uv \
+    set -eux; \
     uv venv /opt/venv; \
     install_requirements() { \
       for index in "${PIP_INDEX_URL}" ${PIP_INDEX_FALLBACKS}; do \
         [ -n "$index" ] || continue; \
         echo "uv pip install via $index"; \
-        if uv pip install --python /opt/venv/bin/python --no-cache \
+        if uv pip install --python /opt/venv/bin/python \
           --default-index "$index" \
           -r requirements.txt; then \
           return 0; \
@@ -172,6 +174,9 @@ RUN if [ "$APT_BASE_URL" != "http://deb.debian.org" ]; then \
     catdoc \
     # ADB (Android Debug Bridge) - APPUI 自动化连接 Android 设备
     adb \
+    # Airtest minicap/minitouch 运行时依赖（提供 libGL.so.1、libglib-2.0.so.0）
+    libgl1 \
+    libglib2.0-0 \
     && rm -rf /var/lib/apt/lists/* \
     && apt-get clean \
     && fc-cache -fv
@@ -243,7 +248,8 @@ RUN set -eux; \
           echo "Fetching: ${metadata_url}"; \
           if metadata="$(curl -fsSL --retry 5 --retry-delay 5 --max-time 60 "${metadata_url}")"; then \
             # 简单粗暴地用 grep 抓出对应 channel 的 version 字段。
-            chrome_version_resolved="$(printf '%s' "${metadata}" | tr -d '\n' | grep -oE "\"${channel}\":\\{[^}]*\"version\":\"[0-9.]+\"" | grep -oE '[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+' | head -n1)"; \
+            # sed 去除所有空格以消除 JSON 格式差异，grep -i 忽略大小写（stable vs Stable）
+            chrome_version_resolved="$(printf '%s' "${metadata}" | tr -d '\n' | sed 's/ //g' | grep -oiE "\"${CHROME_VERSION}\":[^}]*\"version\":\"[0-9.]+\"" | grep -oE '[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+' | head -n1)"; \
             if [ -z "${chrome_version_resolved}" ]; then \
               echo "Warning: failed to parse ${channel} version from metadata, falling back to CHROME_VERSION=${CHROME_VERSION}"; \
               chrome_version_resolved="${CHROME_VERSION}"; \

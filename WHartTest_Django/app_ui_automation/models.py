@@ -235,3 +235,30 @@ class AppUiExecutionRecord(models.Model):
 
     def __str__(self):
         return f"{self.script.name} - {self.get_status_display()}"
+
+
+class AppUiExecutionConfig(models.Model):
+    """APPUI 执行配置（全局单例）"""
+    airtest_threshold = models.FloatField(_('图像匹配阈值'), default=0.6,
+        help_text=_('0-1 之间，值越低匹配越宽松'))
+    airtest_find_timeout = models.IntegerField(_('元素查找超时（秒）'), default=30)
+    airtest_opdelay = models.FloatField(_('操作间隔延迟（秒）'), default=1.0)
+    poco_wait_timeout = models.IntegerField(_('Poco元素等待超时（秒）'), default=20,
+        help_text=_('修改后需重新连接设备才生效'))
+    updated_by = models.ForeignKey(User, on_delete=models.SET_NULL, null=True,
+        related_name='app_ui_config_updates', verbose_name=_('更新人'))
+    updated_at = models.DateTimeField(_('更新时间'), auto_now=True)
+
+    class Meta:
+        verbose_name = _('APPUI 执行配置')
+        verbose_name_plural = _('APPUI 执行配置')
+        db_table = 'app_ui_execution_config'
+
+    def __str__(self):
+        return f"APPUI执行配置 (阈值={self.airtest_threshold}, 超时={self.airtest_find_timeout}s)"
+
+    @classmethod
+    def get_config(cls):
+        """获取全局配置（单例）"""
+        config, _ = cls.objects.get_or_create(id=1)
+        return config

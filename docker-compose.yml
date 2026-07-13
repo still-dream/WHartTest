@@ -181,7 +181,7 @@ services:
         # 基础镜像走第三方镜像代理，避免 daemon 的 registry-mirrors（sjtug 等）抽风时拖垮构建。
         # 可通过 DOCKER_NODE_BASE_IMAGE / DOCKER_NGINX_BASE_IMAGE 切到其他源
         NODE_BASE_IMAGE: ${DOCKER_NODE_BASE_IMAGE:-docker.1ms.run/library/node:20-alpine}
-        NGINX_BASE_IMAGE: ${DOCKER_NGINX_BASE_IMAGE:-docker.1ms.run/library/nginx:alpine}
+        NGINX_BASE_IMAGE: ${DOCKER_NGINX_BASE_IMAGE:-nginx:alpine}
         NPM_REGISTRY: ${DOCKER_NPM_REGISTRY:-https://registry.npmmirror.com}
     container_name: wharttest-frontend
     ports:

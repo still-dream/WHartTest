@@ -6,22 +6,48 @@ import zipfile
 
 from rest_framework import viewsets, status
 from rest_framework.decorators import action
+from rest_framework.mixins import DestroyModelMixin
 from rest_framework.response import Response
 from django_filters.rest_framework import DjangoFilterBackend
 from rest_framework.filters import SearchFilter, OrderingFilter
+from rest_framework_simplejwt.authentication import JWTAuthentication
+from api_keys.authentication import APIKeyAuthentication
 from django.db.models.deletion import ProtectedError
 from django.conf import settings
 from django.http import FileResponse
 
 from .models import (
     AppUiModule, AppUiScript, AppUiDevice,
-    AppUiExecutionRecord, AppUiBatchExecutionRecord
+    AppUiExecutionRecord, AppUiBatchExecutionRecord,
+    AppUiExecutionConfig
 )
 from .serializers import (
     AppUiModuleSerializer, AppUiScriptSerializer, AppUiDeviceSerializer,
-    AppUiExecutionRecordSerializer, AppUiBatchExecutionRecordSerializer
+    AppUiExecutionRecordSerializer, AppUiBatchExecutionRecordSerializer,
+    AppUiExecutionConfigSerializer
 )
 from .tasks import execute_app_ui_script
+
+
+class QueryParamJWTAuthentication(JWTAuthentication):
+    """扩展 JWT 认证，支持通过 URL query parameter ?token=xxx 传递 token。
+    用于 window.open() 等无法设置 Authorization header 的场景。"""
+
+    def authenticate(self, request):
+        # 先尝试标准 header 认证
+        auth = super().authenticate(request)
+        if auth is not None:
+            return auth
+        # header 认证失败，尝试 query parameter
+        token = request.query_params.get('token')
+        if token:
+            try:
+                raw_token = token.encode() if isinstance(token, str) else token
+                validated_token = self.get_validated_token(raw_token)
+                return (self.get_user(validated_token), validated_token)
+            except Exception:
+                return None
+        return None
 
 
 class AppUiModuleViewSet(viewsets.ModelViewSet):
@@ -203,8 +229,9 @@ class AppUiDeviceViewSet(viewsets.ModelViewSet):
             return Response({'status': 'offline', 'message': f'连接失败: {str(e)}'})
 
 
-class AppUiExecutionRecordViewSet(viewsets.ReadOnlyModelViewSet):
+class AppUiExecutionRecordViewSet(DestroyModelMixin, viewsets.ReadOnlyModelViewSet):
     """执行记录视图"""
+    authentication_classes = [QueryParamJWTAuthentication, APIKeyAuthentication]
     queryset = AppUiExecutionRecord.objects.select_related('script', 'device', 'executor')
     serializer_class = AppUiExecutionRecordSerializer
     filter_backends = [DjangoFilterBackend, SearchFilter, OrderingFilter]
@@ -258,3 +285,28 @@ class AppUiBatchExecutionRecordViewSet(viewsets.ReadOnlyModelViewSet):
     filterset_fields = ['status', 'trigger_type']
     ordering_fields = ['created_at']
     ordering = ['-created_at']
+
+
+class AppUiExecutionConfigViewSet(viewsets.ViewSet):
+    """执行配置视图（全局单例）"""
+    queryset = AppUiExecutionConfig.objects.all()
+    def retrieve(self, request, pk=None):
+        config = AppUiExecutionConfig.get_config()
+        serializer = AppUiExecutionConfigSerializer(config)
+        return Response(serializer.data)
+
+    def update(self, request, pk=None):
+        config = AppUiExecutionConfig.get_config()
+        old_poco_timeout = config.poco_wait_timeout
+        serializer = AppUiExecutionConfigSerializer(config, data=request.data, partial=True)
+        serializer.is_valid(raise_exception=True)
+        serializer.save(updated_by=request.user)
+        # 检测 poco_wait_timeout 是否变更（需重连才生效）
+        needs_reconnect = serializer.validated_data.get('poco_wait_timeout') is not None \
+            and serializer.validated_data.get('poco_wait_timeout') != old_poco_timeout
+        data = serializer.data
+        data['needs_reconnect'] = needs_reconnect
+        return Response(data)
+
+    def partial_update(self, request, pk=None):
+        return self.update(request, pk=pk)

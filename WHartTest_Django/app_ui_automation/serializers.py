@@ -6,7 +6,8 @@ import os
 from rest_framework import serializers
 from .models import (
     AppUiModule, AppUiScript, AppUiDevice,
-    AppUiExecutionRecord, AppUiBatchExecutionRecord
+    AppUiExecutionRecord, AppUiBatchExecutionRecord,
+    AppUiExecutionConfig
 )
 
 
@@ -76,3 +77,15 @@ class AppUiBatchExecutionRecordSerializer(serializers.ModelSerializer):
     class Meta:
         model = AppUiBatchExecutionRecord
         fields = '__all__'
+
+
+class AppUiExecutionConfigSerializer(serializers.ModelSerializer):
+    """执行配置序列化器"""
+    updated_by_name = serializers.CharField(source='updated_by.username', read_only=True, default='')
+
+    class Meta:
+        model = AppUiExecutionConfig
+        fields = ['id', 'airtest_threshold', 'airtest_find_timeout',
+                  'airtest_opdelay', 'poco_wait_timeout',
+                  'updated_by', 'updated_by_name', 'updated_at']
+        read_only_fields = ['id', 'updated_by', 'updated_at']

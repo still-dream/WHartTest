@@ -463,6 +463,26 @@ class LLMConfigViewSet(BaseModelViewSet):
                 status=status.HTTP_400_BAD_REQUEST,
             )
 
+        # 火山引擎方舟 Coding Plan 的 /models 端点不支持模型列表查询，
+        # 返回预定义的 Coding Plan 支持模型列表
+        if "api/coding/v3" in api_url:
+            coding_plan_models = [
+                "ark-code-latest",
+                "doubao-seed-2.0-code",
+                "doubao-seed-2.0-pro",
+                "doubao-seed-2.0-lite",
+                "doubao-seed-code",
+                "minimax-m2.7",
+                "minimax-m3",
+                "glm-5.2",
+                "glm-latest",
+                "deepseek-v4-flash",
+                "deepseek-v4-pro",
+                "kimi-k2.6",
+                "kimi-k2.7-code",
+            ]
+            return Response({"status": "success", "models": coding_plan_models})
+
         headers = {"Content-Type": "application/json"}
         if api_key:
             headers["Authorization"] = f"Bearer {api_key}"

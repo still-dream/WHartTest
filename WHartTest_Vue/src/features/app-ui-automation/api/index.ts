@@ -13,6 +13,7 @@ import type {
   AppUiDeviceForm,
   AppUiExecutionRecord,
   AppUiBatchExecutionRecord,
+  AppUiExecutionConfig,
   AppUiScriptPreview,
   AppUiExecuteResult,
   AppUiDeviceCheckResult,
@@ -150,4 +151,12 @@ export const batchRecordApi = {
     request.get<PaginatedResponse<AppUiBatchExecutionRecord>>(`${BASE_URL}/batch-records/`, { params }),
 
   get: (id: number) => request.get<AppUiBatchExecutionRecord>(`${BASE_URL}/batch-records/${id}/`),
+}
+
+// ==================== 执行配置管理 ====================
+export const executionConfigApi = {
+  get: () => request.get<AppUiExecutionConfig>(`${BASE_URL}/execution-config/1/`),
+
+  update: (data: Partial<AppUiExecutionConfig>) =>
+    request.patch<AppUiExecutionConfig & { needs_reconnect?: boolean }>(`${BASE_URL}/execution-config/1/`, data),
 }

@@ -279,10 +279,6 @@ pytest>=8.0.0
 # https://github.com/microsoft/playwright-python/blob/main/LICENSE
 playwright>=1.40.0
 
-# Pillow图像处理库 - MIT-CMU许可证（用于Word文档图片尺寸解析）
-# https://github.com/python-pillow/Pillow/blob/main/LICENSE
-Pillow>=10.0.0
-
 # Token计数库 - MIT许可证 (用于上下文长度计算)
 # https://github.com/openai/tiktoken/blob/main/LICENSE
 tiktoken>=0.5.0
@@ -291,9 +287,10 @@ tiktoken>=0.5.0
 # https://github.com/nltk/nltk/blob/develop/LICENSE.txt
 nltk>=3.8.0
 
-# WebSocket客户端 - LGPL许可证 (用于WebSocket连接)
+# WebSocket客户端 - LGPL许可证
+# 注意: pocoui 硬性依赖 websocket-client==0.48.0，项目代码不直接使用此包，
+# 由 pocoui 自动安装其所需版本即可。
 # https://github.com/websocket-client/websocket-client/blob/master/LICENSE
-websocket-client>=1.6.0
 
 # 文件监控自动重启工具 - Apache 2.0许可证 (提供 watchmedo 命令)
 # https://github.com/gorakhargosh/watchdog/blob/master/LICENSE
@@ -319,4 +316,10 @@ sentry-sdk==2.57.0
 
 # Airtest UI自动化框架 - Apache 2.0许可证 (APPUI 自动化执行)
 # https://github.com/AirtestProject/Airtest/blob/master/LICENSE
+# numpy<2.0: opencv-contrib-python 编译基于 numpy 1.x，numpy 2.x 会导致 "numpy.core.multiarray failed to import"
+numpy<2.0
+# OpenCV 图像处理 - airtest 依赖，显式声明避免版本漂移
+opencv-contrib-python>=4.5,<5.0
 airtest>=1.3.0
+# Poco UI自动化框架 - Apache 2.0许可证 (Airtest UI元素定位)
+pocoui>=1.0.90

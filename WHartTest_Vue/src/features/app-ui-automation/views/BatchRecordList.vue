@@ -25,6 +25,10 @@
           刷新
         </a-button>
       </div>
+      <a-button type="outline" @click="openConfig">
+        <template #icon><icon-settings /></template>
+        执行配置
+      </a-button>
     </div>
 
     <a-table
@@ -101,15 +105,83 @@
         </a-descriptions>
       </template>
     </a-drawer>
+
+    <!-- 执行配置抽屉 -->
+    <a-drawer
+      v-model:visible="configVisible"
+      title="执行配置"
+      width="480px"
+      unmount-on-close
+      :footer="true"
+    >
+      <a-form :model="configForm" layout="vertical" :disabled="configLoading">
+        <a-form-item label="图像匹配阈值" help="0-1 之间，值越低匹配越宽松">
+          <a-input-number
+            v-model="configForm.airtest_threshold"
+            :min="0"
+            :max="1"
+            :step="0.05"
+            :precision="2"
+            style="width: 100%"
+          />
+        </a-form-item>
+        <a-form-item label="元素查找超时（秒）">
+          <a-input-number
+            v-model="configForm.airtest_find_timeout"
+            :min="1"
+            :max="300"
+            style="width: 100%"
+          />
+        </a-form-item>
+        <a-form-item label="操作间隔延迟（秒）">
+          <a-input-number
+            v-model="configForm.airtest_opdelay"
+            :min="0"
+            :max="10"
+            :step="0.1"
+            :precision="1"
+            style="width: 100%"
+          />
+        </a-form-item>
+        <a-form-item label="Poco元素等待超时（秒）">
+          <template #label>
+            <span>Poco元素等待超时（秒）</span>
+            <a-tag color="orange" size="small" style="margin-left: 8px">需重连生效</a-tag>
+          </template>
+          <a-input-number
+            v-model="configForm.poco_wait_timeout"
+            :min="1"
+            :max="120"
+            style="width: 100%"
+          />
+          <div v-if="configNeedsReconnect" style="margin-top: 8px">
+            <a-alert type="warning" :show-icon="true">
+              此参数已修改，下次执行脚本时将自动使用新值重新连接设备。
+            </a-alert>
+          </div>
+        </a-form-item>
+        <a-form-item v-if="configData.updated_by_name" label="最近更新">
+          <span style="color: var(--color-text-3); font-size: 13px">
+            {{ configData.updated_by_name }} · {{ formatTime(configData.updated_at) }}
+          </span>
+        </a-form-item>
+      </a-form>
+      <template #footer>
+        <a-space>
+          <a-button @click="configVisible = false">取消</a-button>
+          <a-button type="primary" :loading="configSaving" @click="saveConfig">保存</a-button>
+        </a-space>
+      </template>
+    </a-drawer>
   </div>
 </template>
 
 <script setup lang="ts">
-import { ref, reactive, onMounted } from 'vue'
+import { ref, reactive, onMounted, computed } from 'vue'
 import { Message } from '@arco-design/web-vue'
-import { IconRefresh, IconEye } from '@arco-design/web-vue/es/icon'
-import { batchRecordApi } from '../api'
-import type { AppUiBatchExecutionRecord, AppUiBatchStatus } from '../types'
+import { IconRefresh, IconEye, IconSettings } from '@arco-design/web-vue/es/icon'
+import { batchRecordApi, executionConfigApi } from '../api'
+import type { AppUiBatchExecutionRecord, AppUiBatchStatus, AppUiExecutionConfig } from '../types'
 import {
   APP_UI_BATCH_STATUS_LABELS, APP_UI_TRIGGER_LABELS, extractPaginationData, extractResponseData,
 } from '../types'
@@ -206,6 +278,71 @@ const viewDetail = async (record: AppUiBatchExecutionRecord) => {
 }
 
 const refresh = () => fetchRecords()
+
+// ==================== 执行配置 ====================
+const configVisible = ref(false)
+const configLoading = ref(false)
+const configSaving = ref(false)
+const configData = reactive<AppUiExecutionConfig>({
+  id: 1, airtest_threshold: 0.6, airtest_find_timeout: 30,
+  airtest_opdelay: 1.0, poco_wait_timeout: 20,
+  updated_by: null, updated_by_name: '', updated_at: '',
+})
+const configForm = reactive({
+  airtest_threshold: 0.6,
+  airtest_find_timeout: 30,
+  airtest_opdelay: 1.0,
+  poco_wait_timeout: 20,
+})
+const configNeedsReconnect = computed(() => configForm.poco_wait_timeout !== configData.poco_wait_timeout)
+
+const openConfig = async () => {
+  configVisible.value = true
+  configLoading.value = true
+  try {
+    const res = await executionConfigApi.get()
+    const data = extractResponseData<AppUiExecutionConfig>(res)
+    if (data) {
+      Object.assign(configData, data)
+      Object.assign(configForm, {
+        airtest_threshold: data.airtest_threshold,
+        airtest_find_timeout: data.airtest_find_timeout,
+        airtest_opdelay: data.airtest_opdelay,
+        poco_wait_timeout: data.poco_wait_timeout,
+      })
+    }
+  } catch {
+    Message.error('获取执行配置失败')
+  } finally {
+    configLoading.value = false
+  }
+}
+
+const saveConfig = async () => {
+  configSaving.value = true
+  try {
+    const res = await executionConfigApi.update({
+      airtest_threshold: configForm.airtest_threshold,
+      airtest_find_timeout: configForm.airtest_find_timeout,
+      airtest_opdelay: configForm.airtest_opdelay,
+      poco_wait_timeout: configForm.poco_wait_timeout,
+    })
+    const data = extractResponseData<AppUiExecutionConfig & { needs_reconnect?: boolean }>(res)
+    if (data) {
+      Object.assign(configData, data)
+      if (data.needs_reconnect) {
+        Message.warning('配置已保存。Poco等待超时已修改，下次执行脚本时将自动重新连接设备生效。')
+      } else {
+        Message.success('配置已保存')
+      }
+      configVisible.value = false
+    }
+  } catch {
+    Message.error('保存配置失败')
+  } finally {
+    configSaving.value = false
+  }
+}
 
 defineExpose({ refresh })
 

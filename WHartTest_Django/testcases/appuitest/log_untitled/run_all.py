@@ -31,9 +31,11 @@ from pathlib import Path
 # ============================== CONFIG ==============================
 AIRTEST_EXE = r"C:\Program Files\AirtestIDE-win-1.2.17\AirtestIDE\AirtestIDE"
 
-SCRIPT_PATH = r"C:\scripts\untitled.air"
-DEVICE_URI  = (r"android://127.0.0.1:5037/118f492e"
-               r"?cap_method=MINICAP&&ori_method=MINICAPORI&&touch_method=MINITOUCH")
+SCRIPT_PATH = r"C:\scripts\untitled22.air"
+# URI 格式: android://ADB_SERVER_HOST:PORT/DEVICE_SERIAL
+# TCP 远程设备: ADB server 本地 (127.0.0.1:5037)，设备序列号即 TCP 地址 (ip:port)
+# 注意: 小米15 (Android 15) 不支持 MINICAP/MINITOUCH，使用默认 JAVAID 方法
+DEVICE_URI  = r"android://127.0.0.1:5037/10.66.138.22:5555"
 
 WORK_DIR   = r"C:\test\log_untitled"   # all outputs live under here
 LANG       = "zh"

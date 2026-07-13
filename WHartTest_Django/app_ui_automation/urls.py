@@ -4,7 +4,8 @@
 from rest_framework.routers import DefaultRouter
 from .views import (
     AppUiModuleViewSet, AppUiScriptViewSet, AppUiDeviceViewSet,
-    AppUiExecutionRecordViewSet, AppUiBatchExecutionRecordViewSet
+    AppUiExecutionRecordViewSet, AppUiBatchExecutionRecordViewSet,
+    AppUiExecutionConfigViewSet
 )
 
 router = DefaultRouter()
@@ -13,5 +14,6 @@ router.register('scripts', AppUiScriptViewSet, basename='app-ui-scripts')
 router.register('devices', AppUiDeviceViewSet, basename='app-ui-devices')
 router.register('execution-records', AppUiExecutionRecordViewSet, basename='app-ui-execution-records')
 router.register('batch-records', AppUiBatchExecutionRecordViewSet, basename='app-ui-batch-records')
+router.register('execution-config', AppUiExecutionConfigViewSet, basename='app-ui-execution-config')
 
 urlpatterns = router.urls

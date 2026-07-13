@@ -158,7 +158,7 @@ import {
   IconRefresh, IconEye, IconDelete, IconDownload, IconStop, IconInfoCircle,
 } from '@arco-design/web-vue/es/icon'
 import { executionRecordApi } from '../api'
-import request from '@/utils/request'
+import { useAuthStore } from '@/store/authStore'
 import type { AppUiExecutionRecord, AppUiExecutionStatus } from '../types'
 import {
   APP_UI_STATUS_LABELS, APP_UI_TRIGGER_LABELS, extractPaginationData, extractResponseData,
@@ -259,29 +259,23 @@ const viewDetail = async (record: AppUiExecutionRecord) => {
 }
 
 const viewReport = (record: AppUiExecutionRecord) => {
+  const authStore = useAuthStore()
+  const token = authStore.getAccessToken
   const url = executionRecordApi.reportUrl(record.id)
-  window.open(url, '_blank')
+  window.open(`${url}?token=${token}`, '_blank')
 }
 
-const downloadReport = async (record: AppUiExecutionRecord) => {
+const downloadReport = (record: AppUiExecutionRecord) => {
   downloadingId.value = record.id
-  try {
-    // 使用相对路径，让 axios 实例自动拼接 baseURL 并携带鉴权头
-    const res = await request.get(`/app-ui-automation/execution-records/${record.id}/download/`, { responseType: 'blob' })
-    const blob = new Blob([res.data as BlobPart], { type: 'application/octet-stream' })
-    const link = document.createElement('a')
-    link.href = URL.createObjectURL(blob)
-    const filename = `${record.script_name}_${formatTime(record.created_at).replace(/[: ]/g, '')}.html`
-    link.download = filename
-    document.body.appendChild(link)
-    link.click()
-    document.body.removeChild(link)
-    URL.revokeObjectURL(link.href)
-  } catch {
-    Message.error('下载报告失败')
-  } finally {
-    downloadingId.value = null
-  }
+  const authStore = useAuthStore()
+  const token = authStore.getAccessToken
+  const url = executionRecordApi.downloadUrl(record.id)
+  const link = document.createElement('a')
+  link.href = `${url}?token=${token}`
+  document.body.appendChild(link)
+  link.click()
+  document.body.removeChild(link)
+  setTimeout(() => { downloadingId.value = null }, 2000)
 }
 
 const cancelExecution = async (record: AppUiExecutionRecord) => {

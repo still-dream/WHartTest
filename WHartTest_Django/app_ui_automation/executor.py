@@ -9,7 +9,6 @@
 
 import os
 import json
-import re
 import subprocess
 import sys
 from pathlib import Path
@@ -20,6 +19,32 @@ from django.utils import timezone
 
 from .models import AppUiExecutionRecord
 
+_poco_patched = False
+
+
+def _apply_poco_patch():
+    """对 Poco.__init__ 打补丁，使其每次实例化时动态读取最新的 poco_wait_timeout 配置。
+
+    仅打一次补丁，避免重复执行时补丁堆叠（闭包链）和旧 config 对象无法回收。
+    """
+    global _poco_patched
+    if _poco_patched:
+        return
+    try:
+        from poco.pocofw import Poco as _Poco
+        _orig_poco_init = _Poco.__init__
+
+        def _patched_poco_init(self, *args, **kwargs):
+            _orig_poco_init(self, *args, **kwargs)
+            from .models import AppUiExecutionConfig
+            config = AppUiExecutionConfig.get_config()
+            self._pre_action_wait_for_appearance = config.poco_wait_timeout
+
+        _Poco.__init__ = _patched_poco_init
+        _poco_patched = True
+    except ImportError:
+        pass
+
 
 class AppUiScriptExecutor:
     """APPUI 脚本执行引擎"""
@@ -27,6 +52,11 @@ class AppUiScriptExecutor:
     def execute(self, execution_record_id):
         """执行脚本主入口"""
         record = AppUiExecutionRecord.objects.get(id=execution_record_id)
+
+        # 如果记录已被取消（revoke 可能未阻止已排队的任务），跳过执行
+        if record.status == 4:
+            return
+
         script = record.script
         device = record.device
 
@@ -87,18 +117,46 @@ class AppUiScriptExecutor:
         work_dir.mkdir(parents=True, exist_ok=True)
         return work_dir
 
+    def _ensure_device_connected(self, device_uri):
+        """对于 TCP 远程设备，先执行 adb connect 确保连接"""
+        # URI 格式: android://host:port/serial
+        # TCP 设备 serial 为 ip:port 格式，需先 adb connect
+        try:
+            from urllib.parse import urlparse
+            parsed = urlparse(device_uri)
+            serial = parsed.path.lstrip('/')
+            if ':' in serial:
+                subprocess.run(['adb', 'connect', serial],
+                               capture_output=True, text=True, timeout=10)
+        except Exception:
+            pass  # 连接失败不影响后续流程，connect_device 会报具体错误
+
     def _run_script_with_airtest(self, script, device, log_dir):
         """STEP 1: 使用 airtest Python 库执行脚本"""
         log_dir.mkdir(parents=True, exist_ok=True)
 
         # 延迟导入 airtest，避免模块加载时依赖
         from airtest.core.api import connect_device, set_logdir
+        from airtest.core.settings import Settings as ST
 
         # 设置日志目录
         set_logdir(str(log_dir))
 
+        # 图像识别参数调优（从数据库读取全局配置）
+        from .models import AppUiExecutionConfig
+        config = AppUiExecutionConfig.get_config()
+
+        ST.THRESHOLD = config.airtest_threshold
+        ST.THRESHOLD_STRICT = config.airtest_threshold
+        ST.FIND_TIMEOUT = config.airtest_find_timeout
+        ST.OPDELAY = config.airtest_opdelay
+
+        # Poco 元素等待超时调优（monkey-patch 仅执行一次，实例化时动态读取最新配置）
+        _apply_poco_patch()
+
         # 连接设备
         if device:
+            self._ensure_device_connected(device.device_uri)
             connect_device(device.device_uri)
 
         # 执行脚本
@@ -117,21 +175,55 @@ class AppUiScriptExecutor:
         exec(compile(script_content, script_path, 'exec'), script_globals)
 
     def _generate_report(self, script, log_dir, report_dir):
-        """STEP 2: 使用 AirtestIDE reporter 生成报告"""
+        """STEP 2: 生成 HTML 报告"""
         report_dir.mkdir(parents=True, exist_ok=True)
         script_path = os.path.join(settings.MEDIA_ROOT, script.script_dir)
 
-        airtest_exe = getattr(settings, 'AIRTEST_IDE_PATH', 'airtest')
-        cmd = [
-            airtest_exe, "reporter",
-            script_path,
-            "--log_root", str(log_dir),
-            "--lang", getattr(settings, 'AIRTEST_REPORT_LANG', 'zh'),
-            "--export", str(report_dir),
-        ]
-        result = subprocess.run(cmd, capture_output=True, text=True)
-        if result.returncode != 0:
-            raise RuntimeError(f"AirtestIDE reporter failed: {result.stderr}")
+        template_path = getattr(settings, 'AIRTEST_REPORT_TEMPLATE', None)
+        has_template = bool(template_path and os.path.isfile(template_path))
+
+        report_generated = False
+
+        # 优先使用 airtest Python API 生成报告（支持自定义模板）
+        if has_template:
+            try:
+                import shutil
+                import airtest.report
+                # LogToHtml 的 Jinja2 FileSystemLoader 只从 airtest report 包目录查找模板，
+                # 需要将自定义模板复制到该目录下，再传文件名
+                airtest_report_dir = os.path.dirname(airtest.report.__file__)
+                dest_template_name = 'jt_log_template.html'
+                dest_template_path = os.path.join(airtest_report_dir, dest_template_name)
+                shutil.copy2(template_path, dest_template_path)
+
+                from airtest.report.report import LogToHtml
+                rpt = LogToHtml(
+                    script_root=script_path,
+                    log_root=str(log_dir),
+                    export_dir=str(report_dir),
+                    lang=getattr(settings, 'AIRTEST_REPORT_LANG', 'zh'),
+                )
+                rpt.report(template_name=dest_template_name)
+                report_generated = True
+            except ImportError:
+                pass  # airtest Python 包不可用，回退到 CLI
+            except Exception as e:
+                raise RuntimeError(f"Airtest report failed (Python API): {e}")
+
+        # 回退到 CLI 方式（AirtestIDE 或无自定义模板）
+        if not report_generated:
+            airtest_exe = getattr(settings, 'AIRTEST_IDE_PATH', 'airtest')
+            report_subcmd = 'report' if os.path.basename(airtest_exe) == 'airtest' else 'reporter'
+            cmd = [
+                airtest_exe, report_subcmd,
+                script_path,
+                "--log_root", str(log_dir),
+                "--lang", getattr(settings, 'AIRTEST_REPORT_LANG', 'zh'),
+                "--export", str(report_dir),
+            ]
+            result = subprocess.run(cmd, capture_output=True, text=True)
+            if result.returncode != 0:
+                raise RuntimeError(f"Airtest report failed: {result.stderr}")
 
         # 查找生成的 log.html
         script_name = script.script_entry.replace('.py', '')
@@ -145,33 +237,27 @@ class AppUiScriptExecutor:
             else:
                 raise FileNotFoundError(f"reporter did not produce log.html in {report_dir}")
 
-        # 应用自定义模板样式
-        self._apply_custom_template(html_dir)
+        # 复制 J&T 品牌图片到报告 static/image 目录（确保 pack_html 能内联）
+        self._copy_brand_images(html_dir)
 
         return html_dir
 
-    def _apply_custom_template(self, html_dir):
-        """应用自定义报告模板样式（J&T 品牌）"""
-        template_path = os.path.join(
-            settings.BASE_DIR, 'testcases', 'appuitest', 'log_template.html'
-        )
-        if not os.path.isfile(template_path):
-            return
+    def _copy_brand_images(self, html_dir):
+        """复制 J&T 品牌图片（JT.jpg 背景图、company_logo.png 页脚 LOGO）到报告 static 目录"""
+        import shutil
+        brand_dir = os.path.join(settings.BASE_DIR, 'testcases', 'appuitest')
+        img_dir = html_dir / 'static' / 'image'
+        img_dir.mkdir(parents=True, exist_ok=True)
 
-        with open(template_path, 'r', encoding='utf-8') as f:
-            template_content = f.read()
+        # 背景水印图: JT.jpg
+        jt_bg_src = os.path.join(brand_dir, 'JT.jpg')
+        if os.path.isfile(jt_bg_src):
+            shutil.copy2(jt_bg_src, img_dir / 'JT.jpg')
 
-        # 提取 <style> 块
-        style_match = re.search(r'<style>(.*?)</style>', template_content, re.DOTALL)
-        if style_match:
-            custom_css = style_match.group(1)
-            log_html_path = html_dir / "log.html"
-            if log_html_path.is_file():
-                with open(log_html_path, 'r', encoding='utf-8') as f:
-                    html = f.read()
-                html = html.replace('</head>', f'<style>{custom_css}</style></head>')
-                with open(log_html_path, 'w', encoding='utf-8') as f:
-                    f.write(html)
+        # 页脚 LOGO: J&Tlogo.png -> company_logo.png
+        logo_src = os.path.join(brand_dir, 'J&Tlogo.png')
+        if os.path.isfile(logo_src):
+            shutil.copy2(logo_src, img_dir / 'company_logo.png')
 
     def _pack_html(self, html_dir, standalone_dir):
         """STEP 3: 打包 Standalone HTML"""

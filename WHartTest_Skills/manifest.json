@@ -21,6 +21,15 @@
       "zip_path": "api-automation-skill.zip"
     },
     {
+      "id": "app-ui-automation",
+      "name": "app-ui-automation",
+      "description": "WHartTest APP UI 自动化管理工具。基于 Airtest/Poco 的移动端 APP 自动化测试，用于管理 APPUI 模块、Airtest 脚本、测试设备、执行配置、执行记录和批量执行。支持脚本调试执行、设备连接检测、执行记录查看与报告下载。当需要查询 APP UI 自动化资源、执行 APP 测试、管理测试设备或查看执行结果时使用。",
+      "version": "1.0.0",
+      "author": "duanxiangchun",
+      "tags": ["app", "automation", "airtest", "wharttest"],
+      "zip_path": "app-ui-automation-skill.zip"
+    },
+    {
       "id": "drawio",
       "name": "drawio",
       "description": "生成 draw.io 原生 .drawio 图表文件，可选导出为 PNG / SVG / PDF 并内嵌图表 XML（导出后仍可在 draw.io 中继续编辑）。",

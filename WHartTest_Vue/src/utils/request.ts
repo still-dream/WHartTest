@@ -131,6 +131,11 @@ async function refreshToken() {
 // 响应拦截器
 service.interceptors.response.use(
   (response: AxiosResponse) => {
+    // 对于 blob/arraybuffer 等二进制响应，直接返回原始响应，不做格式转换
+    if (response.config.responseType === 'blob' || response.config.responseType === 'arraybuffer') {
+      return response;
+    }
+
     // 后端返回的完整响应
     const res = response.data;
 

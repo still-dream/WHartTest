@@ -20,6 +20,10 @@ python manage.py migrate --noinput
 echo "Creating default admin user if it does not exist..."
 python manage.py init_admin
 
-# 3. 启动 supervisord 来管理所有服务
+# 3. 同步预置 Skills（从 /app/bundled_skills 导入或更新）
+echo "Syncing bundled skills..."
+python manage.py init_skills || echo "Warning: Skills sync encountered errors, continuing..."
+
+# 4. 启动 supervisord 来管理所有服务
 echo "Starting supervisord..."
 exec supervisord -c /app/supervisord.conf

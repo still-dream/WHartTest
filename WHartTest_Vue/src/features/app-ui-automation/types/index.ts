@@ -150,6 +150,18 @@ export interface AppUiBatchExecutionRecord {
   created_at: string
 }
 
+/** APPUI 执行配置 */
+export interface AppUiExecutionConfig {
+  id: number
+  airtest_threshold: number
+  airtest_find_timeout: number
+  airtest_opdelay: number
+  poco_wait_timeout: number
+  updated_by: number | null
+  updated_by_name: string
+  updated_at: string
+}
+
 /** 脚本预览结果 */
 export interface AppUiScriptPreview {
   content: string
