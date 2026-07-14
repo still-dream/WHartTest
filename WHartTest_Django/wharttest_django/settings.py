@@ -134,6 +134,7 @@ INSTALLED_APPS = [
     "app_ui_automation",  # APPUI 自动化应用（Airtest）。
     "weixin_integration",  # 微信扫码登录与消息集成。
     'task_center', # 任务中心应用
+    'notifications',  # 推送通知应用
     'django_celery_beat', # Celery Beat 数据库调度器
     'api_database_configs',  # API 数据库配置应用。
     'api_environments',  # API 环境管理应用。
