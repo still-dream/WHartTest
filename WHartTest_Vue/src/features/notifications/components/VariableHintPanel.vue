@@ -9,9 +9,9 @@
             class="var-item"
             @click="onVarClick(v)"
           >
-            <a-tooltip :content="`点击插入 {{${v.name}}} - ${v.description}`">
+            <a-tooltip :content="'点击插入 ' + varDisplay(v.name) + ' - ' + v.description">
               <a-tag color="arcoblue" style="cursor: pointer">
-                {{ '{{' + v.name + '}}' }}
+                {{ varDisplay(v.name) }}
               </a-tag>
             </a-tooltip>
             <span class="var-desc">{{ v.description }}</span>
@@ -26,6 +26,8 @@
 import { NOTIFICATION_VARIABLES, type NotificationVariable } from '../types';
 
 const variables = NOTIFICATION_VARIABLES;
+
+const varDisplay = (name: string) => `{{${name}}}`;
 
 const emit = defineEmits<{
   (e: 'insert', varName: string): void;
