@@ -230,6 +230,14 @@
               <template #icon><icon-history /></template>
               <a href="#" @click="checkProjectAndNavigate($event, '/operation-logs')">{{ operationLogsMenuLabel }}</a>
             </a-menu-item>
+            <a-menu-item key="webhook-addresses" v-if="hasWebhookPermission">
+              <template #icon><icon-message /></template>
+              <a href="#" @click="checkProjectAndNavigate($event, '/system/webhook-addresses')">{{ webhookMenuLabel }}</a>
+            </a-menu-item>
+            <a-menu-item key="message-templates">
+              <template #icon><icon-file /></template>
+              <a href="#" @click="checkProjectAndNavigate($event, '/system/message-templates')">{{ templateMenuLabel }}</a>
+            </a-menu-item>
           </a-sub-menu>
         </a-menu>
         <!-- 侧边栏底部收起/展开按钮 -->
@@ -353,6 +361,8 @@ const modelsMenuLabel = computed(() => (locale.value === 'en-US' ? 'Models' : tl
 const mcpMenuLabel = computed(() => (locale.value === 'en-US' ? 'MCP' : tl('MCP配置')));
 const skillsMenuLabel = computed(() => (locale.value === 'en-US' ? 'Skills' : tl('Skills管理')));
 const operationLogsMenuLabel = computed(() => (locale.value === 'en-US' ? 'Logs' : tl('操作日志')));
+const webhookMenuLabel = computed(() => (locale.value === 'en-US' ? 'Webhooks' : tl('推送地址')));
+const templateMenuLabel = computed(() => (locale.value === 'en-US' ? 'Templates' : tl('消息模板')));
 
 // 更新说明预览（显示完整内容）
 const releaseNotesPreview = computed(() => {
@@ -509,6 +519,10 @@ const hasOperationLogsPermission = computed(() => {
   return authStore.hasPermission('accounts.view_operation_logs');
 });
 
+const hasWebhookPermission = computed(() => {
+  return !!authStore.user?.is_staff;
+});
+
 // 检查是否有测试管理菜单项的权限
 const hasTestManagementMenuItems = computed(() => {
   return hasTestcasesPermission.value ||
@@ -525,7 +539,9 @@ const hasSystemMenuItems = computed(() => {
          hasApiKeysPermission.value ||
          hasMcpConfigsPermission.value ||
          hasSkillsPermission.value ||
-         hasOperationLogsPermission.value;
+         hasOperationLogsPermission.value ||
+         hasWebhookPermission.value ||
+         true; // 消息模板对所有认证用户可见
 });
 
 // 切换侧边栏收起状态
