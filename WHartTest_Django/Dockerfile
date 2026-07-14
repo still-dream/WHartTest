@@ -322,6 +322,7 @@ COPY httprunner/ /app/httprunner/
 COPY knowledge/ /app/knowledge/
 COPY langgraph_integration/ /app/langgraph_integration/
 COPY mcp_tools/ /app/mcp_tools/
+COPY notifications/ /app/notifications/
 COPY orchestrator_integration/ /app/orchestrator_integration/
 COPY projects/ /app/projects/
 COPY prompts/ /app/prompts/
