@@ -317,6 +317,7 @@ import {
 } from '@/features/notifications/services/notificationService';
 import VariableHintPanel from '@/features/notifications/components/VariableHintPanel.vue';
 import { scriptApi, deviceApi } from '@/features/app-ui-automation/api';
+import { extractPaginationData } from '@/features/app-ui-automation/types';
 
 const props = defineProps<{
   projectId: number;
@@ -656,9 +657,9 @@ const onModuleChange = () => {
 const loadAppUiDevices = async () => {
   loadingAppUiDevices.value = true;
   try {
-    const resp = await deviceApi.list({ project: props.projectId });
-    const data = (resp as any).data?.data?.data || (resp as any).data?.data || {};
-    appUiDevices.value = (data.items || data.results || []).map((d: any) => ({
+    const resp = await deviceApi.list({ project: props.projectId, page_size: 200 } as any);
+    const { items } = extractPaginationData(resp);
+    appUiDevices.value = items.map((d: any) => ({
       id: d.id, name: d.name, platform: d.platform,
     }));
   } catch {
@@ -670,15 +671,16 @@ const loadAppUiDevices = async () => {
 
 const loadAppUiScripts = async () => {
   try {
-    const resp = await scriptApi.list({ project: props.projectId });
-    const data = (resp as any).data?.data?.data || (resp as any).data?.data || {};
-    appUiScripts.value = data.items || data.results || [];
+    const resp = await scriptApi.list({ project: props.projectId, page_size: 200 } as any);
+    const { items } = extractPaginationData(resp);
+    appUiScripts.value = items;
   } catch {
     appUiScripts.value = [];
   }
 };
 
 const openAppUiScriptModal = async () => {
+  selectedAppUiScriptIds.value = [...(form.app_ui_scripts || [])];
   await loadAppUiScripts();
   appUiScriptModalVisible.value = true;
 };
