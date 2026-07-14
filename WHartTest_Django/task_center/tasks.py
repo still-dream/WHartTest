@@ -108,8 +108,15 @@ def execute_scheduled_task(self, task_id: int, trigger_type: str = 'scheduled'):
             scripts = task.app_ui_scripts.all()
             if not scripts:
                 execution.log += 'No scripts selected for APPUI task\n'
+                execution.status = TaskExecution.ExecutionStatus.FAILED
+                execution.finished_at = timezone.now()
                 execution.save()
-                return
+                try:
+                    from notifications.services import send_task_notification
+                    send_task_notification(task, execution, None)
+                except Exception as push_err:
+                    logger.warning(f"推送通知失败: {push_err}")
+                return {'status': 'failed', 'execution_id': execution.execution_id, 'error': 'No scripts selected'}
 
             batch = AppUiBatchExecutionRecord.objects.create(
                 name=f"定时任务-{task.name}",
@@ -122,13 +129,29 @@ def execute_scheduled_task(self, task_id: int, trigger_type: str = 'scheduled'):
             script_ids = list(scripts.values_list('id', flat=True))
             device_id = task.app_ui_device_id if task.app_ui_device else None
 
-            # 串行执行
             execute_app_ui_batch(batch.id, script_ids, device_id)
 
             execution.log += f'APPUI batch {batch.id} completed\n'
-            execution.status = 'success'
+            batch.refresh_from_db()
+            if batch.status == 2:
+                execution.status = TaskExecution.ExecutionStatus.SUCCESS
+            else:
+                execution.status = TaskExecution.ExecutionStatus.FAILED
+            execution.finished_at = timezone.now()
+            execution.log = '\n'.join(log_lines) + '\n' + execution.log
             execution.save()
-            return
+
+            try:
+                from notifications.services import send_task_notification
+                send_task_notification(task, execution, batch)
+            except Exception as push_err:
+                logger.warning(f"推送通知失败: {push_err}")
+
+            if task.schedule_type == ScheduledTask.ScheduleType.ONCE:
+                task.status = ScheduledTask.TaskStatus.DISABLED
+                task.save(update_fields=['status'])
+
+            return {'status': execution.status, 'execution_id': execution.execution_id}
 
         log_lines.append(f"[{timezone.now().isoformat()}] 任务执行完成")
 
@@ -136,6 +159,12 @@ def execute_scheduled_task(self, task_id: int, trigger_type: str = 'scheduled'):
         execution.finished_at = timezone.now()
         execution.log = '\n'.join(log_lines)
         execution.save()
+
+        try:
+            from notifications.services import send_task_notification
+            send_task_notification(task, execution, None)
+        except Exception as push_err:
+            logger.warning(f"推送通知失败: {push_err}")
 
         # 一次性任务执行后自动禁用
         if task.schedule_type == ScheduledTask.ScheduleType.ONCE:
@@ -153,6 +182,12 @@ def execute_scheduled_task(self, task_id: int, trigger_type: str = 'scheduled'):
         execution.log = '\n'.join(log_lines)
         execution.error_message = str(e)
         execution.save()
+
+        try:
+            from notifications.services import send_task_notification
+            send_task_notification(task, execution, None)
+        except Exception as push_err:
+            logger.warning(f"推送通知失败: {push_err}")
 
         # 一次性任务失败后自动禁用
         if task.schedule_type == ScheduledTask.ScheduleType.ONCE:

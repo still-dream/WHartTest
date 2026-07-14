@@ -105,7 +105,8 @@ class MessageTemplateModelTest(TestCase):
         t2 = MessageTemplate.objects.create(
             name='sys_tpl', content='c2', is_system=True, creator=self.admin
         )
-        templates = list(MessageTemplate.objects.all())
+        # 迁移也会创建系统模板，只验证本测试创建的模板排序
+        templates = list(MessageTemplate.objects.filter(id__in=[t1.id, t2.id]))
         self.assertEqual(templates[0], t2)
         self.assertEqual(templates[1], t1)
 
@@ -227,7 +228,11 @@ class MessageTemplateAPITest(TestCase):
         resp = self.client.get(self.base_url)
         self.assertEqual(resp.status_code, status.HTTP_200_OK)
         results = resp.data.get('results', resp.data)
-        self.assertEqual(len(results), 2)
+        # 迁移会创建系统内置模板，所以总数 >= 2
+        self.assertGreaterEqual(len(results), 2)
+        names = [r['name'] for r in results]
+        self.assertIn('系统模板', names)
+        self.assertIn('用户模板', names)
 
     def test_any_user_can_create(self):
         self.client.force_authenticate(user=self.user2)
@@ -511,3 +516,38 @@ class SendTaskNotificationTest(TestCase):
         mock_post.return_value = MagicMock(status_code=200)
         send_task_notification(self.task, self.execution, self.batch)
         self.assertFalse(mock_post.called)
+
+
+from types import SimpleNamespace
+
+
+class SystemTemplateMigrationTest(TestCase):
+    """系统内置模板 data migration 测试"""
+
+    def test_system_template_exists_after_migration(self):
+        sys_templates = MessageTemplate.objects.filter(is_system=True)
+        self.assertTrue(sys_templates.exists())
+        tpl = sys_templates.first()
+        self.assertIn('{{task_name}}', tpl.content)
+        self.assertIn('{{status}}', tpl.content)
+        self.assertIn('{{project_name}}', tpl.content)
+        self.assertIn('{{total}}', tpl.content)
+        self.assertIn('{{passed}}', tpl.content)
+        self.assertIn('{{failed}}', tpl.content)
+        self.assertIn('{{report_url}}', tpl.content)
+
+
+class AccountsMenuMappingTest(TestCase):
+    """accounts 序列化器菜单分类测试"""
+
+    def test_notifications_grouped_under_system_settings(self):
+        from accounts.serializers import ContentTypeSerializer
+        serializer = ContentTypeSerializer()
+        ct = SimpleNamespace(app_label='notifications', model='webhookaddress')
+        self.assertEqual(serializer.get_app_label_cn(ct), '系统管理')
+
+    def test_notifications_subcategory_is_push_config(self):
+        from accounts.serializers import ContentTypeSerializer
+        serializer = ContentTypeSerializer()
+        ct = SimpleNamespace(app_label='notifications', model='webhookaddress')
+        self.assertEqual(serializer.get_app_label_subcategory(ct), '推送配置')

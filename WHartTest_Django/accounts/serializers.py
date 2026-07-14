@@ -449,6 +449,7 @@ class ContentTypeSerializer(serializers.ModelSerializer):
             "mcpserverconfig": "系统管理",
             # 系统核心应用（内容类型接口已排除 admin/contenttypes/sessions）
             "authtoken": "系统管理",
+            "notifications": "系统管理",
         }
         return app_labels.get(app_label, "系统管理")
 
@@ -496,6 +497,7 @@ class ContentTypeSerializer(serializers.ModelSerializer):
             "message": "System Settings",
             "mcpserverconfig": "System Settings",
             "authtoken": "System Settings",
+            "notifications": "System Settings",
         }
         return app_labels.get(app_label, "System Settings")
 
@@ -560,6 +562,7 @@ class ContentTypeSerializer(serializers.ModelSerializer):
             "message": "消息管理",
             "task_center": "任务调度",
             "django_celery_beat": "任务调度",
+            "notifications": "推送配置",
         }
         return subcategories.get(app_label, None)
 
@@ -619,6 +622,7 @@ class ContentTypeSerializer(serializers.ModelSerializer):
             "message": "Messages",
             "task_center": "Task Scheduling",
             "django_celery_beat": "Task Scheduling",
+            "notifications": "Push Config",
         }
         return subcategories.get(app_label, None)
 
@@ -684,6 +688,7 @@ class ContentTypeSerializer(serializers.ModelSerializer):
             "消息管理": 27,
             "Skills管理": 28,
             "任务调度": 29,
+            "推送配置": 30,
         }
         return subcategory_sort.get(subcategory, 99)
 
@@ -763,6 +768,8 @@ class ContentTypeSerializer(serializers.ModelSerializer):
                 "ui_automation.uipagestepsdetailed": "UI页面步骤明细",
                 "ui_automation.uipublicdata": "UI公共数据",
                 "ui_automation.uitestcase": "UI测试用例",
+                "notifications.webhookaddress": "推送地址",
+                "notifications.messagetemplate": "消息模板",
             }
 
             # 优先使用 应用+模型 精确映射，避免跨应用同名模型翻译冲突。
@@ -874,6 +881,8 @@ class ContentTypeSerializer(serializers.ModelSerializer):
                 "ui_automation.uipagestepsdetailed": "UI页面步骤明细",
                 "ui_automation.uipublicdata": "UI公共数据",
                 "ui_automation.uitestcase": "UI测试用例",
+                "notifications.webhookaddress": "推送地址",
+                "notifications.messagetemplate": "消息模板",
             }
 
             app_model_key = f"{app_label}.{model_name}"
@@ -1016,6 +1025,8 @@ class ContentTypeSerializer(serializers.ModelSerializer):
             "ui_automation.uitestcase": "UI Test Case",
             "weixin_integration.weixinbotconfig": "WeChat Bot Config",
             "weixin_integration.weixinloginsession": "WeChat Login Session",
+            "notifications.webhookaddress": "Webhook Address",
+            "notifications.messagetemplate": "Message Template",
         }
 
         app_model_key = f"{app_label}.{model_name}"
