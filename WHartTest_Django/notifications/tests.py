@@ -1,5 +1,7 @@
 from django.test import TestCase
 from django.contrib.auth.models import User
+from rest_framework.test import APIClient
+from rest_framework import status
 from .models import WebhookAddress, MessageTemplate
 
 
@@ -113,3 +115,160 @@ class MessageTemplateModelTest(TestCase):
         )
         self.user.delete()
         self.assertEqual(MessageTemplate.objects.filter(id=tpl.id).count(), 0)
+
+
+class WebhookAddressAPITest(TestCase):
+    """WebhookAddress API 测试"""
+
+    def setUp(self):
+        self.client = APIClient()
+        self.admin = User.objects.create_user(
+            username='admin1', password='pass1234', is_staff=True
+        )
+        self.normal_user = User.objects.create_user(
+            username='user1', password='pass1234'
+        )
+        self.addr = WebhookAddress.objects.create(
+            name='测试群', url='https://open.feishu.cn/hook/xxx',
+            creator=self.admin,
+        )
+        self.base_url = '/api/notifications/webhook-addresses/'
+
+    def test_admin_can_list(self):
+        self.client.force_authenticate(user=self.admin)
+        resp = self.client.get(self.base_url)
+        self.assertEqual(resp.status_code, status.HTTP_200_OK)
+        results = resp.data.get('results', resp.data)
+        self.assertEqual(len(results), 1)
+
+    def test_admin_sees_full_fields(self):
+        self.client.force_authenticate(user=self.admin)
+        resp = self.client.get(self.base_url)
+        results = resp.data.get('results', resp.data)
+        item = results[0]
+        self.assertIn('url', item)
+        self.assertIn('description', item)
+        self.assertIn('platform_type', item)
+
+    def test_normal_user_sees_limited_fields(self):
+        self.client.force_authenticate(user=self.normal_user)
+        resp = self.client.get(self.base_url)
+        self.assertEqual(resp.status_code, status.HTTP_200_OK)
+        results = resp.data.get('results', resp.data)
+        item = results[0]
+        self.assertIn('id', item)
+        self.assertIn('name', item)
+        self.assertIn('is_active', item)
+        self.assertNotIn('url', item)
+
+    def test_admin_can_create(self):
+        self.client.force_authenticate(user=self.admin)
+        resp = self.client.post(self.base_url, {
+            'name': '新地址', 'url': 'https://example.com/new',
+        })
+        self.assertEqual(resp.status_code, status.HTTP_201_CREATED)
+        self.assertEqual(WebhookAddress.objects.count(), 2)
+
+    def test_normal_user_cannot_create(self):
+        self.client.force_authenticate(user=self.normal_user)
+        resp = self.client.post(self.base_url, {
+            'name': 'hack', 'url': 'https://evil.com',
+        })
+        self.assertEqual(resp.status_code, status.HTTP_403_FORBIDDEN)
+
+    def test_admin_can_update(self):
+        self.client.force_authenticate(user=self.admin)
+        resp = self.client.patch(f'{self.base_url}{self.addr.id}/', {
+            'name': 'updated name',
+        })
+        self.assertEqual(resp.status_code, status.HTTP_200_OK)
+        self.addr.refresh_from_db()
+        self.assertEqual(self.addr.name, 'updated name')
+
+    def test_admin_can_delete(self):
+        self.client.force_authenticate(user=self.admin)
+        resp = self.client.delete(f'{self.base_url}{self.addr.id}/')
+        self.assertIn(resp.status_code, [status.HTTP_200_OK, status.HTTP_204_NO_CONTENT])
+        self.assertEqual(WebhookAddress.objects.count(), 0)
+
+    def test_normal_user_cannot_delete(self):
+        self.client.force_authenticate(user=self.normal_user)
+        resp = self.client.delete(f'{self.base_url}{self.addr.id}/')
+        self.assertEqual(resp.status_code, status.HTTP_403_FORBIDDEN)
+
+    def test_admin_test_action(self):
+        self.client.force_authenticate(user=self.admin)
+        resp = self.client.post(f'{self.base_url}{self.addr.id}/test/')
+        self.assertEqual(resp.status_code, status.HTTP_200_OK)
+        self.assertIn('message', resp.data)
+
+
+class MessageTemplateAPITest(TestCase):
+    """MessageTemplate API 测试"""
+
+    def setUp(self):
+        self.client = APIClient()
+        self.admin = User.objects.create_user(
+            username='admin1', password='pass1234', is_staff=True
+        )
+        self.user1 = User.objects.create_user(username='user1', password='pass1234')
+        self.user2 = User.objects.create_user(username='user2', password='pass1234')
+        self.sys_tpl = MessageTemplate.objects.create(
+            name='系统模板', content='系统内容', is_system=True,
+            creator=self.admin,
+        )
+        self.user_tpl = MessageTemplate.objects.create(
+            name='用户模板', content='用户内容', creator=self.user1,
+        )
+        self.base_url = '/api/notifications/message-templates/'
+
+    def test_any_user_can_list(self):
+        self.client.force_authenticate(user=self.user2)
+        resp = self.client.get(self.base_url)
+        self.assertEqual(resp.status_code, status.HTTP_200_OK)
+        results = resp.data.get('results', resp.data)
+        self.assertEqual(len(results), 2)
+
+    def test_any_user_can_create(self):
+        self.client.force_authenticate(user=self.user2)
+        resp = self.client.post(self.base_url, {
+            'name': '我的模板', 'content': '内容',
+        })
+        self.assertEqual(resp.status_code, status.HTTP_201_CREATED)
+
+    def test_creator_can_update(self):
+        self.client.force_authenticate(user=self.user1)
+        resp = self.client.patch(f'{self.base_url}{self.user_tpl.id}/', {
+            'name': 'updated',
+        })
+        self.assertEqual(resp.status_code, status.HTTP_200_OK)
+
+    def test_non_creator_cannot_update(self):
+        self.client.force_authenticate(user=self.user2)
+        resp = self.client.patch(f'{self.base_url}{self.user_tpl.id}/', {
+            'name': 'hacked',
+        })
+        self.assertEqual(resp.status_code, status.HTTP_403_FORBIDDEN)
+
+    def test_creator_can_delete_own(self):
+        self.client.force_authenticate(user=self.user1)
+        resp = self.client.delete(f'{self.base_url}{self.user_tpl.id}/')
+        self.assertIn(resp.status_code, [status.HTTP_200_OK, status.HTTP_204_NO_CONTENT])
+
+    def test_system_template_cannot_be_deleted(self):
+        self.client.force_authenticate(user=self.admin)
+        resp = self.client.delete(f'{self.base_url}{self.sys_tpl.id}/')
+        self.assertEqual(resp.status_code, status.HTTP_400_BAD_REQUEST)
+
+    def test_non_creator_cannot_delete(self):
+        self.client.force_authenticate(user=self.user2)
+        resp = self.client.delete(f'{self.base_url}{self.user_tpl.id}/')
+        self.assertEqual(resp.status_code, status.HTTP_403_FORBIDDEN)
+
+    def test_is_system_read_only(self):
+        self.client.force_authenticate(user=self.user1)
+        resp = self.client.post(self.base_url, {
+            'name': 'try system', 'content': 'c', 'is_system': True,
+        })
+        self.assertEqual(resp.status_code, status.HTTP_201_CREATED)
+        self.assertFalse(resp.data['is_system'])
