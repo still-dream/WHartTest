@@ -1,6 +1,8 @@
 from rest_framework import serializers
 from .models import ScheduledTask, TaskExecution
 from ui_automation.models import UiTestCase
+from app_ui_automation.models import AppUiScript, AppUiDevice
+from notifications.models import WebhookAddress
 
 
 class ScheduledTaskSerializer(serializers.ModelSerializer):
@@ -12,6 +14,17 @@ class ScheduledTaskSerializer(serializers.ModelSerializer):
     ui_testcase_ids = serializers.PrimaryKeyRelatedField(
         source='ui_testcases', many=True,
         queryset=UiTestCase.objects.all(), required=False
+    )
+    app_ui_scripts = serializers.PrimaryKeyRelatedField(
+        many=True, queryset=AppUiScript.objects.all(), required=False
+    )
+    app_ui_device = serializers.PrimaryKeyRelatedField(
+        queryset=AppUiDevice.objects.all(), required=False, allow_null=True
+    )
+    webhook_addresses = serializers.PrimaryKeyRelatedField(
+        many=True,
+        queryset=WebhookAddress.objects.filter(is_active=True),
+        required=False
     )
 
     class Meta:
@@ -27,6 +40,8 @@ class ScheduledTaskSerializer(serializers.ModelSerializer):
             'actuator_id',
             'environment', 'environment_name',
             'ui_environment', 'ui_environment_name',
+            'app_ui_scripts', 'app_ui_device',
+            'push_config', 'webhook_addresses', 'push_message_content',
         ]
         read_only_fields = [
             'project', 'status', 'last_run_at', 'creator', 'creator_name',
@@ -34,9 +49,9 @@ class ScheduledTaskSerializer(serializers.ModelSerializer):
             'test_suite_name', 'environment_name', 'ui_environment_name',
         ]
         extra_kwargs = {
-                'environment': {'required': False, 'allow_null': True},
-                'ui_environment': {'required': False, 'allow_null': True},
-            }
+            'environment': {'required': False, 'allow_null': True},
+            'ui_environment': {'required': False, 'allow_null': True},
+        }
 
     def get_schedule_display(self, obj):
         return obj.get_schedule_display_text()
@@ -122,6 +137,43 @@ class ScheduledTaskSerializer(serializers.ModelSerializer):
             hourly_minute = attrs.get('hourly_minute', getattr(self.instance, 'hourly_minute', None))
             if hourly_minute is None:
                 raise serializers.ValidationError({'hourly_minute': '每小时执行时必须指定分钟数'})
+
+        # APPUI 自动化模块校验
+        if module == ScheduledTask.TaskModule.APP_UI_AUTOMATION:
+            app_ui_scripts = attrs.get('app_ui_scripts', None)
+            if app_ui_scripts is not None:
+                if hasattr(app_ui_scripts, 'all'):
+                    script_count = app_ui_scripts.count()
+                elif isinstance(app_ui_scripts, list):
+                    script_count = len(app_ui_scripts)
+                else:
+                    script_count = 0
+            elif self.instance:
+                script_count = self.instance.app_ui_scripts.count()
+            else:
+                script_count = 0
+            if not script_count:
+                raise serializers.ValidationError({'app_ui_scripts': 'APPUI 自动化模块必须选择至少一个脚本'})
+
+            app_ui_device = attrs.get('app_ui_device', getattr(self.instance, 'app_ui_device_id', None) if self.instance else None)
+            if not app_ui_device:
+                raise serializers.ValidationError({'app_ui_device': 'APPUI 自动化模块必须选择执行设备'})
+
+        # 推送配置校验
+        push_config = attrs.get('push_config', getattr(self.instance, 'push_config', 'always') if self.instance else 'always')
+        if push_config != 'disabled':
+            push_content = attrs.get('push_message_content', getattr(self.instance, 'push_message_content', '') if self.instance else '')
+            if not push_content:
+                raise serializers.ValidationError({'push_message_content': '启用推送时必须填写消息内容'})
+            webhooks = attrs.get('webhook_addresses', None)
+            if webhooks is not None:
+                webhook_count = len(webhooks) if isinstance(webhooks, list) else 0
+            elif self.instance:
+                webhook_count = self.instance.webhook_addresses.count()
+            else:
+                webhook_count = 0
+            if webhook_count == 0:
+                raise serializers.ValidationError({'webhook_addresses': '启用推送时至少选择一个推送地址'})
 
         return attrs
 

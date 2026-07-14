@@ -29,6 +29,11 @@ class ScheduledTask(models.Model):
     class ExecutionTarget(models.TextChoices):
         ACTUATOR = 'actuator', _('执行器')
 
+    class PushConfig(models.TextChoices):
+        ALWAYS = 'always', '总是推送'
+        FAILURE_ONLY = 'failure_only', '仅失败时推送'
+        DISABLED = 'disabled', '不推送'
+
     # 基本信息
     name = models.CharField(_('任务名称'), max_length=50)
     description = models.TextField(_('任务描述'), max_length=200, blank=True, default='')
@@ -129,6 +134,22 @@ class ScheduledTask(models.Model):
         _('Celery任务ID'), max_length=255, blank=True, default=''
     )
 
+    # 推送配置
+    push_config = models.CharField(
+        '推送策略', max_length=20,
+        choices=PushConfig.choices, default='always'
+    )
+    webhook_addresses = models.ManyToManyField(
+        'notifications.WebhookAddress', blank=True,
+        verbose_name='推送地址',
+        related_name='scheduled_tasks',
+        help_text='订阅的飞书 Webhook 推送地址'
+    )
+    push_message_content = models.TextField(
+        '推送消息内容', blank=True, default='',
+        help_text='Markdown格式，支持{{变量}}'
+    )
+
     # 审计
     creator = models.ForeignKey(
         settings.AUTH_USER_MODEL, on_delete=models.SET_NULL,
@@ -154,7 +175,10 @@ class ScheduledTask(models.Model):
             return "一次性（未设置时间）"
         elif self.schedule_type == self.ScheduleType.DAILY:
             if self.daily_time:
-                return f"每天 {self.daily_time.strftime('%H:%M')}"
+                t = self.daily_time
+                if isinstance(t, str):
+                    return f"每天 {t[:5]}"
+                return f"每天 {t.strftime('%H:%M')}"
             return "每天"
         elif self.schedule_type == self.ScheduleType.WEEKLY:
             day_names = ['周一', '周二', '周三', '周四', '周五', '周六', '周日']
