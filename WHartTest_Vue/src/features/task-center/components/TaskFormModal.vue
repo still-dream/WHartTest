@@ -30,6 +30,7 @@
             <a-select v-model="form.module" :placeholder="modalText.selectModule" @change="onModuleChange">
               <a-option value="ui_automation">{{ modalText.uiAutomation }}</a-option>
               <a-option value="test_suite">{{ modalText.testSuite }}</a-option>
+              <a-option value="app_ui_automation">APPUI 自动化</a-option>
             </a-select>
           </a-form-item>
 
@@ -59,6 +60,37 @@
               @popup-visible-change="(v: boolean) => v && loadTestSuites()"
             >
               <a-option v-for="suite in testSuites" :key="suite.id" :value="suite.id">{{ suite.name }}</a-option>
+            </a-select>
+          </a-form-item>
+
+          <a-form-item
+            v-if="form.module === 'app_ui_automation'"
+            label="选择APPUI脚本"
+            field="app_ui_scripts"
+            :rules="[{ required: true, message: '请选择至少一个脚本' }]"
+          >
+            <a-button type="outline" size="small" @click="openAppUiScriptModal">
+              <template #icon><icon-select-all /></template>
+              {{ selectedAppUiScriptsText }}
+            </a-button>
+          </a-form-item>
+
+          <a-form-item
+            v-if="form.module === 'app_ui_automation'"
+            label="执行设备"
+            field="app_ui_device"
+            :rules="[{ required: true, message: '请选择执行设备' }]"
+          >
+            <a-select
+              v-model="form.app_ui_device"
+              placeholder="请选择设备"
+              :loading="loadingAppUiDevices"
+              allow-search
+              @popup-visible-change="(v: boolean) => v && loadAppUiDevices()"
+            >
+              <a-option v-for="dev in appUiDevices" :key="dev.id" :value="dev.id">
+                {{ dev.name }} ({{ dev.platform }})
+              </a-option>
             </a-select>
           </a-form-item>
         </div>
@@ -184,15 +216,90 @@
             </a-input-number>
           </a-form-item>
         </div>
+
+        <a-divider>推送配置</a-divider>
+        <a-form-item label="推送策略" field="push_config">
+          <a-radio-group v-model="form.push_config">
+            <a-radio value="always">总是推送</a-radio>
+            <a-radio value="failure_only">仅失败时推送</a-radio>
+            <a-radio value="disabled">不推送</a-radio>
+          </a-radio-group>
+        </a-form-item>
+
+        <template v-if="form.push_config !== 'disabled'">
+          <a-form-item
+            label="推送地址"
+            field="webhook_addresses"
+            :rules="[{ required: true, message: '请至少选择一个推送地址' }]"
+          >
+            <a-select
+              v-model="form.webhook_addresses"
+              placeholder="选择推送地址"
+              multiple
+              allow-search
+              :loading="loadingWebhooks"
+              @popup-visible-change="(v: boolean) => v && loadWebhooks()"
+            >
+              <a-option v-for="wh in webhookList" :key="wh.id" :value="wh.id">
+                {{ wh.name }}
+              </a-option>
+            </a-select>
+          </a-form-item>
+
+          <a-form-item label="消息内容" field="push_message_content">
+            <div style="display: flex; gap: 8px; margin-bottom: 8px;">
+              <a-select
+                placeholder="引入模板"
+                allow-search
+                style="width: 240px;"
+                :loading="loadingTemplates"
+                @popup-visible-change="(v: boolean) => v && loadTemplates()"
+                @change="onTemplateSelected"
+              >
+                <a-option v-for="tpl in templateList" :key="tpl.id" :value="tpl.id">
+                  {{ tpl.name }}
+                </a-option>
+              </a-select>
+            </div>
+            <VariableHintPanel @insert="onInsertVariable" />
+            <a-textarea
+              ref="pushContentRef"
+              v-model="form.push_message_content"
+              placeholder="支持 Markdown 和 {{变量}} 占位符"
+              :auto-size="{ minRows: 6, maxRows: 15 }"
+              style="font-family: monospace;"
+            />
+          </a-form-item>
+        </template>
       </a-form>
     </div>
   </a-modal>
   <UiTestCaseSelectModal ref="caseSelectModal" :project-id="projectId" @confirm="onCaseSelected" />
+  <a-modal
+    v-model:visible="appUiScriptModalVisible"
+    title="选择APPUI脚本"
+    :width="600"
+    @ok="onAppUiScriptsConfirmed"
+  >
+    <a-table
+      :data="appUiScripts"
+      row-key="id"
+      :pagination="false"
+      :row-selection="{ type: 'checkbox', showCheckedAll: true }"
+      v-model:selectedKeys="selectedAppUiScriptIds"
+    >
+      <template #columns>
+        <a-table-column title="脚本名称" data-index="name" />
+        <a-table-column title="平台" data-index="platform" />
+        <a-table-column title="等级" data-index="level" />
+      </template>
+    </a-table>
+  </a-modal>
 </template>
 
 <script setup lang="ts">
-import { ref, reactive, computed } from 'vue';
-import { Message } from '@arco-design/web-vue';
+import { ref, reactive, computed, nextTick } from 'vue';
+import { Message, Modal } from '@arco-design/web-vue';
 import { IconSelectAll } from '@arco-design/web-vue/es/icon';
 import axios from 'axios';
 import { API_BASE_URL } from '@/config/api';
@@ -202,6 +309,14 @@ import { getCurrentServerLanguage } from '@/utils/installLocaleAdapters';
 import { createTask, updateTask, type TaskFormData, type ScheduledTask } from '../services/taskService';
 import { actuatorApi, type ActuatorInfo } from '@/features/ui-automation/api';
 import UiTestCaseSelectModal from './UiTestCaseSelectModal.vue';
+import {
+  getWebhookAddresses,
+  getMessageTemplates,
+  type WebhookAddress,
+  type MessageTemplate,
+} from '@/features/notifications/services/notificationService';
+import VariableHintPanel from '@/features/notifications/components/VariableHintPanel.vue';
+import { scriptApi, deviceApi } from '@/features/app-ui-automation/api';
 
 const props = defineProps<{
   projectId: number;
@@ -345,6 +460,20 @@ const environments = ref<{ id: number; name: string; base_url: string }[]>([]);
 const uiEnvironments = ref<{ id: number; name: string; browser: string }[]>([]);
 const caseSelectModal = ref<InstanceType<typeof UiTestCaseSelectModal>>();
 
+// APPUI 相关状态
+const loadingAppUiDevices = ref(false);
+const appUiDevices = ref<{ id: number; name: string; platform: string }[]>([]);
+const appUiScriptModalVisible = ref(false);
+const appUiScripts = ref<any[]>([]);
+const selectedAppUiScriptIds = ref<number[]>([]);
+
+// 推送相关状态
+const loadingWebhooks = ref(false);
+const webhookList = ref<WebhookAddress[]>([]);
+const loadingTemplates = ref(false);
+const templateList = ref<MessageTemplate[]>([]);
+const pushContentRef = ref();
+
 const scheduleOptions = computed(() => [
   { value: 'once', label: modalText.value.once },
   { value: 'daily', label: modalText.value.daily },
@@ -381,6 +510,11 @@ const defaultForm = (): TaskFormData => ({
   actuator_id: '',
   environment: null,
   ui_environment: null,
+  app_ui_scripts: [],
+  app_ui_device: null,
+  push_config: 'always',
+  webhook_addresses: [],
+  push_message_content: '',
 });
 
 const form = reactive<TaskFormData>(defaultForm());
@@ -393,6 +527,12 @@ const selectedUiCasesText = computed(() => (
   form.ui_testcase_ids.length
     ? modalText.value.selectedUiCases(form.ui_testcase_ids.length)
     : modalText.value.chooseCases
+));
+
+const selectedAppUiScriptsText = computed(() => (
+  form.app_ui_scripts?.length
+    ? `已选 ${form.app_ui_scripts.length} 个脚本`
+    : '选择脚本'
 ));
 
 const environmentValidator = (value: unknown, callback: (error?: string) => void) => {
@@ -509,6 +649,101 @@ const onModuleChange = () => {
   form.test_suite = null;
   form.ui_testcase_ids = [];
   form.actuator_id = '';
+  form.app_ui_scripts = [];
+  form.app_ui_device = null;
+};
+
+const loadAppUiDevices = async () => {
+  loadingAppUiDevices.value = true;
+  try {
+    const resp = await deviceApi.list({ project: props.projectId });
+    const data = (resp as any).data?.data?.data || (resp as any).data?.data || {};
+    appUiDevices.value = (data.items || data.results || []).map((d: any) => ({
+      id: d.id, name: d.name, platform: d.platform,
+    }));
+  } catch {
+    appUiDevices.value = [];
+  } finally {
+    loadingAppUiDevices.value = false;
+  }
+};
+
+const loadAppUiScripts = async () => {
+  try {
+    const resp = await scriptApi.list({ project: props.projectId });
+    const data = (resp as any).data?.data?.data || (resp as any).data?.data || {};
+    appUiScripts.value = data.items || data.results || [];
+  } catch {
+    appUiScripts.value = [];
+  }
+};
+
+const openAppUiScriptModal = async () => {
+  await loadAppUiScripts();
+  appUiScriptModalVisible.value = true;
+};
+
+const loadWebhooks = async () => {
+  loadingWebhooks.value = true;
+  try {
+    const data = await getWebhookAddresses();
+    webhookList.value = data as WebhookAddress[];
+  } catch {
+    webhookList.value = [];
+  } finally {
+    loadingWebhooks.value = false;
+  }
+};
+
+const loadTemplates = async () => {
+  loadingTemplates.value = true;
+  try {
+    templateList.value = await getMessageTemplates();
+  } catch {
+    templateList.value = [];
+  } finally {
+    loadingTemplates.value = false;
+  }
+};
+
+const onTemplateSelected = (tplId: number) => {
+  const tpl = templateList.value.find(t => t.id === tplId);
+  if (tpl) {
+    if (form.push_message_content) {
+      Modal.confirm({
+        title: '确认覆盖',
+        content: '是否用模板内容覆盖当前消息内容？',
+        onOk: () => {
+          form.push_message_content = tpl.content;
+        },
+      });
+    } else {
+      form.push_message_content = tpl.content;
+    }
+  }
+};
+
+const onInsertVariable = (varName: string) => {
+  const insertion = `{{${varName}}}`;
+  const textarea = pushContentRef.value?.$el?.querySelector('textarea');
+  if (textarea) {
+    const start = textarea.selectionStart;
+    const end = textarea.selectionEnd;
+    form.push_message_content = (form.push_message_content || '').substring(0, start)
+      + insertion + (form.push_message_content || '').substring(end);
+    nextTick(() => {
+      textarea.focus();
+      const newPos = start + insertion.length;
+      textarea.setSelectionRange(newPos, newPos);
+    });
+  } else {
+    form.push_message_content = (form.push_message_content || '') + insertion;
+  }
+};
+
+const onAppUiScriptsConfirmed = () => {
+  form.app_ui_scripts = [...selectedAppUiScriptIds.value];
+  appUiScriptModalVisible.value = false;
 };
 
 const resetForm = () => {
@@ -550,7 +785,15 @@ const open = (task?: ScheduledTask) => {
       actuator_id: task.actuator_id || '',
       environment: task.environment ?? 0,
       ui_environment: task.ui_environment ?? null,
+      app_ui_scripts: task.app_ui_scripts || [],
+      app_ui_device: task.app_ui_device ?? null,
+      push_config: task.push_config || 'always',
+      webhook_addresses: task.webhook_addresses || [],
+      push_message_content: task.push_message_content || '',
     });
+    if (task.module === 'app_ui_automation') {
+      loadAppUiDevices();
+    }
   } else {
     isEditing.value = false;
     editingId.value = null;

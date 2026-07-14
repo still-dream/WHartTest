@@ -6,9 +6,10 @@ import { useAuthStore } from '@/store/authStore';
 
 export type TaskStatus = 'disabled' | 'running' | 'executing';
 export type ScheduleType = 'once' | 'hourly' | 'daily' | 'weekly';
-export type TaskModule = 'ui_automation' | 'test_suite';
+export type TaskModule = 'ui_automation' | 'test_suite' | 'app_ui_automation';
 export type TriggerType = 'scheduled' | 'manual' | 'api';
 export type ExecutionStatus = 'running' | 'success' | 'failed';
+export type PushConfig = 'always' | 'failure_only' | 'disabled';
 
 export interface ScheduledTask {
   id: number;
@@ -39,6 +40,11 @@ export interface ScheduledTask {
   environment_name: string | null;
   ui_environment: number | null;
   ui_environment_name: string | null;
+  app_ui_scripts: number[];
+  app_ui_device: number | null;
+  push_config: PushConfig;
+  webhook_addresses: number[];
+  push_message_content: string;
   created_at: string;
   updated_at: string;
 }
@@ -62,6 +68,11 @@ export interface TaskFormData {
   actuator_id?: string;
   environment: number;
   ui_environment?: number | null;
+  app_ui_scripts?: number[];
+  app_ui_device?: number | null;
+  push_config?: PushConfig;
+  webhook_addresses?: number[];
+  push_message_content?: string;
 }
 
 export interface TaskExecution {
