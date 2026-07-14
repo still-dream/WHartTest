@@ -272,3 +272,242 @@ class MessageTemplateAPITest(TestCase):
         })
         self.assertEqual(resp.status_code, status.HTTP_201_CREATED)
         self.assertFalse(resp.data['is_system'])
+
+
+from notifications.variables import VARIABLES, build_context, render_content
+from notifications.services import build_feishu_card, send_task_notification
+from unittest.mock import patch, MagicMock
+from task_center.models import ScheduledTask, TaskExecution
+from projects.models import Project
+
+
+class VariablesTest(TestCase):
+    """变量系统测试"""
+
+    def test_render_content_replaces_variables(self):
+        content = '## {{task_name}} 执行{{status}}\n通过率: {{pass_rate}}'
+        context = {
+            'task_name': '登录测试',
+            'status': '成功',
+            'pass_rate': '100%',
+        }
+        result = render_content(content, context)
+        self.assertEqual(result, '## 登录测试 执行成功\n通过率: 100%')
+
+    def test_render_content_handles_missing_variable(self):
+        content = 'Hello {{name}}, {{missing}}'
+        context = {'name': 'World'}
+        result = render_content(content, context)
+        self.assertEqual(result, 'Hello World, {{missing}}')
+
+    def test_render_content_handles_int_values(self):
+        content = '总数: {{total}}, 通过: {{passed}}'
+        context = {'total': 15, 'passed': 13}
+        result = render_content(content, context)
+        self.assertEqual(result, '总数: 15, 通过: 13')
+
+    def test_variables_list_contains_key_vars(self):
+        var_names = [v[0] for v in VARIABLES]
+        self.assertIn('task_name', var_names)
+        self.assertIn('project_name', var_names)
+        self.assertIn('status', var_names)
+        self.assertIn('total', var_names)
+        self.assertIn('passed', var_names)
+        self.assertIn('failed', var_names)
+        self.assertIn('pass_rate', var_names)
+        self.assertIn('duration', var_names)
+        self.assertIn('report_url', var_names)
+        self.assertIn('task_url', var_names)
+
+    def test_build_context_for_app_ui_module(self):
+        from app_ui_automation.models import AppUiBatchExecutionRecord
+        from django.contrib.auth.models import User
+
+        user = User.objects.create_user(username='ctx_user', password='pass')
+        project = Project.objects.create(name='ctx_project')
+        task = ScheduledTask.objects.create(
+            name='ctx_task', project=project,
+            module='app_ui_automation', schedule_type='daily',
+            daily_time='10:00:00', creator=user,
+        )
+        execution = TaskExecution.objects.create(
+            task=task, trigger_type='scheduled',
+            status='success',
+        )
+        batch = AppUiBatchExecutionRecord.objects.create(
+            name='batch', total_scripts=10, passed_scripts=8,
+            failed_scripts=2, status=3, executor=user,
+        )
+        context = build_context(task, execution, batch)
+        self.assertEqual(context['task_name'], 'ctx_task')
+        self.assertEqual(context['project_name'], 'ctx_project')
+        self.assertEqual(context['status'], '成功')
+        self.assertEqual(context['total'], 10)
+        self.assertEqual(context['passed'], 8)
+        self.assertEqual(context['failed'], 2)
+        self.assertEqual(context['pass_rate'], '80.0%')
+        self.assertEqual(context['executor'], 'ctx_user')
+
+    def test_build_context_failed_cases_for_app_ui(self):
+        from app_ui_automation.models import (
+            AppUiBatchExecutionRecord, AppUiScript, AppUiExecutionRecord,
+            AppUiModule,
+        )
+        from django.contrib.auth.models import User
+
+        user = User.objects.create_user(username='fc_user', password='pass')
+        project = Project.objects.create(name='fc_project')
+        task = ScheduledTask.objects.create(
+            name='fc_task', project=project,
+            module='app_ui_automation', schedule_type='daily',
+            daily_time='10:00:00', creator=user,
+        )
+        execution = TaskExecution.objects.create(
+            task=task, trigger_type='scheduled', status='failed',
+        )
+        module = AppUiModule.objects.create(
+            project=project, name='fc_module', level=1,
+        )
+        script1 = AppUiScript.objects.create(
+            project=project, module=module, name='script1',
+            script_file='dummy.zip', script_dir='dummy',
+        )
+        script2 = AppUiScript.objects.create(
+            project=project, module=module, name='script2',
+            script_file='dummy2.zip', script_dir='dummy2',
+        )
+        batch = AppUiBatchExecutionRecord.objects.create(
+            name='batch', total_scripts=2, passed_scripts=0,
+            failed_scripts=2, status=4, executor=user,
+        )
+        AppUiExecutionRecord.objects.create(
+            batch=batch, script=script1, status=3, executor=user,
+        )
+        AppUiExecutionRecord.objects.create(
+            batch=batch, script=script2, status=3, executor=user,
+        )
+        context = build_context(task, execution, batch)
+        self.assertIn('script1', context['failed_cases'])
+        self.assertIn('script2', context['failed_cases'])
+
+    def test_build_context_no_failed_cases(self):
+        from app_ui_automation.models import AppUiBatchExecutionRecord
+        from django.contrib.auth.models import User
+
+        user = User.objects.create_user(username='nf_user', password='pass')
+        project = Project.objects.create(name='nf_project')
+        task = ScheduledTask.objects.create(
+            name='nf_task', project=project,
+            module='app_ui_automation', schedule_type='daily',
+            daily_time='10:00:00', creator=user,
+        )
+        execution = TaskExecution.objects.create(
+            task=task, trigger_type='scheduled', status='success',
+        )
+        batch = AppUiBatchExecutionRecord.objects.create(
+            name='batch', total_scripts=5, passed_scripts=5,
+            failed_scripts=0, status=2, executor=user,
+        )
+        context = build_context(task, execution, batch)
+        self.assertEqual(context['failed_cases'], '无')
+
+
+class FeishuCardTest(TestCase):
+    """飞书卡片构建测试"""
+
+    def test_build_card_success_status(self):
+        card = build_feishu_card('content here', 'success', 'https://report.com', 'https://task.com')
+        self.assertEqual(card['msg_type'], 'interactive')
+        self.assertEqual(card['card']['header']['template'], 'green')
+        self.assertEqual(card['card']['header']['title']['content'], '测试任务执行通知')
+        elements = card['card']['elements']
+        self.assertTrue(any(e.get('tag') == 'markdown' for e in elements))
+
+    def test_build_card_failed_status(self):
+        card = build_feishu_card('failed content', 'failed', '', '')
+        self.assertEqual(card['card']['header']['template'], 'red')
+
+    def test_build_card_has_action_buttons(self):
+        card = build_feishu_card('c', 'success', 'https://r.com', 'https://t.com')
+        elements = card['card']['elements']
+        actions = [e for e in elements if e.get('tag') == 'action']
+        self.assertTrue(len(actions) >= 1)
+        buttons = actions[0].get('actions', [])
+        self.assertTrue(len(buttons) >= 2)
+        button_types = [b.get('type') for b in buttons]
+        self.assertIn('link', button_types)
+
+
+class SendTaskNotificationTest(TestCase):
+    """send_task_notification 测试"""
+
+    def setUp(self):
+        from app_ui_automation.models import AppUiBatchExecutionRecord
+
+        self.user = User.objects.create_user(username='push_user', password='pass')
+        self.project = Project.objects.create(name='push_project')
+        self.task = ScheduledTask.objects.create(
+            name='push_task', project=self.project,
+            module='app_ui_automation', schedule_type='daily',
+            daily_time='10:00:00', creator=self.user,
+            push_config='always',
+            push_message_content='## {{task_name}} 执行{{status}}',
+        )
+        self.webhook = WebhookAddress.objects.create(
+            name='push_hook', url='https://open.feishu.cn/hook/test',
+            creator=self.user,
+        )
+        self.task.webhook_addresses.add(self.webhook)
+        self.execution = TaskExecution.objects.create(
+            task=self.task, trigger_type='scheduled', status='success',
+        )
+        self.batch = AppUiBatchExecutionRecord.objects.create(
+            name='batch', total_scripts=3, passed_scripts=3,
+            failed_scripts=0, status=2, executor=self.user,
+        )
+
+    @patch('notifications.services.http_requests.post')
+    def test_send_notification_always(self, mock_post):
+        mock_post.return_value = MagicMock(status_code=200)
+        send_task_notification(self.task, self.execution, self.batch)
+        self.assertTrue(mock_post.called)
+
+    @patch('notifications.services.http_requests.post')
+    def test_skip_when_disabled(self, mock_post):
+        self.task.push_config = 'disabled'
+        self.task.save()
+        send_task_notification(self.task, self.execution, self.batch)
+        self.assertFalse(mock_post.called)
+
+    @patch('notifications.services.http_requests.post')
+    def test_skip_failure_only_on_success(self, mock_post):
+        self.task.push_config = 'failure_only'
+        self.task.save()
+        send_task_notification(self.task, self.execution, self.batch)
+        self.assertFalse(mock_post.called)
+
+    @patch('notifications.services.http_requests.post')
+    def test_send_failure_only_on_failure(self, mock_post):
+        self.task.push_config = 'failure_only'
+        self.task.save()
+        self.execution.status = 'failed'
+        self.execution.save()
+        self.batch.status = 4
+        self.batch.failed_scripts = 3
+        self.batch.passed_scripts = 0
+        self.batch.save()
+        send_task_notification(self.task, self.execution, self.batch)
+        self.assertTrue(mock_post.called)
+
+    @patch('notifications.services.http_requests.post')
+    def test_push_failure_does_not_raise(self, mock_post):
+        mock_post.side_effect = Exception('network error')
+        send_task_notification(self.task, self.execution, self.batch)
+
+    @patch('notifications.services.http_requests.post')
+    def test_inactive_webhook_skipped(self, mock_post):
+        self.webhook.is_active = False
+        self.webhook.save()
+        mock_post.return_value = MagicMock(status_code=200)
+        send_task_notification(self.task, self.execution, self.batch)
+        self.assertFalse(mock_post.called)
