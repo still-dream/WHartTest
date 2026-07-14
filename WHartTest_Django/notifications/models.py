@@ -28,3 +28,33 @@ class WebhookAddress(models.Model):
 
     def __str__(self):
         return self.name
+
+
+class MessageTemplate(models.Model):
+    """消息模板库（所有用户可维护）"""
+
+    PLATFORM_CHOICES = [('feishu', '飞书')]
+
+    name = models.CharField('模板名称', max_length=100)
+    content = models.TextField(
+        '模板内容', help_text='Markdown格式，支持{{变量}}占位符'
+    )
+    platform_type = models.CharField(
+        '平台类型', max_length=20, choices=PLATFORM_CHOICES, default='feishu'
+    )
+    description = models.TextField('描述', blank=True, default='')
+    is_system = models.BooleanField('系统内置', default=False)
+    creator = models.ForeignKey(
+        User, on_delete=models.CASCADE,
+        verbose_name='创建人', related_name='created_message_templates'
+    )
+    created_at = models.DateTimeField('创建时间', auto_now_add=True)
+    updated_at = models.DateTimeField('更新时间', auto_now=True)
+
+    class Meta:
+        verbose_name = '消息模板'
+        verbose_name_plural = '消息模板'
+        ordering = ['-is_system', '-created_at']
+
+    def __str__(self):
+        return self.name
