@@ -8,6 +8,15 @@ import type {
   PaginatedResponse,
 } from '../types';
 
+export type {
+  WebhookAddress,
+  WebhookAddressLimited,
+  WebhookAddressFormData,
+  MessageTemplate,
+  MessageTemplateFormData,
+  PaginatedResponse,
+} from '../types';
+
 const BASE_URL = '/notifications';
 
 // ==================== Webhook 地址管理 ====================
