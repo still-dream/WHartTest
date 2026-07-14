@@ -9,6 +9,7 @@
 
 import os
 import json
+import logging
 import subprocess
 import sys
 from pathlib import Path
@@ -18,6 +19,8 @@ from django.conf import settings
 from django.utils import timezone
 
 from .models import AppUiExecutionRecord
+
+logger = logging.getLogger(__name__)
 
 _poco_patched = False
 
@@ -83,6 +86,9 @@ class AppUiScriptExecutor:
 
             # STEP 3: 打包 Standalone HTML
             standalone_path = self._pack_html(html_dir, standalone_dir)
+
+            # STEP 4: 生成报告截图（用于飞书通知）
+            self._generate_screenshot(standalone_path)
 
             # 解析日志统计
             stats = self._parse_log_stats(log_dir)
@@ -279,6 +285,46 @@ class AppUiScriptExecutor:
         out_path = standalone_dir / f"{timestamp}.html"
         pack_html(src, out_path)
         return out_path
+
+    def _generate_screenshot(self, html_path):
+        """使用 Playwright 将报告 HTML 转为截图，并压缩到 18KB 以下"""
+        screenshot_path = html_path.with_suffix('.jpg')
+        try:
+            from playwright.sync_api import sync_playwright
+
+            with sync_playwright() as p:
+                browser = p.chromium.launch()
+                page = browser.new_page(viewport={'width': 800, 'height': 600})
+                page.goto(f'file://{html_path}')
+                page.screenshot(path=str(screenshot_path), full_page=True)
+                browser.close()
+
+            self._compress_screenshot(screenshot_path)
+            logger.info(f"报告截图已生成: {screenshot_path}")
+        except Exception as e:
+            logger.warning(f"生成报告截图失败: {e}")
+
+    def _compress_screenshot(self, image_path, max_size=18 * 1024):
+        """将图片压缩到 max_size 字节以下"""
+        from PIL import Image
+
+        img = Image.open(image_path)
+        if img.mode in ('RGBA', 'P'):
+            img = img.convert('RGB')
+
+        for scale in [1.0, 0.75, 0.5, 0.35, 0.25]:
+            new_w = int(img.width * scale)
+            new_h = int(img.height * scale)
+            resized = img.resize((new_w, new_h), Image.LANCZOS)
+            for quality in [85, 70, 55, 40, 25]:
+                resized.save(str(image_path), 'JPEG', quality=quality)
+                if os.path.getsize(image_path) <= max_size:
+                    return
+
+        # 兜底：缩到 20% 并用最低质量
+        img.resize(
+            (int(img.width * 0.2), int(img.height * 0.2)), Image.LANCZOS
+        ).save(str(image_path), 'JPEG', quality=20)
 
     def _parse_log_stats(self, log_dir):
         """解析 log.txt 统计步骤数"""

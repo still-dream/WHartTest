@@ -3,6 +3,7 @@
 
 import os
 import zipfile
+from datetime import datetime
 
 from rest_framework import viewsets, status
 from rest_framework.decorators import action
@@ -259,7 +260,7 @@ class AppUiExecutionRecordViewSet(DestroyModelMixin, viewsets.ReadOnlyModelViewS
         html_path = os.path.join(settings.MEDIA_ROOT, record.report_path)
         if not os.path.isfile(html_path):
             return Response({'error': '报告文件不存在'}, status=status.HTTP_404_NOT_FOUND)
-        filename = f"{record.script.name}_{record.created_at.strftime('%Y%m%d_%H%M%S')}.html"
+        filename = f"{datetime.now().strftime('%Y%m%d_%H%M%S')}_{record.id}.html"
         response = FileResponse(open(html_path, 'rb'), content_type='application/octet-stream')
         response['Content-Disposition'] = f'attachment; filename="{filename}"'
         return response

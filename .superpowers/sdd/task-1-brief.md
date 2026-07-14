@@ -1,0 +1,189 @@
+## Task 1: Create notifications app + WebhookAddress model + tests
+
+**Files:**
+- Create: `WHartTest_Django/notifications/__init__.py`
+- Create: `WHartTest_Django/notifications/apps.py`
+- Create: `WHartTest_Django/notifications/models.py`
+- Create: `WHartTest_Django/notifications/admin.py`
+- Create: `WHartTest_Django/notifications/migrations/__init__.py`
+- Create: `WHartTest_Django/notifications/tests.py`
+- Modify: `WHartTest_Django/wharttest_django/settings.py`
+
+**Interfaces:**
+- Produces: `notifications` Django app, `WebhookAddress` model
+- Consumes: `django.contrib.auth.models.User`
+
+- [ ] **Step 1: Create app directory structure**
+
+Create the following empty files:
+- `WHartTest_Django/notifications/__init__.py` (empty)
+- `WHartTest_Django/notifications/migrations/__init__.py` (empty)
+
+- [ ] **Step 2: Create apps.py**
+
+```python
+from django.apps import AppConfig
+
+
+class NotificationsConfig(AppConfig):
+    default_auto_field = 'django.db.models.BigAutoField'
+    name = 'notifications'
+    verbose_name = '推送通知'
+```
+
+- [ ] **Step 3: Register app in INSTALLED_APPS**
+
+In `WHartTest_Django/wharttest_django/settings.py`, add `'notifications'` after `'task_center'` (line ~136):
+
+```python
+    'task_center', # 任务中心应用
+    'notifications',  # 推送通知应用
+    'django_celery_beat', # Celery Beat 数据库调度器
+```
+
+- [ ] **Step 4: Write the failing test**
+
+Create `WHartTest_Django/notifications/tests.py`:
+
+```python
+from django.test import TestCase
+from django.contrib.auth.models import User
+from .models import WebhookAddress
+
+
+class WebhookAddressModelTest(TestCase):
+    """WebhookAddress 模型测试"""
+
+    def setUp(self):
+        self.user = User.objects.create_user(
+            username='admin1', password='pass1234', is_staff=True
+        )
+
+    def test_create_webhook_address(self):
+        addr = WebhookAddress.objects.create(
+            name='飞书测试群',
+            url='https://open.feishu.cn/open-apis/bot/v2/hook/xxx',
+            creator=self.user,
+        )
+        self.assertEqual(addr.name, '飞书测试群')
+        self.assertEqual(addr.platform_type, 'feishu')
+        self.assertTrue(addr.is_active)
+        self.assertEqual(addr.description, '')
+        self.assertIsNotNone(addr.created_at)
+        self.assertIsNotNone(addr.updated_at)
+
+    def test_str_representation(self):
+        addr = WebhookAddress.objects.create(
+            name='生产报警群',
+            url='https://open.feishu.cn/open-apis/bot/v2/hook/abc',
+            creator=self.user,
+        )
+        self.assertEqual(str(addr), '生产报警群')
+
+    def test_default_values(self):
+        addr = WebhookAddress.objects.create(
+            name='默认地址',
+            url='https://example.com/webhook',
+        )
+        self.assertEqual(addr.platform_type, 'feishu')
+        self.assertTrue(addr.is_active)
+        self.assertIsNone(addr.creator)
+        self.assertEqual(addr.description, '')
+
+    def test_ordering(self):
+        a1 = WebhookAddress.objects.create(name='first', url='https://a.com')
+        a2 = WebhookAddress.objects.create(name='second', url='https://b.com')
+        addrs = list(WebhookAddress.objects.all())
+        self.assertEqual(addrs[0], a2)
+        self.assertEqual(addrs[1], a1)
+
+    def test_creator_set_null_on_delete(self):
+        addr = WebhookAddress.objects.create(
+            name='with_user', url='https://c.com', creator=self.user
+        )
+        self.user.delete()
+        addr.refresh_from_db()
+        self.assertIsNone(addr.creator)
+```
+
+- [ ] **Step 5: Run test to verify it fails**
+
+```bash
+cd WHartTest_Django && python manage.py test notifications -v 2
+```
+
+Expected: `ModuleNotFoundError: No module named 'notifications.models'` (or similar import error).
+
+- [ ] **Step 6: Write minimal implementation**
+
+Create `WHartTest_Django/notifications/models.py`:
+
+```python
+from django.db import models
+from django.contrib.auth.models import User
+
+
+class WebhookAddress(models.Model):
+    """飞书 Webhook 推送地址（全局，仅管理员管理）"""
+
+    PLATFORM_CHOICES = [('feishu', '飞书')]
+
+    name = models.CharField('地址名称', max_length=100)
+    url = models.URLField('Webhook URL')
+    platform_type = models.CharField(
+        '平台类型', max_length=20, choices=PLATFORM_CHOICES, default='feishu'
+    )
+    description = models.TextField('描述', blank=True, default='')
+    is_active = models.BooleanField('是否启用', default=True)
+    creator = models.ForeignKey(
+        User, on_delete=models.SET_NULL, null=True, blank=True,
+        verbose_name='创建人', related_name='created_webhook_addresses'
+    )
+    created_at = models.DateTimeField('创建时间', auto_now_add=True)
+    updated_at = models.DateTimeField('更新时间', auto_now=True)
+
+    class Meta:
+        verbose_name = '推送地址'
+        verbose_name_plural = '推送地址'
+        ordering = ['-created_at']
+
+    def __str__(self):
+        return self.name
+```
+
+Create `WHartTest_Django/notifications/admin.py`:
+
+```python
+from django.contrib import admin
+from .models import WebhookAddress
+
+
+@admin.register(WebhookAddress)
+class WebhookAddressAdmin(admin.ModelAdmin):
+    list_display = ['name', 'platform_type', 'url', 'is_active', 'creator', 'created_at']
+    list_filter = ['is_active', 'platform_type']
+    search_fields = ['name', 'url']
+    readonly_fields = ['created_at', 'updated_at']
+```
+
+- [ ] **Step 7: Run makemigrations + migrate**
+
+```bash
+cd WHartTest_Django && python manage.py makemigrations notifications && python manage.py migrate
+```
+
+Expected: Migration `0001_initial` created, tables applied.
+
+- [ ] **Step 8: Run test to verify it passes**
+
+```bash
+cd WHartTest_Django && python manage.py test notifications -v 2
+```
+
+Expected: All 5 tests pass.
+
+- [ ] **Step 9: Commit**
+
+```bash
+cd WHartTest_Django && git add notifications/ wharttest_django/settings.py && git commit -m "feat: add notifications app with WebhookAddress model"
+```

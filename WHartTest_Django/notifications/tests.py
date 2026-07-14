@@ -321,8 +321,7 @@ class VariablesTest(TestCase):
         self.assertIn('failed', var_names)
         self.assertIn('pass_rate', var_names)
         self.assertIn('duration', var_names)
-        self.assertIn('report_url', var_names)
-        self.assertIn('task_url', var_names)
+        self.assertIn('report_hint', var_names)
 
     def test_build_context_for_app_ui_module(self):
         from app_ui_automation.models import AppUiBatchExecutionRecord
@@ -421,7 +420,7 @@ class FeishuCardTest(TestCase):
     """飞书卡片构建测试"""
 
     def test_build_card_success_status(self):
-        card = build_feishu_card('content here', 'success', 'https://report.com', 'https://task.com')
+        card = build_feishu_card('content here', 'success')
         self.assertEqual(card['msg_type'], 'interactive')
         self.assertEqual(card['card']['header']['template'], 'green')
         self.assertEqual(card['card']['header']['title']['content'], '测试任务执行通知')
@@ -429,18 +428,15 @@ class FeishuCardTest(TestCase):
         self.assertTrue(any(e.get('tag') == 'markdown' for e in elements))
 
     def test_build_card_failed_status(self):
-        card = build_feishu_card('failed content', 'failed', '', '')
+        card = build_feishu_card('failed content', 'failed')
         self.assertEqual(card['card']['header']['template'], 'red')
 
-    def test_build_card_has_action_buttons(self):
-        card = build_feishu_card('c', 'success', 'https://r.com', 'https://t.com')
+    def test_build_card_with_image(self):
+        card = build_feishu_card('c', 'success', image_key='img_v3_test')
         elements = card['card']['elements']
-        actions = [e for e in elements if e.get('tag') == 'action']
-        self.assertTrue(len(actions) >= 1)
-        buttons = actions[0].get('actions', [])
-        self.assertTrue(len(buttons) >= 2)
-        button_types = [b.get('type') for b in buttons]
-        self.assertIn('link', button_types)
+        img_elements = [e for e in elements if e.get('tag') == 'img']
+        self.assertTrue(len(img_elements) >= 1)
+        self.assertEqual(img_elements[0]['img_key'], 'img_v3_test')
 
 
 class SendTaskNotificationTest(TestCase):
@@ -534,7 +530,7 @@ class SystemTemplateMigrationTest(TestCase):
         self.assertIn('{{total}}', tpl.content)
         self.assertIn('{{passed}}', tpl.content)
         self.assertIn('{{failed}}', tpl.content)
-        self.assertIn('{{report_url}}', tpl.content)
+        self.assertIn('{{report_hint}}', tpl.content)
 
 
 class AccountsMenuMappingTest(TestCase):

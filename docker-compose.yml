@@ -115,6 +115,9 @@ services:
       - HF_ENDPOINT=${DOCKER_HF_ENDPOINT:-https://huggingface.co}
       # APPUI 自动化配置 - 使用 airtest CLI（非 AirtestIDE GUI）
       - AIRTEST_IDE_PATH=airtest
+      # 飞书开放平台应用配置（用于报告截图上传）
+      - FEISHU_APP_ID=${FEISHU_APP_ID:-}
+      - FEISHU_APP_SECRET=${FEISHU_APP_SECRET:-}
     depends_on:
       postgres:
         condition: service_healthy

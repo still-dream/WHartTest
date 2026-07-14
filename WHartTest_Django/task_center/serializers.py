@@ -76,10 +76,17 @@ class ScheduledTaskSerializer(serializers.ModelSerializer):
             return obj.ui_environment.name
         return None
 
+    def to_internal_value(self, data):
+        # 前端可能用 0 / "0" 表示"未选择"，转换为 None 以避免 PrimaryKeyRelatedField 查询 pk=0 失败
+        data = data.copy()
+        for field in ('environment', 'ui_environment', 'test_suite', 'app_ui_device'):
+            if data.get(field) in (0, '0', ''):
+                data[field] = None
+        return super().to_internal_value(data)
+
     def validate_environment(self, value):
         """校验环境属于当前项目（仅在填写时校验）"""
-        # 处理空值：None、0、空字符串都视为未选择
-        if value is None or (hasattr(value, 'id') and value.id in (None, 0)):
+        if value is None:
             return None
         project = self.context.get('project')
         if project is not None and value.project_id != project.id:

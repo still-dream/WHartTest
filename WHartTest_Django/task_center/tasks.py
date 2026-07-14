@@ -129,29 +129,18 @@ def execute_scheduled_task(self, task_id: int, trigger_type: str = 'scheduled'):
             script_ids = list(scripts.values_list('id', flat=True))
             device_id = task.app_ui_device_id if task.app_ui_device else None
 
-            execute_app_ui_batch(batch.id, script_ids, device_id)
+            # 异步执行批量任务，避免阻塞 Celery worker（APPUI 脚本执行时间可能很长）
+            # 通知逻辑在 execute_app_ui_batch 完成后由 _finalize_scheduled_execution 发送
+            execute_app_ui_batch.delay(
+                batch.id, script_ids, device_id,
+                scheduled_task_id=task.id, execution_id=execution.id,
+            )
 
-            execution.log += f'APPUI batch {batch.id} completed\n'
-            batch.refresh_from_db()
-            if batch.status == 2:
-                execution.status = TaskExecution.ExecutionStatus.SUCCESS
-            else:
-                execution.status = TaskExecution.ExecutionStatus.FAILED
-            execution.finished_at = timezone.now()
-            execution.log = '\n'.join(log_lines) + '\n' + execution.log
+            log_lines.append(f"[{timezone.now().isoformat()}] APPUI 批量执行已提交: batch_id={batch.id}")
+            execution.log = '\n'.join(log_lines)
             execution.save()
 
-            try:
-                from notifications.services import send_task_notification
-                send_task_notification(task, execution, batch)
-            except Exception as push_err:
-                logger.warning(f"推送通知失败: {push_err}")
-
-            if task.schedule_type == ScheduledTask.ScheduleType.ONCE:
-                task.status = ScheduledTask.TaskStatus.DISABLED
-                task.save(update_fields=['status'])
-
-            return {'status': execution.status, 'execution_id': execution.execution_id}
+            return {'status': 'submitted', 'execution_id': execution.execution_id, 'batch_id': batch.id}
 
         log_lines.append(f"[{timezone.now().isoformat()}] 任务执行完成")
 

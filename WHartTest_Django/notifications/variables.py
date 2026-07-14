@@ -17,8 +17,7 @@ VARIABLES = [
     ('failed_cases', '失败用例列表', 'test_login / test_payment'),
     ('error_summary', '错误摘要', '2个用例执行失败'),
     ('current_date', '当前日期时间', '2026-07-14 15:30:00'),
-    ('report_url', '报告链接', 'https://...'),
-    ('task_url', '任务详情链接', 'https://...'),
+    ('report_hint', '报告提示', '请前往 J&T智萃平台 查看测试报告详情'),
     ('platform_name', '平台名称', 'WHartTest'),
 ]
 
@@ -64,6 +63,7 @@ def build_context(task, execution, module_result):
         'error_summary': '',
         'report_url': '',
         'task_url': '',
+        'report_hint': '',
     }
 
     if execution:
@@ -117,9 +117,7 @@ def _fill_app_ui_context(context, batch, execution):
         context['error_summary'] = ''
 
     if batch.id:
-        context['report_url'] = f'/app-ui-automation/batch-records/{batch.id}/'
-    if execution and execution.task and execution.task.id:
-        context['task_url'] = f'/task-center?task={execution.task.id}'
+        context['report_hint'] = f'请前往 J&T智萃平台 查看测试报告详情（批次ID: {batch.id}）'
 
 
 def _fill_ui_automation_context(context, task):
@@ -138,8 +136,7 @@ def _fill_ui_automation_context(context, task):
             context['pass_rate'] = f'{rate}%'
         if context['failed'] > 0:
             context['error_summary'] = f'{context["failed"]}个用例执行失败'
-    if task.id:
-        context['task_url'] = f'/task-center?task={task.id}'
+    context['report_hint'] = '请前往 J&T智萃平台 查看测试报告详情'
 
 
 def _fill_test_suite_context(context, task):
@@ -160,5 +157,4 @@ def _fill_test_suite_context(context, task):
                 context['pass_rate'] = f'{rate}%'
             if failed > 0:
                 context['error_summary'] = f'{failed}个用例执行失败'
-    if task.id:
-        context['task_url'] = f'/task-center?task={task.id}'
+    context['report_hint'] = '请前往 J&T智萃平台 查看测试报告详情'

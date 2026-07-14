@@ -743,3 +743,9 @@ AIRTEST_REPORT_LANG = 'zh'
 AIRTEST_REPORT_TEMPLATE = os.path.join(
     BASE_DIR, 'testcases', 'appuitest', 'log_template.html'
 )
+
+# ============================== 飞书开放平台配置 ==============================
+# 用于图片上传（报告截图嵌入飞书消息卡片）
+# 不配置时跳过截图，仅发送文本通知
+FEISHU_APP_ID = os.environ.get('FEISHU_APP_ID', '')
+FEISHU_APP_SECRET = os.environ.get('FEISHU_APP_SECRET', '')
