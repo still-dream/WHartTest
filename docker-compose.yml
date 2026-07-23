@@ -111,6 +111,8 @@ services:
       - QDRANT_URL=http://qdrant:6333
       # 内部API基础URL - 使用localhost因为在同一容器
       - DJANGO_BASE_URL=http://localhost:8000
+      # 外部可访问的基础URL - 用于通知消息中的报告链接
+      - DJANGO_PUBLIC_BASE_URL=${DJANGO_PUBLIC_BASE_URL:-http://10.66.110.24:8913}
       - WEIXIN_PLUGIN_HOST_URL=http://weixin-plugin-host:3001
       - HF_ENDPOINT=${DOCKER_HF_ENDPOINT:-https://huggingface.co}
       # APPUI 自动化配置 - 使用 airtest CLI（非 AirtestIDE GUI）

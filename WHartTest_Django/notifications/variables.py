@@ -1,4 +1,6 @@
 """变量注册表与上下文构建"""
+from django.conf import settings
+from django.core import signing
 from django.utils import timezone
 
 
@@ -117,7 +119,16 @@ def _fill_app_ui_context(context, batch, execution):
         context['error_summary'] = ''
 
     if batch.id:
-        context['report_hint'] = f'请前往 J&T智萃平台 查看测试报告详情（批次ID: {batch.id}）'
+        # 生成带签名的公开报告链接（无需登录即可查看）
+        last_record = batch.execution_records.exclude(
+            report_path=''
+        ).order_by('-id').first()
+        if last_record:
+            token = signing.dumps({'record_id': last_record.id})
+            report_url = f'{settings.PUBLIC_BASE_URL}/api/app-ui-automation/public-report/?token={token}'
+            context['report_hint'] = f'[查看完整报告]({report_url})'
+        else:
+            context['report_hint'] = '暂无可用报告'
 
 
 def _fill_ui_automation_context(context, task):

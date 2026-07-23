@@ -158,7 +158,6 @@ import {
   IconRefresh, IconEye, IconDelete, IconDownload, IconStop, IconInfoCircle,
 } from '@arco-design/web-vue/es/icon'
 import { executionRecordApi } from '../api'
-import { useAuthStore } from '@/store/authStore'
 import type { AppUiExecutionRecord, AppUiExecutionStatus } from '../types'
 import {
   APP_UI_STATUS_LABELS, APP_UI_TRIGGER_LABELS, extractPaginationData, extractResponseData,
@@ -258,24 +257,38 @@ const viewDetail = async (record: AppUiExecutionRecord) => {
   }
 }
 
-const viewReport = (record: AppUiExecutionRecord) => {
-  const authStore = useAuthStore()
-  const token = authStore.getAccessToken
-  const url = executionRecordApi.reportUrl(record.id)
-  window.open(`${url}?token=${token}`, '_blank')
+const viewReport = async (record: AppUiExecutionRecord) => {
+  try {
+    const res = await executionRecordApi.fetchReport(record.id)
+    const blob = new Blob([res.data], { type: 'text/html' })
+    const blobUrl = URL.createObjectURL(blob)
+    window.open(blobUrl, '_blank')
+    setTimeout(() => URL.revokeObjectURL(blobUrl), 60000)
+  } catch {
+    Message.error('打开报告失败')
+  }
 }
 
-const downloadReport = (record: AppUiExecutionRecord) => {
+const downloadReport = async (record: AppUiExecutionRecord) => {
   downloadingId.value = record.id
-  const authStore = useAuthStore()
-  const token = authStore.getAccessToken
-  const url = executionRecordApi.downloadUrl(record.id)
-  const link = document.createElement('a')
-  link.href = `${url}?token=${token}`
-  document.body.appendChild(link)
-  link.click()
-  document.body.removeChild(link)
-  setTimeout(() => { downloadingId.value = null }, 2000)
+  try {
+    const res = await executionRecordApi.fetchDownload(record.id)
+    const blob = new Blob([res.data], { type: 'application/octet-stream' })
+    const blobUrl = URL.createObjectURL(blob)
+    const link = document.createElement('a')
+    link.href = blobUrl
+    const disposition = res.headers['content-disposition'] || ''
+    const match = disposition.match(/filename="?(.+?)"?$/)
+    link.download = match ? match[1] : `report_${record.id}.html`
+    document.body.appendChild(link)
+    link.click()
+    document.body.removeChild(link)
+    URL.revokeObjectURL(blobUrl)
+  } catch {
+    Message.error('下载报告失败')
+  } finally {
+    setTimeout(() => { downloadingId.value = null }, 2000)
+  }
 }
 
 const cancelExecution = async (record: AppUiExecutionRecord) => {

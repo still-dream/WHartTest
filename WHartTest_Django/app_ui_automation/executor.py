@@ -183,7 +183,9 @@ class AppUiScriptExecutor:
     def _generate_report(self, script, log_dir, report_dir):
         """STEP 2: 生成 HTML 报告"""
         report_dir.mkdir(parents=True, exist_ok=True)
-        script_path = os.path.join(settings.MEDIA_ROOT, script.script_dir)
+        # 传入脚本文件完整路径（而非目录），使 airtest 的 script_dir_name() 能正确
+        # 从文件名推导 script_name，避免 .air 目录名与 .py 文件名不一致时找错文件。
+        script_path = os.path.join(settings.MEDIA_ROOT, script.script_dir, script.script_entry)
 
         template_path = getattr(settings, 'AIRTEST_REPORT_TEMPLATE', None)
         has_template = bool(template_path and os.path.isfile(template_path))
@@ -209,6 +211,7 @@ class AppUiScriptExecutor:
                     export_dir=str(report_dir),
                     lang=getattr(settings, 'AIRTEST_REPORT_LANG', 'zh'),
                 )
+
                 rpt.report(template_name=dest_template_name)
                 report_generated = True
             except ImportError:

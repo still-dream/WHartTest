@@ -15,7 +15,8 @@ from rest_framework_simplejwt.authentication import JWTAuthentication
 from api_keys.authentication import APIKeyAuthentication
 from django.db.models.deletion import ProtectedError
 from django.conf import settings
-from django.http import FileResponse
+from django.core import signing
+from django.http import FileResponse, HttpResponseForbidden, HttpResponseNotFound
 
 from .models import (
     AppUiModule, AppUiScript, AppUiDevice,
@@ -311,3 +312,42 @@ class AppUiExecutionConfigViewSet(viewsets.ViewSet):
 
     def partial_update(self, request, pk=None):
         return self.update(request, pk=pk)
+
+
+# 报告签名 token 有效期（30 天）
+REPORT_TOKEN_MAX_AGE = 30 * 24 * 3600
+
+
+def public_report_view(request):
+    """公开访问测试报告（通过签名 token 认证，无需登录）。
+
+    用于飞书消息中的报告链接，token 由 notifications.variables 生成。
+    """
+    token = request.GET.get('token')
+    if not token:
+        return HttpResponseForbidden('缺少访问令牌')
+
+    try:
+        data = signing.loads(token, max_age=REPORT_TOKEN_MAX_AGE)
+    except signing.SignatureExpired:
+        return HttpResponseForbidden('链接已过期')
+    except signing.BadSignature:
+        return HttpResponseForbidden('无效的访问链接')
+
+    record_id = data.get('record_id')
+    if not record_id:
+        return HttpResponseForbidden('无效的访问链接')
+
+    try:
+        record = AppUiExecutionRecord.objects.get(id=record_id)
+    except AppUiExecutionRecord.DoesNotExist:
+        return HttpResponseNotFound('报告记录不存在')
+
+    if not record.report_path:
+        return HttpResponseNotFound('报告尚未生成')
+
+    html_path = os.path.join(settings.MEDIA_ROOT, record.report_path)
+    if not os.path.isfile(html_path):
+        return HttpResponseNotFound('报告文件不存在')
+
+    return FileResponse(open(html_path, 'rb'), content_type='text/html')

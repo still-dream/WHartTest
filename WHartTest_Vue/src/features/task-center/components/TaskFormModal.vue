@@ -30,7 +30,7 @@
             <a-select v-model="form.module" :placeholder="modalText.selectModule" @change="onModuleChange">
               <a-option value="ui_automation">{{ modalText.uiAutomation }}</a-option>
               <a-option value="test_suite">{{ modalText.testSuite }}</a-option>
-              <a-option value="app_ui_automation">APPUI 自动化</a-option>
+              <a-option value="app_ui_automation">{{ modalText.appUiAutomation }}</a-option>
             </a-select>
           </a-form-item>
 
@@ -347,6 +347,7 @@ const modalText = computed(() => (
         enterValue: 'Enter a value',
         uiAutomation: 'UI Automation',
         testSuite: 'Test Suite',
+        appUiAutomation: 'APPUI Automation',
         selectUiCase: 'Select UI Cases',
         selectAtLeastOneUiCase: 'Select at least one UI case',
         selectedUiCases: (count: number) => `${count} case(s) selected`,
@@ -403,6 +404,7 @@ const modalText = computed(() => (
         enterValue: '请输入',
         uiAutomation: 'UI 自动化',
         testSuite: '测试套件',
+        appUiAutomation: 'APPUI 自动化',
         selectUiCase: '选择UI用例',
         selectAtLeastOneUiCase: '请选择至少一个UI用例',
         selectedUiCases: (count: number) => `已选 ${count} 个用例`,

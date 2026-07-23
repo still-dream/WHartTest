@@ -702,6 +702,11 @@ CELERY_WORKER_TASK_LOG_FORMAT = "[%(asctime)s: %(levelname)s/%(processName)s][%(
 # 内部服务调用基础地址。
 BASE_URL = os.environ.get("DJANGO_BASE_URL", "http://localhost:8000")
 
+# 外部可访问的基础URL - 用于生成通知消息中的链接（如飞书消息中的报告链接）
+# 应设置为用户可从浏览器访问的实际地址，如 http://10.66.110.24:8913
+# 未配置时回退到 BASE_URL
+PUBLIC_BASE_URL = os.environ.get("DJANGO_PUBLIC_BASE_URL", "").rstrip("/") or BASE_URL
+
 # DOCX Editor 集成配置
 # 主项目后端服务端访问 docx-editor 的地址，例如 http://127.0.0.1:18080
 DOCX_EDITOR_BASE_URL = os.environ.get("DOCX_EDITOR_BASE_URL", "").rstrip("/")

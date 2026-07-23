@@ -91,8 +91,9 @@ def _get_report_screenshot(task, module_result):
 
 # ============================== 飞书卡片构建 ==============================
 
+
 def build_feishu_card(rendered_content, status, image_key=None):
-    """构建飞书交互卡片 JSON"""
+    """构建飞书交互卡片 JSON（JSON 2.0）"""
     header_template = 'green' if status == 'success' else 'red'
 
     elements = [
@@ -112,6 +113,7 @@ def build_feishu_card(rendered_content, status, image_key=None):
     return {
         'msg_type': 'interactive',
         'card': {
+            'schema': '2.0',
             'header': {
                 'title': {
                     'tag': 'plain_text',
@@ -119,7 +121,9 @@ def build_feishu_card(rendered_content, status, image_key=None):
                 },
                 'template': header_template,
             },
-            'elements': elements,
+            'body': {
+                'elements': elements,
+            },
         },
     }
 
@@ -128,9 +132,16 @@ def build_feishu_card(rendered_content, status, image_key=None):
 
 def send_task_notification(task, execution, module_result):
     """任务执行完成后调用，发送推送通知"""
+    logger.info(
+        f"开始发送通知: task={task.name}, push_config={task.push_config}, "
+        f"execution.status={execution.status}, module={task.module}"
+    )
+
     if task.push_config == 'disabled':
+        logger.info(f"跳过推送: 任务 [{task.name}] push_config=disabled")
         return
     if task.push_config == 'failure_only' and execution.status == 'success':
+        logger.info(f"跳过推送: 任务 [{task.name}] push_config=failure_only 且执行成功")
         return
 
     # APPUI 任务需要 batch 对象来填充统计数据，若为 None 则记录日志并跳过
@@ -154,7 +165,16 @@ def send_task_notification(task, execution, module_result):
         image_key=image_key,
     )
 
-    for addr in task.webhook_addresses.filter(is_active=True):
+    active_webhooks = task.webhook_addresses.filter(is_active=True)
+    webhook_count = active_webhooks.count()
+    if webhook_count == 0:
+        logger.warning(
+            f"跳过推送: 任务 [{task.name}] 没有关联活跃的 webhook 地址"
+        )
+        return
+
+    logger.info(f"任务 [{task.name}] 准备推送到 {webhook_count} 个 webhook 地址")
+    for addr in active_webhooks:
         try:
             resp = http_requests.post(addr.url, json=card, timeout=10)
             if resp.status_code != 200:
@@ -162,5 +182,14 @@ def send_task_notification(task, execution, module_result):
                     f"推送失败 {addr.name}: HTTP {resp.status_code}, "
                     f"response={resp.text[:200]}"
                 )
+            else:
+                resp_data = resp.json()
+                if resp_data.get('code') != 0 and resp_data.get('StatusCode') != 0:
+                    logger.warning(
+                        f"推送失败 {addr.name}: 飞书返回错误, "
+                        f"response={resp.text[:200]}"
+                    )
+                else:
+                    logger.info(f"推送成功 {addr.name}")
         except Exception as e:
             logger.warning(f"推送失败 {addr.name}: {e}")

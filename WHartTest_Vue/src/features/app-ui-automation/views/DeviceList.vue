@@ -122,7 +122,7 @@
           </a-radio-group>
         </a-form-item>
         <a-form-item field="device_uri" label="设备连接 URI" required>
-          <a-input v-model="formData.device_uri" placeholder="Android: android://127.0.0.1:5037/序列号; iOS: ios:///127.0.0.1:8100" />
+          <a-input v-model="formData.device_uri" :placeholder="deviceUriPlaceholder" />
         </a-form-item>
         <a-form-item field="device_serial" label="设备序列号">
           <a-input v-model="formData.device_serial" placeholder="可选，设备序列号" />
@@ -193,6 +193,24 @@ const connectionTypeLabels: Record<AppUiConnectionType, string> = {
   cloud: '云真机平台',
   usb: 'USB 直连',
 }
+
+const deviceUriPlaceholder = computed(() => {
+  if (formData.platform === 'ios') {
+    return 'ios:///127.0.0.1:8100'
+  }
+  switch (formData.connection_type) {
+    case 'adb_tcp':
+      return 'android://127.0.0.1:5037/安卓手机无线IP:5555'
+    case 'emulator':
+      return 'android://127.0.0.1:5037/127.0.0.1:62001'
+    case 'cloud':
+      return 'android://云平台IP:端口/设备ID'
+    case 'usb':
+      return 'android://127.0.0.1:5037/设备序列号'
+    default:
+      return 'android://127.0.0.1:5037/设备序列号'
+  }
+})
 
 const deviceStatusLabels: Record<AppUiDeviceStatus, string> = {
   online: '在线',

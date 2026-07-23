@@ -58,12 +58,6 @@ async function uploadViaFetch(url: string, method: string, data: FormData): Prom
   return { success: true, data: result.data, message: result.message }
 }
 
-// 拼接可直接在浏览器中打开的完整 URL（基于 axios 实例的 baseURL）
-function buildUrl(path: string): string {
-  const baseURL = (request as any).defaults?.baseURL || ''
-  return `${baseURL}${path}`
-}
-
 // ==================== 模块管理 ====================
 export const moduleApi = {
   list: (params?: { project?: number; parent?: number; level?: number }) =>
@@ -134,11 +128,13 @@ export const executionRecordApi = {
 
   delete: (id: number) => request.delete(`${BASE_URL}/execution-records/${id}/`),
 
-  /** 获取在线报告的访问 URL */
-  reportUrl: (id: number) => buildUrl(`${BASE_URL}/execution-records/${id}/report/`),
+  /** 获取在线报告内容（Blob，通过 Authorization header 认证） */
+  fetchReport: (id: number) =>
+    request.get(`${BASE_URL}/execution-records/${id}/report/`, { responseType: 'blob' }),
 
-  /** 获取报告下载 URL */
-  downloadUrl: (id: number) => buildUrl(`${BASE_URL}/execution-records/${id}/download/`),
+  /** 下载报告内容（Blob，通过 Authorization header 认证） */
+  fetchDownload: (id: number) =>
+    request.get(`${BASE_URL}/execution-records/${id}/download/`, { responseType: 'blob' }),
 
   /** 取消执行 */
   cancel: (id: number) =>
