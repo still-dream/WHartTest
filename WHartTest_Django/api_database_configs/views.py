@@ -126,7 +126,7 @@ class ApiDatabaseConfigViewSet(BaseModelViewSet):
 
             else:
                 conn_strings = {
-                    'oracle': f"oracle://{user}:{password}@{host}:{port}/{database}",
+                    'oracle': f"oracle+oracledb://{user}:{password}@{host}:{port}/?service_name={database}",
                     'sqlserver': f"mssql+pymssql://{user}:{password}@{host}:{port}/{database}",
                 }
                 if db_type not in conn_strings:

@@ -79,8 +79,8 @@ class ApiDatabaseConfig(models.Model):
             return f"sqlite:///{self.database}"
         elif self.db_type == 'oracle':
             return (
-                f"oracle://{self.username}:{self.password}"
-                f"@{self.host}:{self.port}/{self.database}"
+                f"oracle+oracledb://{self.username}:{self.password}"
+                f"@{self.host}:{self.port}/?service_name={self.database}"
             )
         elif self.db_type == 'sqlserver':
             return (

@@ -79,7 +79,19 @@ class AppUiScriptExecutor:
 
         try:
             # STEP 1: 用 airtest Python 库执行脚本
-            self._run_script_with_airtest(script, device, log_dir)
+            # 即使脚本执行失败（抛出 TargetNotFoundError 等），也要继续生成报告，
+            # 以便在测试报告中展示已执行的正常步骤和失败步骤。
+            execution_error = None
+            execution_traceback = None
+            try:
+                self._run_script_with_airtest(script, device, log_dir)
+            except Exception as run_err:
+                execution_error = run_err
+                import traceback as _tb
+                execution_traceback = _tb.format_exc()
+                logger.warning(
+                    f"脚本执行出错: {run_err}, 将基于已写入的日志继续生成测试报告"
+                )
 
             # STEP 2: 用 AirtestIDE reporter 生成报告
             html_dir = self._generate_report(script, log_dir, report_dir)
@@ -99,9 +111,17 @@ class AppUiScriptExecutor:
             record.total_steps = stats['total']
             record.passed_steps = stats['passed']
             record.failed_steps = stats['failed']
-            record.status = 2 if stats['failed'] == 0 else 3
+
+            # 如果脚本执行过程中出现异常，标记为失败并保存错误信息
+            if execution_error is not None:
+                record.status = 3
+                record.error_message = str(execution_error)
+                record.execution_log = execution_traceback
+            else:
+                record.status = 2 if stats['failed'] == 0 else 3
 
         except Exception as e:
+            # 报告生成阶段失败（脚本执行可能已成功，也可能已失败）
             record.status = 3
             record.error_message = str(e)
             import traceback
