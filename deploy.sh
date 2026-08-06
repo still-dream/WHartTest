@@ -21,20 +21,36 @@ LOG_FILE="${LOG_FILE:-$HOME/.wharttest-deploy.log}"
 DO_BUILD=1
 SHOW_LOGS=0
 DO_CLEAN=0
+BG_MODE=0
 for arg in "$@"; do
     case $arg in
         --no-build) DO_BUILD=0 ;;
         --logs)     SHOW_LOGS=1 ;;
         --clean)    DO_CLEAN=1 ;;
+        --bg)       BG_MODE=1 ;;          # 后台模式
         --help|-h)
-            echo "用法: $0 [--no-build] [--logs] [--clean]"
+            echo "用法: $0 [--no-build] [--logs] [--clean] [--bg]"
             echo "  --no-build  只拉代码、重启，不重新构建镜像"
             echo "  --logs      部署完成后查看日志"
             echo "  --clean     清理悬空镜像"
+            echo "  --bg        后台运行，日志写入 /tmp/wharttest-deploy.log"
             exit 0
             ;;
     esac
 done
+
+# 后台模式：nohup 启动后立即退出
+if [ "$BG_MODE" = "1" ]; then
+    LOG=/tmp/wharttest-deploy.log
+    PIDFILE=/tmp/wharttest-deploy.pid
+    nohup "$0" "${@/--bg/}" > "$LOG" 2>&1 &
+    echo $! > "$PIDFILE"
+    echo "✓ 后台启动成功"
+    echo "  PID:  $(cat $PIDFILE)"
+    echo "  日志: tail -f $LOG"
+    echo "  停止: kill $(cat $PIDFILE)"
+    exit 0
+fi
 
 # 日志
 mkdir -p "$(dirname "$LOG_FILE")"
