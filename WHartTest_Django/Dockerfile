@@ -133,13 +133,26 @@ print('BM25 model downloaded successfully from: $endpoint'); \
 # ============================================
 FROM ${PYTHON_BASE_IMAGE} AS browser-tools
 
+ARG APT_BASE_URL=http://deb.debian.org
 ARG NPM_REGISTRY=https://registry.npmjs.org
 ARG PLAYWRIGHT_DOWNLOAD_HOST=
 ARG CHROME_FOR_TESTING_MIRROR=
 ARG CHROME_VERSION=stable
 
 # 仅安装浏览器工具需要的系统依赖
-RUN apt-get -o Acquire::Retries=10 update && apt-get -o Acquire::Retries=10 install -y --fix-missing --no-install-recommends \
+RUN set -eux; \
+    if [ -n "$APT_BASE_URL" ] && [ "$APT_BASE_URL" != "http://deb.debian.org" ]; then \
+        echo ">>> 替换 apt 源为: $APT_BASE_URL"; \
+        for f in /etc/apt/sources.list /etc/apt/sources.list.d/*.list /etc/apt/sources.list.d/*.sources; do \
+            [ -f "$f" ] || continue; \
+            sed -i "s|http://deb.debian.org/debian|${APT_BASE_URL}/debian|g; \
+                    s|https://deb.debian.org/debian|${APT_BASE_URL}/debian|g; \
+                    s|http://security.debian.org/debian-security|${APT_BASE_URL}/debian-security|g; \
+                    s|https://security.debian.org/debian-security|${APT_BASE_URL}/debian-security|g; \
+                    s|http://deb.debian.org/debian-security|${APT_BASE_URL}/debian-security|g" "$f"; \
+        done; \
+    fi; \
+    apt-get -o Acquire::Retries=10 update && apt-get -o Acquire::Retries=10 install -y --fix-missing --no-install-recommends \
     curl \
     git \
     nodejs \
