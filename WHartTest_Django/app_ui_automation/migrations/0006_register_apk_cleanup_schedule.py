@@ -14,13 +14,14 @@ def register_periodic_task(apps, schema_editor):
     CrontabSchedule = apps.get_model('django_celery_beat', 'CrontabSchedule')
 
     # 每天凌晨 3:00 执行
+    # 注意：django-celery-beat 2.6+ 已移除 CrontabSchedule.timezone 字段，
+    # 时区由全局 CELERY_TIMEZONE 配置统一控制。
     crontab, _ = CrontabSchedule.objects.get_or_create(
         minute='0',
         hour='3',
         day_of_week='*',
         day_of_month='*',
         month_of_year='*',
-        timezone='Asia/Shanghai',
     )
 
     PeriodicTask.objects.update_or_create(

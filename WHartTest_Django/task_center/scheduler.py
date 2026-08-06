@@ -66,7 +66,8 @@ def register_periodic_task(task: ScheduledTask):
         crontab_kwargs = _build_crontab_kwargs(task)
         if not crontab_kwargs:
             return
-        crontab_kwargs['timezone'] = timezone.get_current_timezone()
+        # 注意：django-celery-beat 2.6+ 已移除 CrontabSchedule.timezone 字段，
+        # 时区由全局 CELERY_TIMEZONE 配置统一控制。
         crontab_schedule, _ = CrontabSchedule.objects.get_or_create(**crontab_kwargs)
         defaults.update(crontab=crontab_schedule, clocked=None, interval=None, one_off=False)
 
