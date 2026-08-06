@@ -29,9 +29,21 @@ ENV PYTHONUNBUFFERED=1 \
     HF_ENDPOINT=${HF_ENDPOINT}
 
 # 安装构建依赖（仅在构建阶段需要）
-RUN if [ "$APT_BASE_URL" != "http://deb.debian.org" ]; then \
-        sed -i "s|http://deb.debian.org/debian|${APT_BASE_URL}/debian|g; s|http://deb.debian.org/debian-security|${APT_BASE_URL}/debian-security|g" /etc/apt/sources.list.d/debian.sources; \
-    fi && \
+RUN set -eux; \
+    if [ -n "$APT_BASE_URL" ] && [ "$APT_BASE_URL" != "http://deb.debian.org" ]; then \
+        echo ">>> 替换 apt 源为: $APT_BASE_URL"; \
+        # 处理所有可能的 sources 文件（兼容新旧 Debian 格式）
+        for f in /etc/apt/sources.list /etc/apt/sources.list.d/*.list /etc/apt/sources.list.d/*.sources; do \
+            [ -f "$f" ] || continue; \
+            sed -i "s|http://deb.debian.org/debian|${APT_BASE_URL}/debian|g; \
+                    s|https://deb.debian.org/debian|${APT_BASE_URL}/debian|g; \
+                    s|http://security.debian.org/debian-security|${APT_BASE_URL}/debian-security|g; \
+                    s|https://security.debian.org/debian-security|${APT_BASE_URL}/debian-security|g; \
+                    s|http://deb.debian.org/debian-security|${APT_BASE_URL}/debian-security|g" "$f"; \
+        done; \
+        echo ">>> 当前 apt 源:"; \
+        cat /etc/apt/sources.list /etc/apt/sources.list.d/*.list /etc/apt/sources.list.d/*.sources 2>/dev/null | grep -v "^#" | grep -v "^$" || true; \
+    fi; \
     apt-get -o Acquire::Retries=10 update && apt-get -o Acquire::Retries=10 install -y --fix-missing --no-install-recommends \
     build-essential \
     && rm -rf /var/lib/apt/lists/*
@@ -264,9 +276,18 @@ ENV PYTHONUNBUFFERED=1 \
 # 仅安装运行时必需的系统依赖
 # 注意：浏览器二进制（playwright / agent-browser / Chrome for Testing）已在 browser-tools 阶段
 # 下载完成并通过 COPY --from=browser-tools 引入，这里不再安装 npm 也不再下载浏览器。
-RUN if [ "$APT_BASE_URL" != "http://deb.debian.org" ]; then \
-        sed -i "s|http://deb.debian.org/debian|${APT_BASE_URL}/debian|g; s|http://deb.debian.org/debian-security|${APT_BASE_URL}/debian-security|g" /etc/apt/sources.list.d/debian.sources; \
-    fi && \
+RUN set -eux; \
+    if [ -n "$APT_BASE_URL" ] && [ "$APT_BASE_URL" != "http://deb.debian.org" ]; then \
+        echo ">>> 替换 apt 源为: $APT_BASE_URL"; \
+        for f in /etc/apt/sources.list /etc/apt/sources.list.d/*.list /etc/apt/sources.list.d/*.sources; do \
+            [ -f "$f" ] || continue; \
+            sed -i "s|http://deb.debian.org/debian|${APT_BASE_URL}/debian|g; \
+                    s|https://deb.debian.org/debian|${APT_BASE_URL}/debian|g; \
+                    s|http://security.debian.org/debian-security|${APT_BASE_URL}/debian-security|g; \
+                    s|https://security.debian.org/debian-security|${APT_BASE_URL}/debian-security|g; \
+                    s|http://deb.debian.org/debian-security|${APT_BASE_URL}/debian-security|g" "$f"; \
+        done; \
+    fi; \
     apt-get -o Acquire::Retries=10 update && apt-get -o Acquire::Retries=10 install -y --fix-missing --no-install-recommends \
     supervisor \
     curl \

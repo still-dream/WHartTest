@@ -14,7 +14,8 @@ set -e
 APP_DIR="/opt/wharttest"
 BRANCH="${DEPLOY_BRANCH:-master}"
 COMPOSE_FILE="docker-compose.yml"
-LOG_FILE="/var/log/wharttest-deploy.log"
+# 优先用当前用户可写的日志位置，避免 /var/log 权限问题
+LOG_FILE="${LOG_FILE:-$HOME/.wharttest-deploy.log}"
 
 # 参数解析
 DO_BUILD=1
@@ -46,6 +47,17 @@ echo "============================================"
 
 # 进入项目目录
 cd "$APP_DIR"
+
+# 0. 修复 .env 权限（如果存在但当前用户读不到）
+if [ -f "$APP_DIR/.env" ] && [ ! -r "$APP_DIR/.env" ]; then
+    echo "⚠️  .env 文件存在但当前用户读不到，尝试修复权限..."
+    sudo chmod 644 "$APP_DIR/.env" 2>/dev/null || \
+    sudo chown "$USER:$USER" "$APP_DIR/.env" 2>/dev/null || true
+    if [ ! -r "$APP_DIR/.env" ]; then
+        echo "❌ 无法读取 .env，请运行：sudo chown $USER:$USER $APP_DIR/.env"
+        exit 1
+    fi
+fi
 
 # 1. 拉取最新代码
 echo ""
