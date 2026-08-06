@@ -66,7 +66,8 @@ services:
         HF_ENDPOINT: ${DOCKER_HF_ENDPOINT:-https://hf-mirror.com}
         # 后端虽不直接跑 npm，保留镜像代理以防 supervisord 流程中触发。
         NPM_REGISTRY: ${DOCKER_NPM_REGISTRY:-https://registry.npmmirror.com}
-        PLAYWRIGHT_DOWNLOAD_HOST: ${DOCKER_PLAYWRIGHT_DOWNLOAD_HOST:-}
+        # ★ Playwright 浏览器走国内镜像
+        PLAYWRIGHT_DOWNLOAD_HOST: ${DOCKER_PLAYWRIGHT_DOWNLOAD_HOST:-https://npmmirror.com/mirrors/playwright}
         # Chrome for Testing 走 npmmirror 镜像，避开 storage.googleapis.com 抽风。
         CHROME_FOR_TESTING_MIRROR: ${DOCKER_CHROME_FOR_TESTING_MIRROR:-https://cdn.npmmirror.com/binaries/chrome-for-testing}
         CHROME_VERSION: ${DOCKER_CHROME_VERSION:-stable}

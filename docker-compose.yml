@@ -74,7 +74,8 @@ services:
         HF_ENDPOINT: ${DOCKER_HF_ENDPOINT:-https://hf-mirror.com}
         # ★ 国内 npm 源
         NPM_REGISTRY: ${DOCKER_NPM_REGISTRY:-https://registry.npmmirror.com}
-        PLAYWRIGHT_DOWNLOAD_HOST: ${DOCKER_PLAYWRIGHT_DOWNLOAD_HOST:-}
+        # ★ Playwright 浏览器走国内镜像（默认 npmmirror）
+        PLAYWRIGHT_DOWNLOAD_HOST: ${DOCKER_PLAYWRIGHT_DOWNLOAD_HOST:-https://npmmirror.com/mirrors/playwright}
         CHROME_FOR_TESTING_MIRROR: ${DOCKER_CHROME_FOR_TESTING_MIRROR:-https://cdn.npmmirror.com/binaries/chrome-for-testing}
         CHROME_VERSION: ${DOCKER_CHROME_VERSION:-stable}
     container_name: wharttest-backend
@@ -244,7 +245,9 @@ services:
 
   # Playwright MCP 服务（官方Docker镜像）
   playwright-mcp:
-    image: ${DOCKER_PLAYWRIGHT_MCP_IMAGE:-docker.1ms.run/microsoft/playwright/mcp}
+    # ★ mcr.microsoft.com 是微软自己的 registry，1ms.run 不镜像，用原地址
+    # 如果拉不到，改成 DOCKER_PLAYWRIGHT_MCP_IMAGE=dockerproxy.cn/microsoft/playwright/mcp
+    image: ${DOCKER_PLAYWRIGHT_MCP_IMAGE:-mcr.microsoft.com/playwright/mcp}
     container_name: wharttest-playwright-mcp
     user: root # 以 root 用户运行,确保有权限写入挂载目录
     entrypoint: [ "node", "/app/cli.js" ]
