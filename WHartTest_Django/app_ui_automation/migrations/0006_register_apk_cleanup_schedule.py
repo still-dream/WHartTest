@@ -60,7 +60,9 @@ class Migration(migrations.Migration):
 
     dependencies = [
         ('app_ui_automation', '0005_apppackage_apppackageversion'),
-        ('django_celery_beat', '0001_initial'),
+        # 用 __latest__ 让迁移能看到 django-celery-beat 后续新增的字段
+        # （priority/one_off/start_time/clocked/solar 是在 0001 之后加的）
+        ('django_celery_beat', '__latest__'),
     ]
 
     operations = [
