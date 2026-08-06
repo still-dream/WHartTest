@@ -2,11 +2,12 @@
 """APPUI 自动化 Celery 异步任务"""
 
 import logging
+import os
 from celery import shared_task
 from celery.exceptions import SoftTimeLimitExceeded
 from django.utils import timezone
 
-from .models import AppUiExecutionRecord, AppUiBatchExecutionRecord, AppUiScript
+from .models import AppUiExecutionRecord, AppUiBatchExecutionRecord, AppUiScript, AppPackageVersion
 from .executor import AppUiScriptExecutor
 
 logger = logging.getLogger(__name__)
@@ -107,3 +108,105 @@ def _finalize_scheduled_execution(scheduled_task_id, execution_id, batch):
             task.save(update_fields=['status'])
     except Exception as e:
         logger.error(f"更新定时任务执行记录失败: {e}")
+
+
+# ============================================================
+# APP 应用分发管理 - 定时清理过期 APK
+# ============================================================
+
+@shared_task(name='app_ui_automation.cleanup_expired_apks')
+def cleanup_expired_apks(dry_run=False, retention_days=None):
+    """清理过期的 APP 安装包（默认 30 天前上传的）
+
+    清理规则：
+      - 达到 expire_at 时间（默认上传后 30 天）
+      - 未被标记为受保护（is_protected=False）
+      - 数据库记录保留，仅删除磁盘文件 + 标记 cleaned_at
+
+    Args:
+        dry_run: True 时仅扫描不删除，用于预演
+        retention_days: 覆盖默认保留天数（None 表示用模型默认值）
+
+    Returns:
+        dict: {scanned, deleted, skipped, freed_bytes, errors}
+    """
+    from datetime import timedelta
+    from django.conf import settings as dj_settings
+
+    now = timezone.now()
+    effective_retention = retention_days if retention_days is not None else AppPackageVersion.RETENTION_DAYS
+
+    # 1. 扫描候选
+    qs = AppPackageVersion.objects.filter(
+        is_protected=False,
+        cleaned_at__isnull=True,
+    ).filter(expire_at__lte=now).select_related('package')
+
+    scanned = qs.count()
+    deleted = 0
+    skipped = 0
+    freed_bytes = 0
+    errors = []
+
+    for version in qs:
+        try:
+            file_path = version.apk_file.path if version.apk_file else None
+            file_size = version.file_size or 0
+
+            if dry_run:
+                logger.info(
+                    f"[DRY-RUN] 将清理 {version.package.package_name} "
+                    f"v{version.version_name} ({version.file_size_human}), "
+                    f"过期时间 {version.expire_at.isoformat()}"
+                )
+                skipped += 1
+                continue
+
+            # 2. 删除磁盘文件
+            if file_path and os.path.isfile(file_path):
+                try:
+                    os.remove(file_path)
+                    freed_bytes += file_size
+                except OSError as e:
+                    logger.warning(f"删除 APK 文件失败 {file_path}: {e}")
+                    errors.append(f"{version.id}: {e}")
+                    continue
+
+            # 3. 清空 FileField 字段，标记清理时间
+            #    保留数据库记录，仅移除文件引用，便于审计
+            version.apk_file = None
+            version.file_size = 0
+            version.cleaned_at = now
+            version.save(update_fields=['apk_file', 'file_size', 'cleaned_at', 'updated_at'])
+
+            deleted += 1
+            logger.info(
+                f"已清理 APK: {version.package.package_name} v{version.version_name}, "
+                f"释放 {version.file_size_human}"
+            )
+        except Exception as e:
+            logger.exception(f"清理 APK 版本 {version.id} 失败: {e}")
+            errors.append(f"{version.id}: {e}")
+
+    summary = {
+        'scanned': scanned,
+        'deleted': deleted,
+        'skipped': skipped,
+        'freed_bytes': freed_bytes,
+        'freed_human': _humanize_size(freed_bytes),
+        'retention_days': effective_retention,
+        'dry_run': dry_run,
+        'errors': errors[:20],  # 最多保留 20 条错误
+    }
+    logger.info(f"APK 自动清理任务完成: {summary}")
+    return summary
+
+
+def _humanize_size(size):
+    """人类可读的文件大小"""
+    size = float(size)
+    for unit in ['B', 'KB', 'MB', 'GB', 'TB']:
+        if size < 1024.0:
+            return f"{size:.1f} {unit}"
+        size /= 1024.0
+    return f"{size:.1f} PB"

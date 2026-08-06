@@ -57,10 +57,13 @@ services:
         # 基础镜像走第三方镜像代理，绕开 daemon 的 registry-mirrors（sjtug）抽风。
         # 可通过 DOCKER_PYTHON_BASE_IMAGE 等变量切到其他源。
         PYTHON_BASE_IMAGE: ${DOCKER_PYTHON_BASE_IMAGE:-docker.1ms.run/library/python:3.11-slim}
-        APT_BASE_URL: ${DOCKER_APT_BASE_URL:-http://deb.debian.org}
-        PIP_INDEX_URL: ${DOCKER_PIP_INDEX_URL:-https://pypi.org/simple}
-        PIP_INDEX_FALLBACKS: ${DOCKER_PIP_INDEX_FALLBACKS:-}
-        HF_ENDPOINT: ${DOCKER_HF_ENDPOINT:-https://huggingface.co}
+        # ★ 国内 apt 源（默认清华）
+        APT_BASE_URL: ${DOCKER_APT_BASE_URL:-https://mirrors.tuna.tsinghua.edu.cn}
+        # ★ 国内 pip 源（默认清华）
+        PIP_INDEX_URL: ${DOCKER_PIP_INDEX_URL:-https://pypi.tuna.tsinghua.edu.cn/simple}
+        PIP_INDEX_FALLBACKS: ${DOCKER_PIP_INDEX_FALLBACKS:-https://pypi.org/simple}
+        # ★ 国内 Hugging Face 镜像
+        HF_ENDPOINT: ${DOCKER_HF_ENDPOINT:-https://hf-mirror.com}
         # 后端虽不直接跑 npm，保留镜像代理以防 supervisord 流程中触发。
         NPM_REGISTRY: ${DOCKER_NPM_REGISTRY:-https://registry.npmmirror.com}
         PLAYWRIGHT_DOWNLOAD_HOST: ${DOCKER_PLAYWRIGHT_DOWNLOAD_HOST:-}
@@ -113,7 +116,7 @@ services:
       - DOCX_EDITOR_SERVICE_KEY=${DOCX_EDITOR_SERVICE_KEY:-docx-editor-default-integration-key-2026}
       # Qdrant向量数据库
       - QDRANT_URL=http://qdrant:6333
-      - HF_ENDPOINT=${DOCKER_HF_ENDPOINT:-https://huggingface.co}
+      - HF_ENDPOINT=${DOCKER_HF_ENDPOINT:-https://hf-mirror.com}
     depends_on:
       postgres:
         condition: service_healthy
@@ -207,9 +210,11 @@ services:
         # 基础镜像走第三方镜像代理，绕开 daemon 的 registry-mirrors（sjtug）抽风。
         # 可通过 DOCKER_PYTHON_BASE_IMAGE 等变量切到其他源。
         PYTHON_BASE_IMAGE: ${DOCKER_PYTHON_BASE_IMAGE:-docker.1ms.run/library/python:3.11-slim}
-        APT_BASE_URL: ${DOCKER_APT_BASE_URL:-http://deb.debian.org}
-        PIP_INDEX_URL: ${DOCKER_PIP_INDEX_URL:-https://pypi.org/simple}
-        PIP_INDEX_FALLBACKS: ${DOCKER_PIP_INDEX_FALLBACKS:-}
+        # ★ 国内 apt 源（默认清华）
+        APT_BASE_URL: ${DOCKER_APT_BASE_URL:-https://mirrors.tuna.tsinghua.edu.cn}
+        # ★ 国内 pip 源
+        PIP_INDEX_URL: ${DOCKER_PIP_INDEX_URL:-https://pypi.tuna.tsinghua.edu.cn/simple}
+        PIP_INDEX_FALLBACKS: ${DOCKER_PIP_INDEX_FALLBACKS:-https://pypi.org/simple}
     container_name: wharttest-mcp
     user: root
     environment:

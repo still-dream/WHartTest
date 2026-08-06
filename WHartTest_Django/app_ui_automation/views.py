@@ -3,14 +3,19 @@
 
 import os
 import zipfile
+import hashlib
+import logging
 from datetime import datetime
+from django.utils import timezone
 
 from rest_framework import viewsets, status
 from rest_framework.decorators import action
 from rest_framework.mixins import DestroyModelMixin
 from rest_framework.response import Response
+from rest_framework.parsers import MultiPartParser, FormParser
 from django_filters.rest_framework import DjangoFilterBackend
 from rest_framework.filters import SearchFilter, OrderingFilter
+from rest_framework.permissions import IsAuthenticated
 from rest_framework_simplejwt.authentication import JWTAuthentication
 from api_keys.authentication import APIKeyAuthentication
 from django.db.models.deletion import ProtectedError
@@ -21,12 +26,14 @@ from django.http import FileResponse, HttpResponseForbidden, HttpResponseNotFoun
 from .models import (
     AppUiModule, AppUiScript, AppUiDevice,
     AppUiExecutionRecord, AppUiBatchExecutionRecord,
-    AppUiExecutionConfig
+    AppUiExecutionConfig,
+    AppPackage, AppPackageVersion,
 )
 from .serializers import (
     AppUiModuleSerializer, AppUiScriptSerializer, AppUiDeviceSerializer,
     AppUiExecutionRecordSerializer, AppUiBatchExecutionRecordSerializer,
-    AppUiExecutionConfigSerializer
+    AppUiExecutionConfigSerializer,
+    AppPackageSerializer, AppPackageVersionSerializer,
 )
 from .tasks import execute_app_ui_script
 
@@ -312,6 +319,205 @@ class AppUiExecutionConfigViewSet(viewsets.ViewSet):
 
     def partial_update(self, request, pk=None):
         return self.update(request, pk=pk)
+
+
+# ============================================================
+# APP 应用分发管理 视图
+# ============================================================
+
+logger = logging.getLogger(__name__)
+
+
+def _calc_file_hashes(file_obj):
+    """计算上传文件的 MD5/SHA1"""
+    md5 = hashlib.md5()
+    sha1 = hashlib.sha1()
+    file_obj.seek(0)
+    for chunk in iter(lambda: file_obj.read(8192), b''):
+        md5.update(chunk)
+        sha1.update(chunk)
+    file_obj.seek(0)
+    return md5.hexdigest(), sha1.hexdigest()
+
+
+class AppPackageViewSet(viewsets.ModelViewSet):
+    """APP 应用（按包名归一）"""
+    queryset = AppPackage.objects.all()
+    serializer_class = AppPackageSerializer
+    filter_backends = [DjangoFilterBackend, SearchFilter, OrderingFilter]
+    search_fields = ['package_name', 'app_name', 'description']
+    ordering_fields = ['updated_at', 'created_at']
+    ordering = ['-updated_at']
+
+    def get_queryset(self):
+        qs = super().get_queryset().select_related('project', 'creator')
+        project = self.request.query_params.get('project')
+        if project:
+            qs = qs.filter(project_id=project)
+        platform = self.request.query_params.get('platform')
+        if platform:
+            qs = qs.filter(platform=platform)
+        return qs
+
+    @action(detail=True, methods=['get'], url_path='versions')
+    def list_versions(self, request, pk=None):
+        """列出指定 APP 下的所有版本（含受保护/清理状态）"""
+        pkg = self.get_object()
+        qs = pkg.versions.all().order_by('-version_code')
+        serializer = AppPackageVersionSerializer(qs, many=True, context={'request': request})
+        return Response(serializer.data)
+
+
+class AppPackageVersionViewSet(viewsets.ModelViewSet):
+    """APP 应用版本（APK 文件）"""
+    queryset = AppPackageVersion.objects.all()
+    serializer_class = AppPackageVersionSerializer
+    parser_classes = [MultiPartParser, FormParser]
+
+    def get_queryset(self):
+        qs = super().get_queryset().select_related('package', 'uploader')
+        # 支持过滤: ?package=1&is_protected=true&expired=true
+        package = self.request.query_params.get('package')
+        if package:
+            qs = qs.filter(package_id=package)
+        is_protected = self.request.query_params.get('is_protected')
+        if is_protected is not None:
+            qs = qs.filter(is_protected=is_protected.lower() == 'true')
+        if self.request.query_params.get('expired') == 'true':
+            qs = qs.filter(expire_at__lte=timezone.now(), is_protected=False, cleaned_at__isnull=True)
+        return qs
+
+    def create(self, request, *args, **kwargs):
+        """上传新版本 (multipart/form-data)"""
+        package_id = request.data.get('package')
+        if not package_id:
+            return Response({'detail': '缺少 package 参数'}, status=status.HTTP_400_BAD_REQUEST)
+
+        try:
+            pkg = AppPackage.objects.get(id=package_id)
+        except AppPackage.DoesNotExist:
+            return Response({'detail': 'APP 不存在'}, status=status.HTTP_404_NOT_FOUND)
+
+        apk_file = request.FILES.get('apk_file')
+        if not apk_file:
+            return Response({'detail': '请上传 APK 文件'}, status=status.HTTP_400_BAD_REQUEST)
+
+        # 校验文件类型
+        if not apk_file.name.lower().endswith('.apk'):
+            return Response({'detail': '只支持 .apk 格式'}, status=status.HTTP_400_BAD_REQUEST)
+
+        # 校验大小（500MB）
+        if apk_file.size > 500 * 1024 * 1024:
+            return Response({'detail': '文件超过 500MB 限制'}, status=status.HTTP_400_BAD_REQUEST)
+
+        # 计算哈希
+        md5, sha1 = _calc_file_hashes(apk_file)
+
+        # 创建版本记录
+        try:
+            version_code = int(request.data.get('version_code', 0))
+        except (TypeError, ValueError):
+            version_code = 0
+
+        if not version_code:
+            return Response({'detail': '请提供有效的 version_code'}, status=status.HTTP_400_BAD_REQUEST)
+
+        version = AppPackageVersion(
+            package=pkg,
+            version_name=request.data.get('version_name', ''),
+            version_code=version_code,
+            apk_file=apk_file,
+            file_size=apk_file.size,
+            file_md5=md5,
+            file_sha1=sha1,
+            changelog=request.data.get('changelog', ''),
+            status=request.data.get('status', 'released'),
+            is_protected=str(request.data.get('is_protected', 'false')).lower() == 'true',
+            uploader=request.user if request.user.is_authenticated else None,
+            parse_status='pending',
+        )
+        try:
+            version.save()
+        except Exception as e:
+            logger.exception('保存 APK 版本失败: %s', e)
+            return Response({'detail': f'保存失败: {e}'}, status=status.HTTP_400_BAD_REQUEST)
+
+        serializer = AppPackageVersionSerializer(version, context={'request': request})
+        return Response(serializer.data, status=status.HTTP_201_CREATED)
+
+    @action(detail=True, methods=['post'], url_path='protect')
+    def toggle_protection(self, request, pk=None):
+        """切换受保护状态"""
+        version = self.get_object()
+        is_protected = bool(request.data.get('is_protected', False))
+        version.is_protected = is_protected
+        # 如果重新受保护，重置清理时间
+        if is_protected:
+            version.cleaned_at = None
+        version.save(update_fields=['is_protected', 'cleaned_at', 'updated_at'])
+        serializer = AppPackageVersionSerializer(version, context={'request': request})
+        return Response(serializer.data)
+
+
+def _get_cleanup_status():
+    """获取清理任务状态（下次运行时间、上次运行时间、累计统计）"""
+    from django_celery_beat.models import PeriodicTask
+
+    task_name = 'app_ui_automation.cleanup_apks_daily'
+    last_run = None
+    try:
+        pt = PeriodicTask.objects.filter(name=task_name).first()
+        if pt and pt.last_run_at:
+            last_run = pt.last_run_at.isoformat()
+    except Exception:
+        pass
+
+    # 统计当前可清理的数量
+    now = timezone.now()
+    pending = AppPackageVersion.objects.filter(
+        is_protected=False,
+        cleaned_at__isnull=True,
+        expire_at__lte=now,
+    ).count()
+
+    return {
+        'retention_days': AppPackageVersion.RETENTION_DAYS,
+        'next_run_at': None,  # 下次运行时间由前端通过 crontab 描述展示
+        'last_run_at': last_run,
+        'total_cleaned': pending,  # 当前待清理
+        'total_freed_bytes': 0,
+    }
+
+
+class AppCleanupViewSet(viewsets.ViewSet):
+    """APK 自动清理相关接口"""
+
+    @action(detail=False, methods=['get'], url_path='cleanup-config')
+    def cleanup_config(self, request):
+        """获取清理配置"""
+        return Response(_get_cleanup_status())
+
+    @action(detail=False, methods=['post'], url_path='cleanup')
+    def run_cleanup(self, request):
+        """手动触发清理任务
+
+        Body: {"dry_run": true/false}
+        """
+        dry_run = bool(request.data.get('dry_run', False))
+
+        from .tasks import cleanup_expired_apks
+        if dry_run:
+            # 同步执行 dry_run，立即返回结果
+            result = cleanup_expired_apks.apply(args=[True]).get()
+            return Response(result)
+
+        # 异步执行，立即返回
+        task = cleanup_expired_apks.delay(dry_run=False)
+        return Response({
+            'task_id': task.id,
+            'status': 'started',
+            'message': '清理任务已启动，请稍后查看结果',
+        })
 
 
 # 报告签名 token 有效期（30 天）

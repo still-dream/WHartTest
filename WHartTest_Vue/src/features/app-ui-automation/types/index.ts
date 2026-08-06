@@ -232,3 +232,74 @@ export function extractPaginationData(res: any): { items: any[]; count: number }
   const items = Array.isArray(wrapped) ? wrapped : []
   return { items, count: items.length }
 }
+
+// ============================================================
+// APP 应用分发管理
+// ============================================================
+
+/** APP 版本状态 */
+export type AppPackageStatus = 'draft' | 'released' | 'deprecated' | 'prerelease'
+
+/** APP 元信息解析状态 */
+export type AppParseStatus = 'pending' | 'parsing' | 'success' | 'failed'
+
+/** APP 应用（按包名归一） */
+export interface AppPackage {
+  id: number
+  project: number
+  platform: AppUiPlatform
+  package_name: string
+  app_name: string
+  icon: string | null
+  description: string
+  total_versions: number
+  latest_version: AppPackageVersion | null
+  creator: number | null
+  creator_name: string
+  created_at: string
+  updated_at: string
+}
+
+/** APP 应用版本 */
+export interface AppPackageVersion {
+  id: number
+  package: number
+  package_name: string
+  version_name: string
+  version_code: number
+  apk_file: string | null
+  file_size: number
+  file_size_human: string
+  file_md5: string
+  file_sha1: string
+  signature_sha1: string
+  signature_algorithm: string
+  target_sdk: number | null
+  min_sdk: number | null
+  permissions: string[]
+  main_activity: string
+  abi_support: string[]
+  changelog: string
+  status: AppPackageStatus
+  is_latest: boolean
+  parse_status: AppParseStatus
+  parse_error: string
+  is_protected: boolean
+  expire_at: string | null
+  cleaned_at: string | null
+  days_to_expire: number | null
+  is_expired: boolean
+  uploader: number | null
+  uploader_name: string
+  created_at: string
+  updated_at: string
+}
+
+/** APP 自动清理配置 */
+export interface AppCleanupConfig {
+  retention_days: number
+  next_run_at: string | null
+  last_run_at: string | null
+  total_cleaned: number
+  total_freed_bytes: number
+}

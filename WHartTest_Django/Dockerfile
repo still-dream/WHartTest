@@ -112,6 +112,131 @@ print('BM25 model downloaded successfully from: $endpoint'); \
     ls -la /root/.cache/fastembed/
 
 # ============================================
+# 中间阶段：浏览器工具层 - 独立缓存所有浏览器二进制
+# 关键目的：把 playwright / agent-browser / Chrome for Testing 的下载隔离到这一层，
+# 避免 requirements.txt 或项目代码变更触发整条 RUN 链重跑而重新下载浏览器。
+# 触发本层重跑的条件：
+#   - 本阶段任何 RUN/COPY/ARG 的内容变化
+#   - NPM_REGISTRY / PLAYWRIGHT_DOWNLOAD_HOST / CHROME_FOR_TESTING_MIRROR / CHROME_VERSION 改变
+# ============================================
+FROM ${PYTHON_BASE_IMAGE} AS browser-tools
+
+ARG NPM_REGISTRY=https://registry.npmjs.org
+ARG PLAYWRIGHT_DOWNLOAD_HOST=
+ARG CHROME_FOR_TESTING_MIRROR=
+ARG CHROME_VERSION=stable
+
+# 仅安装浏览器工具需要的系统依赖
+RUN apt-get -o Acquire::Retries=10 update && apt-get -o Acquire::Retries=10 install -y --fix-missing --no-install-recommends \
+    curl \
+    git \
+    nodejs \
+    npm \
+    unzip \
+    # Playwright Chromium 系统库
+    libnss3 \
+    libnspr4 \
+    libatk1.0-0 \
+    libatk-bridge2.0-0 \
+    libcups2 \
+    libdrm2 \
+    libdbus-1-3 \
+    libxkbcommon0 \
+    libatspi2.0-0 \
+    libxcomposite1 \
+    libxdamage1 \
+    libxext6 \
+    libxfixes3 \
+    libxrandr2 \
+    libgbm1 \
+    libpango-1.0-0 \
+    libcairo2 \
+    libasound2 \
+    # 中文字体支持（解决截图乱码问题）
+    fonts-noto-cjk \
+    fonts-wqy-zenhei \
+    && rm -rf /var/lib/apt/lists/* \
+    && apt-get clean \
+    && fc-cache -fv
+
+# 安装 Playwright (npm 版) 并下载 Chromium
+# 用 npm playwright 而非 Python playwright：避免依赖 /opt/venv，独立可缓存
+RUN set -eux; \
+    npm config set registry "${NPM_REGISTRY}"; \
+    npm install -g playwright; \
+    if [ -n "${PLAYWRIGHT_DOWNLOAD_HOST:-}" ]; then \
+      echo "Using Playwright download host: ${PLAYWRIGHT_DOWNLOAD_HOST}"; \
+      PLAYWRIGHT_DOWNLOAD_HOST="${PLAYWRIGHT_DOWNLOAD_HOST}" npx playwright install chromium; \
+    else \
+      npx playwright install chromium; \
+    fi
+
+# 安装 agent-browser 并下载 Chrome for Testing
+# 支持通过 CHROME_FOR_TESTING_MIRROR 参数指定 Chrome for Testing 镜像地址
+# 如果镜像地址为空，则使用 agent-browser 自带下载
+RUN set -eux; \
+    npm install -g agent-browser; \
+    echo "agent-browser npm package installed successfully"; \
+    if [ -n "${CHROME_FOR_TESTING_MIRROR}" ]; then \
+        echo "Using Chrome for Testing mirror: ${CHROME_FOR_TESTING_MIRROR}"; \
+        mkdir -p /opt/chrome-for-testing; \
+        # 解析实际版本号：若 CHROME_VERSION 为 stable/beta/dev/canary，则从镜像的
+        # last-known-good-versions.json 里查出版本号；否则按字面量使用（用于钉版本）。
+        chrome_version_resolved="${CHROME_VERSION}"; \
+        case "${CHROME_VERSION}" in \
+          stable|beta|dev|canary) \
+            channel="$(printf '%s' "${CHROME_VERSION}" | tr '[:lower:]' '[:upper:]')"; \
+            echo "Resolving channel '${channel}' from mirror metadata..."; \
+            metadata_url="${CHROME_FOR_TESTING_MIRROR%/}/last-known-good-versions.json"; \
+            echo "Fetching: ${metadata_url}"; \
+            if metadata="$(curl -fsSL --retry 5 --retry-delay 5 --max-time 60 "${metadata_url}")"; then \
+              chrome_version_resolved="$(printf '%s' "${metadata}" | tr -d '\n' | sed 's/ //g' | grep -oiE "\"${CHROME_VERSION}\":[^}]*\"version\":\"[0-9.]+\"" | grep -oE '[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+' | head -n1)"; \
+              if [ -z "${chrome_version_resolved}" ]; then \
+                echo "Warning: failed to parse ${channel} version from metadata, falling back to CHROME_VERSION=${CHROME_VERSION}"; \
+                chrome_version_resolved="${CHROME_VERSION}"; \
+              else \
+                echo "Resolved ${channel} version: ${chrome_version_resolved}"; \
+              fi; \
+            else \
+              echo "Warning: failed to fetch metadata from ${metadata_url}, falling back to CHROME_VERSION=${CHROME_VERSION}"; \
+              chrome_version_resolved="${CHROME_VERSION}"; \
+            fi; \
+            ;; \
+        esac; \
+        chrome_url="${CHROME_FOR_TESTING_MIRROR%/}/${chrome_version_resolved}/linux64/chrome-linux64.zip"; \
+        echo "Downloading Chrome from: $chrome_url"; \
+        for i in 1 2 3; do \
+            if curl -fsSL --retry 5 --retry-delay 10 --max-time 1200 "$chrome_url" -o /tmp/chrome.zip; then \
+                echo "Chrome downloaded successfully on attempt $i"; \
+                break; \
+            fi; \
+            echo "Download failed on attempt $i, retrying..."; \
+            sleep 5; \
+        done; \
+        if [ -f /tmp/chrome.zip ]; then \
+            unzip -q /tmp/chrome.zip -d /opt/chrome-for-testing; \
+            rm /tmp/chrome.zip; \
+            echo "Chrome for Testing installed to /opt/chrome-for-testing"; \
+        else \
+            echo "Warning: Chrome download from mirror failed, falling back to agent-browser install"; \
+            agent-browser install || echo "Warning: agent-browser install also failed"; \
+        fi; \
+    else \
+        echo "No Chrome mirror specified, using agent-browser install"; \
+        for i in 1 2 3; do \
+            echo "Attempt $i: Running agent-browser install..."; \
+            if agent-browser install; then \
+                echo "agent-browser browsers installed successfully"; \
+                break; \
+            fi; \
+            echo "agent-browser install failed on attempt $i"; \
+            if [ "$i" -lt 3 ]; then \
+                sleep 10; \
+            fi; \
+        done; \
+    fi
+
+# ============================================
 # 第二阶段：运行阶段（仅包含运行时依赖）
 # ============================================
 FROM ${PYTHON_BASE_IMAGE}
@@ -137,6 +262,8 @@ ENV PYTHONUNBUFFERED=1 \
     AGENT_BROWSER_CHROME_PATH=/opt/chrome-for-testing/chrome-linux64/chrome
 
 # 仅安装运行时必需的系统依赖
+# 注意：浏览器二进制（playwright / agent-browser / Chrome for Testing）已在 browser-tools 阶段
+# 下载完成并通过 COPY --from=browser-tools 引入，这里不再安装 npm 也不再下载浏览器。
 RUN if [ "$APT_BASE_URL" != "http://deb.debian.org" ]; then \
         sed -i "s|http://deb.debian.org/debian|${APT_BASE_URL}/debian|g; s|http://deb.debian.org/debian-security|${APT_BASE_URL}/debian-security|g" /etc/apt/sources.list.d/debian.sources; \
     fi && \
@@ -144,10 +271,9 @@ RUN if [ "$APT_BASE_URL" != "http://deb.debian.org" ]; then \
     supervisor \
     curl \
     git \
+    # nodejs 仅作为 agent-browser / playwright 客户端脚本的运行时（不需要 npm）
     nodejs \
-    npm \
-    unzip \
-    # Playwright 所需的系统依赖
+    # Playwright 所需的系统依赖（运行时仍需保留，让 Playwright 启动浏览器时能链接到这些 .so）
     libnss3 \
     libnspr4 \
     libatk1.0-0 \
@@ -181,22 +307,20 @@ RUN if [ "$APT_BASE_URL" != "http://deb.debian.org" ]; then \
     && apt-get clean \
     && fc-cache -fv
 
+# 从 browser-tools 阶段复制已下载好的浏览器二进制与全局 npm 包
+# 关键：这几条 COPY 必须在 `COPY --from=builder /opt/venv` 之前，
+# 这样 venv 变化时这些层才会被 Docker 当作未失效而复用缓存，不会重新下载浏览器。
+COPY --from=browser-tools /root/.cache/ms-playwright /root/.cache/ms-playwright
+COPY --from=browser-tools /opt/chrome-for-testing /opt/chrome-for-testing
+COPY --from=browser-tools /usr/local/lib/node_modules /usr/local/lib/node_modules
+COPY --from=browser-tools /usr/local/bin/agent-browser /usr/local/bin/agent-browser
+COPY --from=browser-tools /usr/local/bin/playwright /usr/local/bin/playwright
+
 # 从构建阶段复制虚拟环境（不包含构建工具）
 COPY --from=builder /opt/venv /opt/venv
 
 # 复制第三方许可证声明文件（用于对外分发合规）
 COPY THIRD_PARTY_NOTICES.md /app/THIRD_PARTY_NOTICES.md
-
-# 安装 Playwright 浏览器（Chromium）—— 镜像源失败时自动回退官方源
-RUN set -eux; \
-    if /opt/venv/bin/playwright install chromium; then \
-      echo "Playwright chromium installed successfully"; \
-    elif [ -n "${PLAYWRIGHT_DOWNLOAD_HOST:-}" ]; then \
-      echo "Mirror download failed, retrying with official source..."; \
-      PLAYWRIGHT_DOWNLOAD_HOST= /opt/venv/bin/playwright install chromium; \
-    else \
-      exit 1; \
-    fi
 
 # 收集第三方许可证文件（Playwright/Pillow/Chromium/FFmpeg）
 RUN set -eux; \
@@ -224,76 +348,6 @@ RUN set -eux; \
     browser_root="${PLAYWRIGHT_BROWSERS_PATH:-/root/.cache/ms-playwright}"; \
     if [ -d "$browser_root" ]; then \
       find "$browser_root" -maxdepth 4 -type f \( -name "LICENSE*" -o -name "COPYING*" -o -name "NOTICE*" -o -name "ABOUT" \) -exec cp --parents -f {} /app/third_party_licenses/playwright-browsers/ \; ; \
-    fi
-
-# 安装 agent-browser CLI 工具及其浏览器
-# agent-browser 是 AI Agent 专用的浏览器自动化工具
-# 支持通过 CHROME_FOR_TESTING_MIRROR 参数指定 Chrome for Testing 镜像地址
-# 如果镜像地址为空，则使用官方地址下载
-RUN set -eux; \
-    npm config set registry "${NPM_REGISTRY}"; \
-    npm install -g agent-browser; \
-    echo "agent-browser npm package installed successfully"; \
-    if [ -n "${CHROME_FOR_TESTING_MIRROR}" ]; then \
-      echo "Using Chrome for Testing mirror: ${CHROME_FOR_TESTING_MIRROR}"; \
-      mkdir -p /opt/chrome-for-testing; \
-      # 解析实际版本号：若 CHROME_VERSION 为 stable/beta/dev/canary，则从镜像的
-      # last-known-good-versions.json 里查出版本号；否则按字面量使用（用于钉版本）。
-      chrome_version_resolved="${CHROME_VERSION}"; \
-      case "${CHROME_VERSION}" in \
-        stable|beta|dev|canary) \
-          channel="$(printf '%s' "${CHROME_VERSION}" | tr '[:lower:]' '[:upper:]')"; \
-          echo "Resolving channel '${channel}' from mirror metadata..."; \
-          metadata_url="${CHROME_FOR_TESTING_MIRROR%/}/last-known-good-versions.json"; \
-          echo "Fetching: ${metadata_url}"; \
-          if metadata="$(curl -fsSL --retry 5 --retry-delay 5 --max-time 60 "${metadata_url}")"; then \
-            # 简单粗暴地用 grep 抓出对应 channel 的 version 字段。
-            # sed 去除所有空格以消除 JSON 格式差异，grep -i 忽略大小写（stable vs Stable）
-            chrome_version_resolved="$(printf '%s' "${metadata}" | tr -d '\n' | sed 's/ //g' | grep -oiE "\"${CHROME_VERSION}\":[^}]*\"version\":\"[0-9.]+\"" | grep -oE '[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+' | head -n1)"; \
-            if [ -z "${chrome_version_resolved}" ]; then \
-              echo "Warning: failed to parse ${channel} version from metadata, falling back to CHROME_VERSION=${CHROME_VERSION}"; \
-              chrome_version_resolved="${CHROME_VERSION}"; \
-            else \
-              echo "Resolved ${channel} version: ${chrome_version_resolved}"; \
-            fi; \
-          else \
-            echo "Warning: failed to fetch metadata from ${metadata_url}, falling back to CHROME_VERSION=${CHROME_VERSION}"; \
-            chrome_version_resolved="${CHROME_VERSION}"; \
-          fi; \
-          ;; \
-      esac; \
-      chrome_url="${CHROME_FOR_TESTING_MIRROR%/}/${chrome_version_resolved}/linux64/chrome-linux64.zip"; \
-      echo "Downloading Chrome from: $chrome_url"; \
-      for i in 1 2 3; do \
-        if curl -fsSL --retry 5 --retry-delay 10 --max-time 1200 "$chrome_url" -o /tmp/chrome.zip; then \
-          echo "Chrome downloaded successfully on attempt $i"; \
-          break; \
-        fi; \
-        echo "Download failed on attempt $i, retrying..."; \
-        sleep 5; \
-      done; \
-      if [ -f /tmp/chrome.zip ]; then \
-        unzip -q /tmp/chrome.zip -d /opt/chrome-for-testing; \
-        rm /tmp/chrome.zip; \
-        export AGENT_BROWSER_CHROME_PATH="/opt/chrome-for-testing/chrome-linux64/chrome"; \
-        echo "AGENT_BROWSER_CHROME_PATH set to: $AGENT_BROWSER_CHROME_PATH"; \
-      else \
-        echo "Warning: Chrome download from mirror failed, falling back to agent-browser install"; \
-        agent-browser install || echo "Warning: agent-browser install also failed"; \
-      fi; \
-    else \
-      echo "No Chrome mirror specified, using agent-browser install"; \
-      for i in 1 2 3; do \
-        echo "Attempt $i: Running agent-browser install..."; \
-        if agent-browser install; then \
-          echo "agent-browser browsers installed successfully"; \
-          break; \
-        fi; \
-        echo "agent-browser install failed on attempt $i"; \
-        if [ "$i" -lt 3 ]; then \
-          sleep 10; \
-        fi; \
-      done; \
     fi
 
 # 从构建阶段复制预下载的 BM25 模型缓存

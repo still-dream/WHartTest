@@ -109,6 +109,11 @@ psycopg[binary]==3.3.1
 # https://github.com/langchain-ai/langchain-mcp-adapters/blob/main/LICENSE
 langchain-mcp-adapters==0.2.1
 
+# MCP 核心库版本约束 - 与 langchain-mcp-adapters 0.2.1 配套使用
+# mcp 2.0.0 移除了 mcp.shared.context.RequestContext，导致 langchain-mcp-adapters 0.2.1
+# 启动时报 ImportError。必须钉住 1.x。
+mcp<2.0.0
+
 # Excel文件处理 - MIT许可证 (当前版本: 3.1.5)
 # https://github.com/theorchard/openpyxl/blob/master/LICENCE.rst
 openpyxl==3.1.5

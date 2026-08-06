@@ -17,6 +17,9 @@ import type {
   AppUiScriptPreview,
   AppUiExecuteResult,
   AppUiDeviceCheckResult,
+  AppPackage,
+  AppPackageVersion,
+  AppCleanupConfig,
   PaginatedResponse,
 } from '../types'
 
@@ -155,4 +158,58 @@ export const executionConfigApi = {
 
   update: (data: Partial<AppUiExecutionConfig>) =>
     request.patch<AppUiExecutionConfig & { needs_reconnect?: boolean }>(`${BASE_URL}/execution-config/1/`, data),
+}
+
+// ==================== APP 应用分发管理 ====================
+export const appPackageApi = {
+  list: (params?: { project?: number; search?: string; platform?: string }) =>
+    request.get<PaginatedResponse<AppPackage>>(`${BASE_URL}/app-packages/`, { params }),
+
+  get: (id: number) => request.get<AppPackage>(`${BASE_URL}/app-packages/${id}/`),
+
+  create: (data: Partial<AppPackage>) => request.post<AppPackage>(`${BASE_URL}/app-packages/`, data),
+
+  update: (id: number, data: Partial<AppPackage>) =>
+    request.patch<AppPackage>(`${BASE_URL}/app-packages/${id}/`, data),
+
+  delete: (id: number) => request.delete(`${BASE_URL}/app-packages/${id}/`),
+
+  /** 上传 APK（新版本） */
+  uploadVersion: (packageId: number, data: FormData) =>
+    uploadViaFetch(`${BASE_URL}/app-packages/${packageId}/versions/`, 'POST', data),
+
+  /** 版本列表 */
+  listVersions: (packageId: number) =>
+    request.get<AppPackageVersion[]>(`${BASE_URL}/app-packages/${packageId}/versions/`),
+
+  /** 版本详情 */
+  getVersion: (packageId: number, versionId: number) =>
+    request.get<AppPackageVersion>(`${BASE_URL}/app-packages/${packageId}/versions/${versionId}/`),
+
+  /** 更新版本信息 */
+  updateVersion: (packageId: number, versionId: number, data: Partial<AppPackageVersion>) =>
+    request.patch<AppPackageVersion>(
+      `${BASE_URL}/app-packages/${packageId}/versions/${versionId}/`, data,
+    ),
+
+  /** 删除版本（同时删除磁盘 APK） */
+  deleteVersion: (packageId: number, versionId: number) =>
+    request.delete(`${BASE_URL}/app-packages/${packageId}/versions/${versionId}/`),
+
+  /** 切换受保护标记（不自动清理） */
+  toggleProtection: (packageId: number, versionId: number, isProtected: boolean) =>
+    request.post<AppPackageVersion>(
+      `${BASE_URL}/app-packages/${packageId}/versions/${versionId}/protect/`,
+      { is_protected: isProtected },
+    ),
+
+  /** 清理配置 */
+  getCleanupConfig: () =>
+    request.get<AppCleanupConfig>(`${BASE_URL}/app-packages/cleanup-config/`),
+
+  /** 手动触发清理（带 dry_run 预览） */
+  runCleanup: (dryRun = false) =>
+    request.post<{ scanned: number; deleted: number; skipped: number; freed_human: string; errors: string[] }>(
+      `${BASE_URL}/app-packages/cleanup/`, { dry_run: dryRun },
+    ),
 }

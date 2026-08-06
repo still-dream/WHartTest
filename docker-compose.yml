@@ -11,7 +11,7 @@
 services:
   # PostgreSQL 数据库服务（生产环境默认启用）
   postgres:
-    image: ${DOCKER_POSTGRES_IMAGE:-postgres:16-alpine}
+    image: ${DOCKER_POSTGRES_IMAGE:-docker.1ms.run/library/postgres:16-alpine}
     container_name: wharttest-postgres
     environment:
       POSTGRES_USER: ${POSTGRES_USER:-postgres}
@@ -32,7 +32,7 @@ services:
 
   # Redis 服务 - Celery的broker和backend
   redis:
-    image: ${DOCKER_REDIS_IMAGE:-redis:7-alpine}
+    image: ${DOCKER_REDIS_IMAGE:-docker.1ms.run/library/redis:7-alpine}
     container_name: wharttest-redis
     ports:
       - "8911:6379"
@@ -65,10 +65,14 @@ services:
         # Chrome for Testing 走 npmmirror 镜像，避开 storage.googleapis.com 抽风。
         # 可通过 DOCKER_CHROME_FOR_TESTING_MIRROR / DOCKER_CHROME_VERSION 覆盖。
         PYTHON_BASE_IMAGE: ${DOCKER_PYTHON_BASE_IMAGE:-docker.1ms.run/library/python:3.11-slim}
-        APT_BASE_URL: ${DOCKER_APT_BASE_URL:-http://deb.debian.org}
-        PIP_INDEX_URL: ${DOCKER_PIP_INDEX_URL:-https://pypi.org/simple}
-        PIP_INDEX_FALLBACKS: ${DOCKER_PIP_INDEX_FALLBACKS:-}
-        HF_ENDPOINT: ${DOCKER_HF_ENDPOINT:-https://huggingface.co}
+        # ★ 国内 apt 源（默认清华，可通过 DOCKER_APT_BASE_URL 覆盖）
+        APT_BASE_URL: ${DOCKER_APT_BASE_URL:-https://mirrors.tuna.tsinghua.edu.cn}
+        # ★ 国内 pip 源（默认清华）
+        PIP_INDEX_URL: ${DOCKER_PIP_INDEX_URL:-https://pypi.tuna.tsinghua.edu.cn/simple}
+        PIP_INDEX_FALLBACKS: ${DOCKER_PIP_INDEX_FALLBACKS:-https://pypi.org/simple}
+        # ★ 国内 Hugging Face 镜像
+        HF_ENDPOINT: ${DOCKER_HF_ENDPOINT:-https://hf-mirror.com}
+        # ★ 国内 npm 源
         NPM_REGISTRY: ${DOCKER_NPM_REGISTRY:-https://registry.npmmirror.com}
         PLAYWRIGHT_DOWNLOAD_HOST: ${DOCKER_PLAYWRIGHT_DOWNLOAD_HOST:-}
         CHROME_FOR_TESTING_MIRROR: ${DOCKER_CHROME_FOR_TESTING_MIRROR:-https://cdn.npmmirror.com/binaries/chrome-for-testing}
@@ -114,7 +118,7 @@ services:
       # 外部可访问的基础URL - 用于通知消息中的报告链接
       - DJANGO_PUBLIC_BASE_URL=${DJANGO_PUBLIC_BASE_URL:-http://10.66.110.24:8913}
       - WEIXIN_PLUGIN_HOST_URL=http://weixin-plugin-host:3001
-      - HF_ENDPOINT=${DOCKER_HF_ENDPOINT:-https://huggingface.co}
+      - HF_ENDPOINT=${DOCKER_HF_ENDPOINT:-https://hf-mirror.com}
       # APPUI 自动化配置 - 使用 airtest CLI（非 AirtestIDE GUI）
       - AIRTEST_IDE_PATH=airtest
       # 飞书开放平台应用配置（用于报告截图上传）
@@ -186,7 +190,7 @@ services:
         # 基础镜像走第三方镜像代理，避免 daemon 的 registry-mirrors（sjtug 等）抽风时拖垮构建。
         # 可通过 DOCKER_NODE_BASE_IMAGE / DOCKER_NGINX_BASE_IMAGE 切到其他源
         NODE_BASE_IMAGE: ${DOCKER_NODE_BASE_IMAGE:-docker.1ms.run/library/node:20-alpine}
-        NGINX_BASE_IMAGE: ${DOCKER_NGINX_BASE_IMAGE:-nginx:alpine}
+        NGINX_BASE_IMAGE: ${DOCKER_NGINX_BASE_IMAGE:-docker.1ms.run/library/nginx:alpine}
         NPM_REGISTRY: ${DOCKER_NPM_REGISTRY:-https://registry.npmmirror.com}
     container_name: wharttest-frontend
     ports:
@@ -240,7 +244,7 @@ services:
 
   # Playwright MCP 服务（官方Docker镜像）
   playwright-mcp:
-    image: ${DOCKER_PLAYWRIGHT_MCP_IMAGE:-mcr.microsoft.com/playwright/mcp}
+    image: ${DOCKER_PLAYWRIGHT_MCP_IMAGE:-docker.1ms.run/microsoft/playwright/mcp}
     container_name: wharttest-playwright-mcp
     user: root # 以 root 用户运行,确保有权限写入挂载目录
     entrypoint: [ "node", "/app/cli.js" ]
@@ -262,7 +266,7 @@ services:
 
   # Qdrant 向量数据库服务
   qdrant:
-    image: ${DOCKER_QDRANT_IMAGE:-qdrant/qdrant:latest}
+    image: ${DOCKER_QDRANT_IMAGE:-docker.1ms.run/qdrant/qdrant:latest}
     container_name: wharttest-qdrant
     ports:
       - "8918:6333"  # REST API

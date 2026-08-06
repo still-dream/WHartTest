@@ -6,6 +6,7 @@ import os
 from django.conf import settings
 from django.db import models
 from django.contrib.auth.models import User
+from django.utils import timezone
 from django.utils.translation import gettext_lazy as _
 from django.core.exceptions import ValidationError
 from projects.models import Project
@@ -262,3 +263,159 @@ class AppUiExecutionConfig(models.Model):
         """获取全局配置（单例）"""
         config, _ = cls.objects.get_or_create(id=1)
         return config
+
+
+# ============================================================
+# APP 应用分发管理（APK 上传 + 自动清理）
+# ============================================================
+
+class AppPackage(models.Model):
+    """APP 应用（按包名归一）"""
+    project = models.ForeignKey(
+        Project, on_delete=models.CASCADE,
+        related_name='app_packages', verbose_name=_('所属项目')
+    )
+    platform = models.CharField(_('平台'), max_length=10, default='android')
+    package_name = models.CharField(_('包名'), max_length=200, db_index=True,
+        help_text=_('例如：com.example.app'))
+    app_name = models.CharField(_('应用名称'), max_length=200, blank=True, default='')
+    icon = models.ImageField(_('图标'), upload_to='app_icons/', null=True, blank=True)
+    description = models.TextField(_('应用描述'), blank=True, default='')
+    creator = models.ForeignKey(
+        User, on_delete=models.SET_NULL, null=True,
+        related_name='created_app_packages', verbose_name=_('创建人')
+    )
+    created_at = models.DateTimeField(_('创建时间'), auto_now_add=True)
+    updated_at = models.DateTimeField(_('更新时间'), auto_now=True)
+
+    class Meta:
+        verbose_name = _('APP 应用')
+        verbose_name_plural = _('APP 应用')
+        ordering = ['-updated_at']
+        unique_together = ('project', 'package_name')
+        db_table = 'app_package'
+
+    def __str__(self):
+        return f"{self.app_name or self.package_name} ({self.package_name})"
+
+    @property
+    def latest_version(self):
+        return self.versions.order_by('-version_code').first()
+
+    @property
+    def total_versions(self):
+        return self.versions.count()
+
+
+class AppPackageVersion(models.Model):
+    """APP 应用版本（APK 文件）"""
+    STATUS_CHOICES = [
+        ('draft', _('草稿')),
+        ('released', _('已发布')),
+        ('deprecated', _('已废弃')),
+        ('prerelease', _('预发布')),
+    ]
+    PARSE_STATUS_CHOICES = [
+        ('pending', _('待解析')),
+        ('parsing', _('解析中')),
+        ('success', _('解析成功')),
+        ('failed', _('解析失败')),
+    ]
+    RETENTION_DAYS = 30  # APK 文件保留天数（自动清理）
+
+    package = models.ForeignKey(
+        AppPackage, on_delete=models.CASCADE,
+        related_name='versions', verbose_name=_('所属应用')
+    )
+    version_name = models.CharField(_('版本号'), max_length=50,
+        help_text=_('如：1.2.3'))
+    version_code = models.IntegerField(_('版本代码'),
+        help_text=_('如：123'))
+    apk_file = models.FileField(_('APK 文件'), upload_to='app_packages/')
+    file_size = models.BigIntegerField(_('文件大小(字节)'), default=0)
+    file_md5 = models.CharField(_('MD5'), max_length=32, blank=True, default='')
+    file_sha1 = models.CharField(_('SHA1'), max_length=40, blank=True, default='')
+    signature_sha1 = models.CharField(_('签名 SHA1'), max_length=100, blank=True, default='')
+    signature_algorithm = models.CharField(_('签名算法'), max_length=50, blank=True, default='')
+    target_sdk = models.IntegerField(_('目标 SDK'), null=True, blank=True)
+    min_sdk = models.IntegerField(_('最低 SDK'), null=True, blank=True)
+    permissions = models.JSONField(_('权限列表'), default=list)
+    main_activity = models.CharField(_('启动 Activity'), max_length=300, blank=True, default='')
+    abi_support = models.JSONField(_('支持 ABI'), default=list)
+    changelog = models.TextField(_('版本说明'), blank=True, default='')
+    status = models.CharField(_('状态'), max_length=20,
+        choices=STATUS_CHOICES, default='released')
+    is_latest = models.BooleanField(_('是否最新版本'), default=False)
+    parse_status = models.CharField(_('解析状态'), max_length=20,
+        choices=PARSE_STATUS_CHOICES, default='pending')
+    parse_error = models.TextField(_('解析错误'), blank=True, default='')
+    # 自动清理相关
+    is_protected = models.BooleanField(_('受保护（不自动清理）'), default=False,
+        help_text=_('勾选后即使超过保留期也不会被自动清理'))
+    expire_at = models.DateTimeField(_('过期时间'), null=True, blank=True,
+        help_text=_('达到该时间后将被自动清理，默认上传后 30 天'))
+    cleaned_at = models.DateTimeField(_('清理时间'), null=True, blank=True,
+        help_text=_('被自动清理的时间'))
+    uploader = models.ForeignKey(
+        User, on_delete=models.SET_NULL, null=True,
+        related_name='uploaded_app_versions', verbose_name=_('上传人')
+    )
+    created_at = models.DateTimeField(_('上传时间'), auto_now_add=True)
+    updated_at = models.DateTimeField(_('更新时间'), auto_now=True)
+
+    class Meta:
+        verbose_name = _('APP 应用版本')
+        verbose_name_plural = _('APP 应用版本')
+        ordering = ['-version_code', '-created_at']
+        unique_together = ('package', 'version_code')
+        db_table = 'app_package_version'
+        indexes = [
+            models.Index(fields=['expire_at', 'is_protected']),
+            models.Index(fields=['status']),
+        ]
+
+    def __str__(self):
+        return f"{self.package.package_name} v{self.version_name} (code={self.version_code})"
+
+    def save(self, *args, **kwargs):
+        # 自动设置过期时间（首次保存时）
+        if not self.expire_at:
+            from datetime import timedelta
+            self.expire_at = timezone.now() + timedelta(days=self.RETENTION_DAYS)
+        super().save(*args, **kwargs)
+
+    def delete(self, *args, **kwargs):
+        # 删除磁盘上的 APK 文件
+        if self.apk_file:
+            apk_path = self.apk_file.path if hasattr(self.apk_file, 'path') else None
+            if apk_path and os.path.isfile(apk_path):
+                try:
+                    os.remove(apk_path)
+                except OSError:
+                    pass
+        super().delete(*args, **kwargs)
+
+    @property
+    def file_size_human(self):
+        """人类可读的文件大小"""
+        size = self.file_size
+        for unit in ['B', 'KB', 'MB', 'GB']:
+            if size < 1024.0:
+                return f"{size:.1f} {unit}"
+            size /= 1024.0
+        return f"{size:.1f} TB"
+
+    @property
+    def is_expired(self):
+        """是否已过期（达到自动清理时间）"""
+        if self.is_protected or not self.expire_at:
+            return False
+        return timezone.now() >= self.expire_at
+
+    @property
+    def days_to_expire(self):
+        """距离过期还剩多少天（负数表示已过期）"""
+        if not self.expire_at:
+            return None
+        delta = self.expire_at - timezone.now()
+        return delta.days
