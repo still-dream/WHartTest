@@ -8,12 +8,21 @@
 # - 默认使用 PostgreSQL（生产环境推荐）
 # - 如需使用 SQLite（本地开发），请设置环境变量 DATABASE_TYPE=sqlite 并注释掉 postgres 服务
 
+# ===== 通用环境变量 anchor（东八区时区）=====
+# 在各 service 里用 <<: *tz-env 引用，例如：
+#   environment:
+#     <<: *tz-env
+#     POSTGRES_USER: ...
+x-tz-env: &tz-env
+  TZ: Asia/Shanghai
+
 services:
   # PostgreSQL 数据库服务（生产环境默认启用）
   postgres:
     image: ${DOCKER_POSTGRES_IMAGE:-docker.1ms.run/library/postgres:16-alpine}
     container_name: wharttest-postgres
     environment:
+      <<: *tz-env
       POSTGRES_USER: ${POSTGRES_USER:-postgres}
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-postgres}
       POSTGRES_DB: ${POSTGRES_DB:-wharttest}
@@ -34,6 +43,8 @@ services:
   redis:
     image: ${DOCKER_REDIS_IMAGE:-docker.1ms.run/library/redis:7-alpine}
     container_name: wharttest-redis
+    environment:
+      <<: *tz-env
     ports:
       - "8911:6379"
     volumes:
@@ -87,44 +98,45 @@ services:
       - backend-static:/app/static
       - ./WHartTest_Skills:/app/bundled_skills:ro
     environment:
+      <<: *tz-env
       # 数据库配置
       # 默认使用 PostgreSQL（生产环境推荐）
       # 如需使用 SQLite（本地开发），请设置 DATABASE_TYPE=sqlite
-      - DATABASE_TYPE=${DATABASE_TYPE:-postgres}
+      DATABASE_TYPE: ${DATABASE_TYPE:-postgres}
       # SQLite 配置（DATABASE_TYPE=sqlite 时使用）
-      - DATABASE_PATH=${DATABASE_PATH:-/app/data/db.sqlite3}
+      DATABASE_PATH: ${DATABASE_PATH:-/app/data/db.sqlite3}
       # PostgreSQL 配置（DATABASE_TYPE=postgres 时使用）
-      - POSTGRES_HOST=${POSTGRES_HOST:-postgres}
-      - POSTGRES_PORT=${POSTGRES_PORT:-5432}
-      - POSTGRES_DB=${POSTGRES_DB:-wharttest}
-      - POSTGRES_USER=${POSTGRES_USER:-postgres}
-      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD:-postgres}
+      POSTGRES_HOST: ${POSTGRES_HOST:-postgres}
+      POSTGRES_PORT: ${POSTGRES_PORT:-5432}
+      POSTGRES_DB: ${POSTGRES_DB:-wharttest}
+      POSTGRES_USER: ${POSTGRES_USER:-postgres}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-postgres}
       # 其他配置
-      - MEDIA_ROOT=${MEDIA_ROOT:-/app/data/media}
-      - LANGGRAPH_CHECKPOINT_SQLITE_PATH=${LANGGRAPH_CHECKPOINT_SQLITE_PATH:-/app/data/chat_history.sqlite}
-      - DJANGO_DEBUG=True
-      - DJANGO_SECRET_KEY=${DJANGO_SECRET_KEY:-django-insecure-change-this-in-production}
-      - DJANGO_ALLOWED_HOSTS=${DJANGO_ALLOWED_HOSTS:-*}
-      - DJANGO_CORS_ALLOWED_ORIGINS=http://localhost:3000,http://localhost:5173,http://localhost:80
-      - DJANGO_ADMIN_USERNAME=${DJANGO_ADMIN_USERNAME:-admin}
-      - DJANGO_ADMIN_EMAIL=${DJANGO_ADMIN_EMAIL:-admin@example.com}
-      - DJANGO_ADMIN_PASSWORD=${DJANGO_ADMIN_PASSWORD:-admin123456}
+      MEDIA_ROOT: ${MEDIA_ROOT:-/app/data/media}
+      LANGGRAPH_CHECKPOINT_SQLITE_PATH: ${LANGGRAPH_CHECKPOINT_SQLITE_PATH:-/app/data/chat_history.sqlite}
+      DJANGO_DEBUG: "True"
+      DJANGO_SECRET_KEY: ${DJANGO_SECRET_KEY:-django-insecure-change-this-in-production}
+      DJANGO_ALLOWED_HOSTS: ${DJANGO_ALLOWED_HOSTS:-*}
+      DJANGO_CORS_ALLOWED_ORIGINS: "http://localhost:3000,http://localhost:5173,http://localhost:80"
+      DJANGO_ADMIN_USERNAME: ${DJANGO_ADMIN_USERNAME:-admin}
+      DJANGO_ADMIN_EMAIL: ${DJANGO_ADMIN_EMAIL:-admin@example.com}
+      DJANGO_ADMIN_PASSWORD: ${DJANGO_ADMIN_PASSWORD:-admin123456}
       # Celery配置
-      - CELERY_BROKER_URL=redis://redis:6379/0
-      - CELERY_RESULT_BACKEND=redis://redis:6379/0
+      CELERY_BROKER_URL: redis://redis:6379/0
+      CELERY_RESULT_BACKEND: redis://redis:6379/0
       # Qdrant向量数据库
-      - QDRANT_URL=http://qdrant:6333
+      QDRANT_URL: http://qdrant:6333
       # 内部API基础URL - 使用localhost因为在同一容器
-      - DJANGO_BASE_URL=http://localhost:8000
+      DJANGO_BASE_URL: http://localhost:8000
       # 外部可访问的基础URL - 用于通知消息中的报告链接
-      - DJANGO_PUBLIC_BASE_URL=${DJANGO_PUBLIC_BASE_URL:-http://10.66.110.24:8913}
-      - WEIXIN_PLUGIN_HOST_URL=http://weixin-plugin-host:3001
-      - HF_ENDPOINT=${DOCKER_HF_ENDPOINT:-https://hf-mirror.com}
+      DJANGO_PUBLIC_BASE_URL: ${DJANGO_PUBLIC_BASE_URL:-http://10.66.110.24:8913}
+      WEIXIN_PLUGIN_HOST_URL: http://weixin-plugin-host:3001
+      HF_ENDPOINT: ${DOCKER_HF_ENDPOINT:-https://hf-mirror.com}
       # APPUI 自动化配置 - 使用 airtest CLI（非 AirtestIDE GUI）
-      - AIRTEST_IDE_PATH=airtest
+      AIRTEST_IDE_PATH: airtest
       # 飞书开放平台应用配置（用于报告截图上传）
-      - FEISHU_APP_ID=${FEISHU_APP_ID:-}
-      - FEISHU_APP_SECRET=${FEISHU_APP_SECRET:-}
+      FEISHU_APP_ID: ${FEISHU_APP_ID:-}
+      FEISHU_APP_SECRET: ${FEISHU_APP_SECRET:-}
     depends_on:
       postgres:
         condition: service_healthy
@@ -161,15 +173,16 @@ services:
     volumes:
       - ./data:/app/data
     environment:
-      - PORT=3001
-      - HOST=0.0.0.0
+      <<: *tz-env
+      PORT: 3001
+      HOST: 0.0.0.0
       # weixin-plugin-host 回调后端的地址
       # Docker 全量部署：后端容器服务名为 backend，使用 Docker 内部网络直连
-      - WHARTTEST_BACKEND_URL=http://backend:8000
-      - WHARTTEST_API_KEY=${WHARTTEST_API_KEY:-wharttest-default-mcp-key-2025}
-      - WHARTTEST_SHARED_DATA_DIR=/app/data
-      - OPENCLAW_STATE_DIR=/app/data/openclaw-state
-      - OPENCLAW_CONFIG=/app/data/openclaw-state/openclaw.json
+      WHARTTEST_BACKEND_URL: http://backend:8000
+      WHARTTEST_API_KEY: ${WHARTTEST_API_KEY:-wharttest-default-mcp-key-2025}
+      WHARTTEST_SHARED_DATA_DIR: /app/data
+      OPENCLAW_STATE_DIR: /app/data/openclaw-state
+      OPENCLAW_CONFIG: /app/data/openclaw-state/openclaw.json
     networks:
       - wharttest-network
     restart: unless-stopped
@@ -196,6 +209,8 @@ services:
     container_name: wharttest-frontend
     ports:
       - "8913:80"
+    environment:
+      <<: *tz-env
     depends_on:
       - backend
     networks:
@@ -220,14 +235,15 @@ services:
     container_name: wharttest-mcp
     user: root
     environment:
+      <<: *tz-env
       # WHartTest Tools 配置
-      - WHARTTEST_BACKEND_URL=${WHARTTEST_BACKEND_URL:-http://backend:8000}
+      WHARTTEST_BACKEND_URL: ${WHARTTEST_BACKEND_URL:-http://backend:8000}
       # 使用系统自动生成的默认API Key，生产环境请在.env中覆盖
-      - WHARTTEST_API_KEY=${WHARTTEST_API_KEY:-wharttest-default-mcp-key-2025}
+      WHARTTEST_API_KEY: ${WHARTTEST_API_KEY:-wharttest-default-mcp-key-2025}
       # MS MCP API 配置（可选）
-      - MS_API_HOST=${MS_API_HOST:-http://ms.example.com}
-      - MS_ACCESS_KEY=${MS_ACCESS_KEY:-your_16byte_key1}
-      - MS_SECRET_KEY=${MS_SECRET_KEY:-your_16byte_key2}
+      MS_API_HOST: ${MS_API_HOST:-http://ms.example.com}
+      MS_ACCESS_KEY: ${MS_ACCESS_KEY:-your_16byte_key1}
+      MS_SECRET_KEY: ${MS_SECRET_KEY:-your_16byte_key2}
     ports:
       - "8914:8006" # WHartTest_tools 服务端口
       - "8915:8007" # ms_mcp_api 服务端口
@@ -252,6 +268,8 @@ services:
     image: ${DOCKER_PLAYWRIGHT_MCP_IMAGE:-mcr.microsoft.com/playwright/mcp}
     container_name: wharttest-playwright-mcp
     user: root # 以 root 用户运行,确保有权限写入挂载目录
+    environment:
+      <<: *tz-env
     entrypoint: [ "node", "/app/cli.js" ]
     command: [ "--no-sandbox", "--host", "0.0.0.0", "--allowed-hosts", "*", "--config", "/app/playwright-mcp-config.json" ]
     ports:
@@ -273,6 +291,8 @@ services:
   qdrant:
     image: ${DOCKER_QDRANT_IMAGE:-docker.1ms.run/qdrant/qdrant:latest}
     container_name: wharttest-qdrant
+    environment:
+      <<: *tz-env
     ports:
       - "8918:6333"  # REST API
     volumes:
