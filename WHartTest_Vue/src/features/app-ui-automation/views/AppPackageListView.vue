@@ -394,6 +394,11 @@ onMounted(() => {
   loadList()
   loadCleanupConfig()
 })
+
+// 暴露给父组件 tab 切换时调用
+defineExpose({
+  refresh: loadList,
+})
 </script>
 
 <style scoped>

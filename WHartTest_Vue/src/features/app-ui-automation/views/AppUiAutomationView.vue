@@ -11,6 +11,9 @@
         <a-tab-pane key="devices" :title="tl('设备管理')">
           <DeviceList ref="deviceListRef" />
         </a-tab-pane>
+        <a-tab-pane key="app-packages" :title="tl('应用管理')">
+          <AppPackageListView ref="appPackageListRef" />
+        </a-tab-pane>
         <a-tab-pane key="execution-records" :title="tl('执行记录')">
           <ExecutionRecordList ref="executionRecordListRef" />
         </a-tab-pane>
@@ -29,6 +32,7 @@ import { useProjectStore } from '@/store/projectStore'
 import ModuleTree from './ModuleTree.vue'
 import ScriptList from './ScriptList.vue'
 import DeviceList from './DeviceList.vue'
+import AppPackageListView from './AppPackageListView.vue'
 import ExecutionRecordList from './ExecutionRecordList.vue'
 import BatchRecordList from './BatchRecordList.vue'
 
@@ -42,9 +46,10 @@ const selectedModuleId = ref<number | undefined>(undefined)
 const moduleTreeRef = ref()
 const scriptListRef = ref()
 const deviceListRef = ref()
+const appPackageListRef = ref()
 const executionRecordListRef = ref()
 const batchRecordListRef = ref()
-void [moduleTreeRef, deviceListRef, executionRecordListRef, batchRecordListRef]
+void [moduleTreeRef, deviceListRef, appPackageListRef, executionRecordListRef, batchRecordListRef]
 
 // 页签切换时刷新对应数据
 watch(activeTab, (newTab) => {
@@ -54,6 +59,9 @@ watch(activeTab, (newTab) => {
       break
     case 'devices':
       deviceListRef.value?.refresh?.()
+      break
+    case 'app-packages':
+      appPackageListRef.value?.refresh?.()
       break
     case 'execution-records':
       executionRecordListRef.value?.refresh?.()
