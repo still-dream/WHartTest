@@ -148,6 +148,10 @@ services:
         condition: service_started
     networks:
       - wharttest-network
+    # 让容器内 host.docker.internal 解析到宿主机网关（Linux Docker 默认不识别该域名），
+    # 用于 airtest 通过宿主机 ADB server 连接 Android 模拟器
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
     restart: unless-stopped
     healthcheck:
       test: [ "CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/api/')" ]
