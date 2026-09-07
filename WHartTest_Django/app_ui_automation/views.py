@@ -9,7 +9,7 @@ from datetime import datetime
 from django.utils import timezone
 
 from rest_framework import viewsets, status
-from rest_framework.decorators import action
+from rest_framework.decorators import action, parser_classes
 from rest_framework.mixins import DestroyModelMixin
 from rest_framework.response import Response
 from rest_framework.parsers import MultiPartParser, FormParser
@@ -340,6 +340,56 @@ def _calc_file_hashes(file_obj):
     return md5.hexdigest(), sha1.hexdigest()
 
 
+def _create_app_package_version(request, pkg: AppPackage) -> Response:
+    """创建 AppPackageVersion 的核心逻辑（被嵌套 URL /app-packages/{id}/versions/ 和平铺 URL /app-package-versions/ 复用）"""
+    apk_file = request.FILES.get('apk_file')
+    if not apk_file:
+        return Response({'detail': '请上传 APK 文件'}, status=status.HTTP_400_BAD_REQUEST)
+
+    # 校验文件类型
+    if not apk_file.name.lower().endswith('.apk'):
+        return Response({'detail': '只支持 .apk 格式'}, status=status.HTTP_400_BAD_REQUEST)
+
+    # 校验大小（500MB）
+    if apk_file.size > 500 * 1024 * 1024:
+        return Response({'detail': '文件超过 500MB 限制'}, status=status.HTTP_400_BAD_REQUEST)
+
+    # 计算哈希
+    md5, sha1 = _calc_file_hashes(apk_file)
+
+    # 创建版本记录
+    try:
+        version_code = int(request.data.get('version_code', 0))
+    except (TypeError, ValueError):
+        version_code = 0
+
+    if not version_code:
+        return Response({'detail': '请提供有效的 version_code'}, status=status.HTTP_400_BAD_REQUEST)
+
+    version = AppPackageVersion(
+        package=pkg,
+        version_name=request.data.get('version_name', ''),
+        version_code=version_code,
+        apk_file=apk_file,
+        file_size=apk_file.size,
+        file_md5=md5,
+        file_sha1=sha1,
+        changelog=request.data.get('changelog', ''),
+        status=request.data.get('status', 'released'),
+        is_protected=str(request.data.get('is_protected', 'false')).lower() == 'true',
+        uploader=request.user if request.user.is_authenticated else None,
+        parse_status='pending',
+    )
+    try:
+        version.save()
+    except Exception as e:
+        logger.exception('保存 APK 版本失败: %s', e)
+        return Response({'detail': f'保存失败: {e}'}, status=status.HTTP_400_BAD_REQUEST)
+
+    serializer = AppPackageVersionSerializer(version, context={'request': request})
+    return Response(serializer.data, status=status.HTTP_201_CREATED)
+
+
 class AppPackageViewSet(viewsets.ModelViewSet):
     """APP 应用（按包名归一）"""
     queryset = AppPackage.objects.all()
@@ -359,10 +409,14 @@ class AppPackageViewSet(viewsets.ModelViewSet):
             qs = qs.filter(platform=platform)
         return qs
 
-    @action(detail=True, methods=['get'], url_path='versions')
+    @parser_classes([MultiPartParser, FormParser])
+    @action(detail=True, methods=['get', 'post'], url_path='versions')
     def list_versions(self, request, pk=None):
-        """列出指定 APP 下的所有版本（含受保护/清理状态）"""
+        """GET 列出指定 APP 下的所有版本；POST 上传新版本 (multipart/form-data)
+        （前端使用的是嵌套 URL /app-packages/{id}/versions/）"""
         pkg = self.get_object()
+        if request.method.lower() == 'post':
+            return _create_app_package_version(request, pkg)
         qs = pkg.versions.all().order_by('-version_code')
         serializer = AppPackageVersionSerializer(qs, many=True, context={'request': request})
         return Response(serializer.data)
@@ -388,62 +442,15 @@ class AppPackageVersionViewSet(viewsets.ModelViewSet):
         return qs
 
     def create(self, request, *args, **kwargs):
-        """上传新版本 (multipart/form-data)"""
+        """上传新版本 (multipart/form-data) - 平铺路由 /app-package-versions/"""
         package_id = request.data.get('package')
         if not package_id:
             return Response({'detail': '缺少 package 参数'}, status=status.HTTP_400_BAD_REQUEST)
-
         try:
             pkg = AppPackage.objects.get(id=package_id)
         except AppPackage.DoesNotExist:
             return Response({'detail': 'APP 不存在'}, status=status.HTTP_404_NOT_FOUND)
-
-        apk_file = request.FILES.get('apk_file')
-        if not apk_file:
-            return Response({'detail': '请上传 APK 文件'}, status=status.HTTP_400_BAD_REQUEST)
-
-        # 校验文件类型
-        if not apk_file.name.lower().endswith('.apk'):
-            return Response({'detail': '只支持 .apk 格式'}, status=status.HTTP_400_BAD_REQUEST)
-
-        # 校验大小（500MB）
-        if apk_file.size > 500 * 1024 * 1024:
-            return Response({'detail': '文件超过 500MB 限制'}, status=status.HTTP_400_BAD_REQUEST)
-
-        # 计算哈希
-        md5, sha1 = _calc_file_hashes(apk_file)
-
-        # 创建版本记录
-        try:
-            version_code = int(request.data.get('version_code', 0))
-        except (TypeError, ValueError):
-            version_code = 0
-
-        if not version_code:
-            return Response({'detail': '请提供有效的 version_code'}, status=status.HTTP_400_BAD_REQUEST)
-
-        version = AppPackageVersion(
-            package=pkg,
-            version_name=request.data.get('version_name', ''),
-            version_code=version_code,
-            apk_file=apk_file,
-            file_size=apk_file.size,
-            file_md5=md5,
-            file_sha1=sha1,
-            changelog=request.data.get('changelog', ''),
-            status=request.data.get('status', 'released'),
-            is_protected=str(request.data.get('is_protected', 'false')).lower() == 'true',
-            uploader=request.user if request.user.is_authenticated else None,
-            parse_status='pending',
-        )
-        try:
-            version.save()
-        except Exception as e:
-            logger.exception('保存 APK 版本失败: %s', e)
-            return Response({'detail': f'保存失败: {e}'}, status=status.HTTP_400_BAD_REQUEST)
-
-        serializer = AppPackageVersionSerializer(version, context={'request': request})
-        return Response(serializer.data, status=status.HTTP_201_CREATED)
+        return _create_app_package_version(request, pkg)
 
     @action(detail=True, methods=['post'], url_path='protect')
     def toggle_protection(self, request, pk=None):

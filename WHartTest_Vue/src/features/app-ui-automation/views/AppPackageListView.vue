@@ -188,13 +188,18 @@
 </template>
 
 <script setup lang="ts">
-import { onMounted, reactive, ref } from 'vue'
+import { computed, onMounted, reactive, ref } from 'vue'
 import { Message, Modal } from '@arco-design/web-vue'
 import AppPackageUploadModal from './AppPackageUploadModal.vue'
 import AppCleanupPreviewModal from './AppCleanupPreviewModal.vue'
 import { appPackageApi } from '../api'
 import type { AppPackage, AppPackageVersion, PaginatedResponse } from '../types'
 import { extractPaginationData } from '../types'
+import { useProjectStore } from '@/store/projectStore'
+
+// ============ 当前项目（来自全局项目仓库） ============
+const projectStore = useProjectStore()
+const projectId = computed(() => projectStore.currentProject?.id ?? null)
 
 // ============ 筛选与分页 ============
 const filters = ref({
@@ -250,7 +255,7 @@ async function loadList() {
     const res: any = await appPackageApi.list({
       search: filters.value.search || undefined,
       platform: filters.value.platform || undefined,
-      page: pagination.current,
+      ...({ page: pagination.current } as any),
       page_size: pagination.pageSize,
     })
     const { items, count } = extractPaginationData(res)
@@ -295,6 +300,10 @@ function onPageSizeChange(size: number) {
 
 // ============ 新建 APP ============
 function showCreateModal() {
+  if (!projectId.value) {
+    Message.error('请先选择项目')
+    return
+  }
   createModal.visible = true
 }
 
@@ -307,9 +316,16 @@ async function handleCreate() {
     Message.error('请输入包名')
     return
   }
+  if (!projectId.value) {
+    Message.error('请先选择项目')
+    return
+  }
   createModal.loading = true
   try {
-    await appPackageApi.create(createModal.form as any)
+    await appPackageApi.create({
+      ...createModal.form,
+      project: projectId.value,
+    } as any)
     Message.success('创建成功，请上传 APK')
     createModal.visible = false
     resetCreateForm()

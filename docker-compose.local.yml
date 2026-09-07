@@ -56,7 +56,11 @@ services:
       args:
         # 基础镜像走第三方镜像代理，绕开 daemon 的 registry-mirrors（sjtug）抽风。
         # 可通过 DOCKER_PYTHON_BASE_IMAGE 等变量切到其他源。
-        PYTHON_BASE_IMAGE: ${DOCKER_PYTHON_BASE_IMAGE:-docker.1ms.run/library/python:3.11-slim}
+        # ★ 钉到 -bookworm 变体标签，显式锁住 Debian 12 (bookworm)
+        #   避免 upstream 把 python:3.11-slim 默认 base 升到 trixie 时
+        #   触发 FROM 失效、整条 apt-get install (~200MB) 重跑
+        #   如需绝对不可变，再用 @sha256:xxx 钉 digest（需先 docker pull 拿 ID）
+        PYTHON_BASE_IMAGE: ${DOCKER_PYTHON_BASE_IMAGE:-docker.1ms.run/library/python:3.11-slim-bookworm}
         # ★ 国内 apt 源（默认清华）
         APT_BASE_URL: ${DOCKER_APT_BASE_URL:-https://mirrors.tuna.tsinghua.edu.cn}
         # ★ 国内 pip 源（默认清华）

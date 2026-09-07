@@ -29,7 +29,9 @@ ENV PYTHONUNBUFFERED=1 \
     HF_ENDPOINT=${HF_ENDPOINT}
 
 # 安装构建依赖（仅在构建阶段需要）
-RUN set -eux; \
+# ★ BuildKit cache mount：apt 包缓存到 /var/cache/apt，避免重跑时 200MB 重下
+RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
+    set -eux; \
     if [ -n "$APT_BASE_URL" ] && [ "$APT_BASE_URL" != "http://deb.debian.org" ]; then \
         echo ">>> 替换 apt 源为: $APT_BASE_URL"; \
         # 处理所有可能的 sources 文件（兼容新旧 Debian 格式）
@@ -140,7 +142,10 @@ ARG CHROME_FOR_TESTING_MIRROR=
 ARG CHROME_VERSION=stable
 
 # 仅安装浏览器工具需要的系统依赖
-RUN set -eux; \
+# ★ BuildKit cache mount：apt 包缓存到 /var/cache/apt；该 RUN 体积最大 (~200MB)，
+#   之前因 base 镜像 digest 变化重跑过整整 1 分 25 秒。挂上 mount 后 200MB → 几秒。
+RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
+    set -eux; \
     if [ -n "$APT_BASE_URL" ] && [ "$APT_BASE_URL" != "http://deb.debian.org" ]; then \
         echo ">>> 替换 apt 源为: $APT_BASE_URL"; \
         for f in /etc/apt/sources.list /etc/apt/sources.list.d/*.list /etc/apt/sources.list.d/*.sources; do \
@@ -186,20 +191,32 @@ RUN set -eux; \
 
 # 安装 Playwright (npm 版) 并下载 Chromium
 # 用 npm playwright 而非 Python playwright：避免依赖 /opt/venv，独立可缓存
-RUN set -eux; \
+# ★ mkdir -p + || echo 兜底：即使下载失败，也保证 /root/.cache/ms-playwright 目录存在
+#   （空目录也能被 COPY --from 正常复制），build 不会因目录不存在而炸
+# 注：不能对 /root/.cache/ms-playwright 用 --mount=type=cache，否则下一阶段
+#   COPY --from=browser-tools /root/.cache/ms-playwright 会找不到目录（cache mount 不入 image 层）
+RUN --mount=type=cache,target=/root/.npm,sharing=locked \
+    set -eux; \
+    mkdir -p /root/.cache/ms-playwright; \
     npm config set registry "${NPM_REGISTRY}"; \
     npm install -g playwright; \
     if [ -n "${PLAYWRIGHT_DOWNLOAD_HOST:-}" ]; then \
       echo "Using Playwright download host: ${PLAYWRIGHT_DOWNLOAD_HOST}"; \
-      PLAYWRIGHT_DOWNLOAD_HOST="${PLAYWRIGHT_DOWNLOAD_HOST}" npx playwright install chromium; \
+      PLAYWRIGHT_DOWNLOAD_HOST="${PLAYWRIGHT_DOWNLOAD_HOST}" npx playwright install chromium \
+        || echo "Warning: npx playwright install failed; Chromium will be missing in runtime"; \
     else \
-      npx playwright install chromium; \
+      npx playwright install chromium \
+        || echo "Warning: npx playwright install failed; Chromium will be missing in runtime"; \
     fi
 
 # 安装 agent-browser 并下载 Chrome for Testing
 # 支持通过 CHROME_FOR_TESTING_MIRROR 参数指定 Chrome for Testing 镜像地址
 # 如果镜像地址为空，则使用 agent-browser 自带下载
+# 注：不能对 /opt/chrome-for-testing 用 --mount=type=cache，否则下一阶段
+#   COPY --from=browser-tools /opt/chrome-for-testing 会找不到目录（cache mount 不入 image 层）
+#   改用 Docker 普通 layer 缓存：同层重新跑会复用已下载的 chrome zip
 RUN set -eux; \
+    mkdir -p /opt/chrome-for-testing; \
     npm install -g agent-browser; \
     echo "agent-browser npm package installed successfully"; \
     if [ -n "${CHROME_FOR_TESTING_MIRROR}" ]; then \
@@ -239,11 +256,13 @@ RUN set -eux; \
             sleep 5; \
         done; \
         if [ -f /tmp/chrome.zip ]; then \
-            unzip -q /tmp/chrome.zip -d /opt/chrome-for-testing; \
-            rm /tmp/chrome.zip; \
-            echo "Chrome for Testing installed to /opt/chrome-for-testing"; \
-        else \
-            echo "Warning: Chrome download from mirror failed, falling back to agent-browser install"; \
+            unzip -q /tmp/chrome.zip -d /opt/chrome-for-testing \
+                && rm /tmp/chrome.zip \
+                && echo "Chrome for Testing installed to /opt/chrome-for-testing" \
+                || echo "Warning: Chrome unzip failed; will fall back to agent-browser install"; \
+        fi; \
+        if [ ! -d /opt/chrome-for-testing/chrome-linux64 ]; then \
+            echo "Warning: Chrome download from mirror failed or unzip failed, falling back to agent-browser install"; \
             agent-browser install || echo "Warning: agent-browser install also failed"; \
         fi; \
     else \
@@ -258,7 +277,7 @@ RUN set -eux; \
             if [ "$i" -lt 3 ]; then \
                 sleep 10; \
             fi; \
-        done; \
+        done || echo "Warning: agent-browser install failed after 3 attempts; Chrome for Testing will be missing"; \
     fi
 
 # ============================================
@@ -289,7 +308,9 @@ ENV PYTHONUNBUFFERED=1 \
 # 仅安装运行时必需的系统依赖
 # 注意：浏览器二进制（playwright / agent-browser / Chrome for Testing）已在 browser-tools 阶段
 # 下载完成并通过 COPY --from=browser-tools 引入，这里不再安装 npm 也不再下载浏览器。
-RUN set -eux; \
+# ★ BuildKit cache mount：apt 包缓存到 /var/cache/apt，与 browser-tools 阶段共享。
+RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
+    set -eux; \
     if [ -n "$APT_BASE_URL" ] && [ "$APT_BASE_URL" != "http://deb.debian.org" ]; then \
         echo ">>> 替换 apt 源为: $APT_BASE_URL"; \
         for f in /etc/apt/sources.list /etc/apt/sources.list.d/*.list /etc/apt/sources.list.d/*.sources; do \
