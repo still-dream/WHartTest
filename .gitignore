@@ -5,6 +5,7 @@
 .env.*.local
 *.env.*
 !*.env.example
+!.env.production
 
 # IDE / Editor
 .vscode/
