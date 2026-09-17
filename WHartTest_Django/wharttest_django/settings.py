@@ -754,3 +754,7 @@ AIRTEST_REPORT_TEMPLATE = os.path.join(
 # 不配置时跳过截图，仅发送文本通知
 FEISHU_APP_ID = os.environ.get('FEISHU_APP_ID', '')
 FEISHU_APP_SECRET = os.environ.get('FEISHU_APP_SECRET', '')
+# 飞书 OAuth 登录回调地址（前端回调页路由），需与飞书开放平台「重定向 URL」一致
+FEISHU_REDIRECT_URI = os.environ.get(
+    'FEISHU_REDIRECT_URI', 'http://localhost:5173/login/feishu/callback'
+)
