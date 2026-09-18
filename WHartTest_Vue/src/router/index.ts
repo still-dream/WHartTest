@@ -2,6 +2,7 @@ import { createRouter, createWebHistory, type RouteRecordRaw } from 'vue-router'
 import { useAuthStore } from '../store/authStore.ts'; // 导入认证 store 获取函数，用于守卫中读取登录态。
 import MainLayout from '../layouts/MainLayout.vue'; // 导入主布局组件，作为受保护页面的统一壳层。
 import LoginView from '../views/LoginView.vue'; // 导入登录页面组件。
+import FeishuCallbackView from '@/views/FeishuCallbackView.vue'; // 导入飞书登录回调页面组件。
 import RegisterView from '../views/RegisterView.vue'; // 导入注册页面组件。
 import DashboardView from '../views/DashboardView.vue'; // 导入首页仪表盘页面组件。
 import UserManagementView from '../views/UserManagementView.vue'; // 导入用户管理页面组件。
@@ -41,6 +42,11 @@ const routes: Array<RouteRecordRaw> = [ // 声明路由表数组，类型约束�
     path: '/register', // 定义注册页访问路径。
     name: 'Register', // 定义注册路由名称。
     component: RegisterView // 指定注册路由对应组件。
+  },
+  {
+    path: '/login/feishu/callback', // 飞书 OAuth 回调地址，与后端 FEISHU_REDIRECT_URI 默认值一致。
+    name: 'FeishuCallback', // 定义飞书回调路由名称。
+    component: FeishuCallbackView // 指定回调页组件，负责用 code 完成登录。
   },
   {
     path: '/', // 定义主应用根路径。
@@ -267,7 +273,7 @@ router.beforeEach((to, _from, next) => { // 注册全局前置守卫，在每次
   console.log('[Router Guard] 认证状态:', { isLoggedIn, toName: to.name }); // 输出鉴权判定前的状态日志。
 
   // 不需要认证的白名单路由
-  const publicRoutes = ['Login', 'Register']; // 声明公开路由名称白名单。
+  const publicRoutes = ['Login', 'Register', 'FeishuCallback']; // 声明公开路由名称白名单。
   const isPublicRoute = publicRoutes.includes(to.name as string); // 判断目标路由是否属于公开白名单。
 
   if (!isLoggedIn && !isPublicRoute) { // 未登录且访问受保护路由时触发重定向。
