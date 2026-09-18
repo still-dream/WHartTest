@@ -7,7 +7,8 @@ from rest_framework.routers import DefaultRouter
 # 导入账户模块下的视图。
 from .views import (
     UserCreateAPIView, CurrentUserAPIView,
-    GroupViewSet, PermissionViewSet, UserViewSet, ContentTypeViewSet
+    GroupViewSet, PermissionViewSet, UserViewSet, ContentTypeViewSet,
+    FeishuAuthorizeUrlView, FeishuLoginView
 )
 
 # 创建账户模块路由器实例。
@@ -22,6 +23,8 @@ urlpatterns = [
     path('', include(router.urls)),  # 挂载 ViewSet 自动路由。
     path('register/', UserCreateAPIView.as_view(), name='user-register'),  # 用户注册端点。
     path('me/', CurrentUserAPIView.as_view(), name='user-me'),  # 当前登录用户信息端点。
+    path('feishu/authorize-url/', FeishuAuthorizeUrlView.as_view(), name='feishu-authorize-url'),
+    path('feishu/login/', FeishuLoginView.as_view(), name='feishu-login'),
     # 挂载操作日志路由（GET/列表、统计、清理旧日志等）。
     path('', include('accounts.operation_logs.urls')),
 ]

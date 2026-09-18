@@ -11,6 +11,8 @@ from rest_framework.response import Response
 from rest_framework.views import APIView
 from wharttest_django.permissions import HasModelPermission, permission_required
 
+from django.conf import settings
+from rest_framework_simplejwt.tokens import RefreshToken
 from rest_framework_simplejwt.views import (
     TokenObtainPairView as BaseTokenObtainPairView,
 )
@@ -29,6 +31,14 @@ from .serializers import (
     UpdateUserPermissionsSerializer,
     UpdateGroupPermissionsSerializer,
     MyTokenObtainPairSerializer,
+)
+from .feishu import (
+    FeishuAuthError,
+    build_authorize_url,
+    build_state,
+    exchange_code_for_token,
+    get_feishu_user,
+    verify_state,
 )
 
 
@@ -909,3 +919,99 @@ class MyTokenObtainPairView(BaseTokenObtainPairView):
                 {"detail": "认证服务正在启动，请稍后重试。"},
                 status=status.HTTP_503_SERVICE_UNAVAILABLE,
             )
+
+
+class FeishuAuthorizeUrlView(APIView):
+    """返回飞书 OAuth 授权页地址（供前端整页跳转）。"""
+
+    permission_classes = [AllowAny]
+
+    def get(self, request, *args, **kwargs):
+        if not getattr(settings, "FEISHU_APP_ID", "") or not getattr(
+            settings, "FEISHU_APP_SECRET", ""
+        ):
+            return Response(
+                {"detail": "飞书登录未配置，请联系管理员。"},
+                status=status.HTTP_503_SERVICE_UNAVAILABLE,
+            )
+        state = build_state()
+        return Response(
+            {"authorize_url": build_authorize_url(state), "state": state},
+            status=status.HTTP_200_OK,
+        )
+
+
+def _generate_feishu_username(email: str) -> str:
+    """用邮箱前缀生成用户名，与现有用户名冲突（不区分大小写）时追加数字后缀。"""
+    base = email.split("@", 1)[0] or "feishu_user"
+    if not User.objects.filter(username__iexact=base).exists():
+        return base
+    index = 1
+    while True:
+        candidate = f"{base}{index}"
+        if not User.objects.filter(username__iexact=candidate).exists():
+            return candidate
+        index += 1
+
+
+class FeishuLoginView(APIView):
+    """飞书授权码登录：按邮箱匹配活跃账号，未匹配则自动创建（默认密码 Jt123456）。"""
+
+    permission_classes = [AllowAny]
+
+    def post(self, request, *args, **kwargs):
+        code = request.data.get("code")
+        state = request.data.get("state")
+        if not code or not state:
+            return Response(
+                {"detail": "缺少 code 或 state 参数。"},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+        if not verify_state(state):
+            return Response(
+                {"detail": "登录 state 校验失败，请重新发起飞书登录。"},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        try:
+            token_data = exchange_code_for_token(code)
+            feishu_user = get_feishu_user(token_data["access_token"])
+            email = (feishu_user.get("email") or "").strip()
+            feishu_name = (feishu_user.get("name") or "").strip()
+            if not email:
+                return Response(
+                    {"detail": "飞书账号未绑定邮箱，无法登录，请使用账号密码登录。"},
+                    status=status.HTTP_400_BAD_REQUEST,
+                )
+
+            user = User.objects.filter(email__iexact=email, is_active=True).first()
+            if user is None:
+                user = User.objects.create_user(
+                    username=_generate_feishu_username(email),
+                    email=email,
+                    password="Jt123456",
+                    first_name=feishu_name,
+                    is_active=True,
+                )
+            elif feishu_name and user.first_name != feishu_name:
+                user.first_name = feishu_name
+                user.save(update_fields=["first_name"])
+        except FeishuAuthError as exc:
+            return Response(
+                {"detail": str(exc)}, status=status.HTTP_400_BAD_REQUEST
+            )
+        except OperationalError:
+            return Response(
+                {"detail": "认证服务正在启动，请稍后重试。"},
+                status=status.HTTP_503_SERVICE_UNAVAILABLE,
+            )
+
+        refresh = RefreshToken.for_user(user)
+        return Response(
+            {
+                "access": str(refresh.access_token),
+                "refresh": str(refresh),
+                "user": UserDetailSerializer(user).data,
+            },
+            status=status.HTTP_200_OK,
+        )
