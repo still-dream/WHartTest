@@ -129,8 +129,7 @@ services:
         condition: service_healthy
       qdrant:
         condition: service_started
-      weixin-plugin-host:
-        condition: service_started
+      # weixin-plugin-host 已加入 weixin profile 暂时下线，不再作为启动依赖。
     networks:
       - skillforge-network
     restart: unless-stopped
@@ -142,6 +141,9 @@ services:
       start_period: 40s
 
   weixin-plugin-host:
+    # ★ 微信插件宿主服务暂时下线：加入 weixin profile，默认 up 不启动、不构建。
+    #   需要时显式启用: docker compose --profile weixin up -d
+    profiles: [ "weixin" ]
     build:
       context: ./SkillForge_WeixinPluginHost
       dockerfile: Dockerfile

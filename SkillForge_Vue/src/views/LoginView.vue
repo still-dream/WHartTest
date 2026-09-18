@@ -5,7 +5,7 @@
     <div class="content-layer">
       <div class="brand-area">
         <img :src="brandLogoUrl" alt="Logo" class="brand-logo" />
-        <h1 class="brand-title">SkillForgeTest</h1>
+        <h1 class="brand-title">SkillForge</h1>
         <p class="brand-subtitle">J&T智萃平台</p>
         <div class="brand-tags">
           <span v-for="tag in featureTags" :key="tag" class="tag">{{ tag }}</span>

@@ -4,7 +4,7 @@
     <a-layout-header class="header">
       <div class="left-section">
         <div class="logo" unselectable="on">
-          <img :src="brandLogoUrl" alt="SkillForgeTest Logo" class="logo-icon" />
+          <img :src="brandLogoUrl" alt="SkillForge Logo" class="logo-icon" />
           <span class="logo-text">J&T智萃平台</span>
         </div>
         <div class="project-selector" v-if="showProjectSelector">

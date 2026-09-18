@@ -667,9 +667,9 @@ def _build_interrupt_reply(interrupt: dict) -> str:
     if tool_names:
         return (
             "这条消息命中了需要人工确认的操作："
-            f"{'、'.join(tool_names)}。请到 WHartTest 网页端完成审批后继续。"
+            f"{'、'.join(tool_names)}。请到 SkillForge 网页端完成审批后继续。"
         )
-    return "这条消息需要在 WHartTest 网页端完成人工审批后才能继续执行。"
+    return "这条消息需要在 SkillForge 网页端完成人工审批后才能继续执行。"
 
 
 def encode_local_image_to_base64(image_path: str) -> str:

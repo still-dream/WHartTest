@@ -86,5 +86,5 @@ export const NOTIFICATION_VARIABLES: NotificationVariable[] = [
   { name: 'current_date', description: '当前日期时间', example: '2026-07-14 15:30:00' },
   { name: 'report_url', description: '报告链接', example: 'https://...' },
   { name: 'task_url', description: '任务详情链接', example: 'https://...' },
-  { name: 'platform_name', description: '平台名称', example: 'WHartTest' },
+  { name: 'platform_name', description: '平台名称', example: 'SkillForge' },
 ];

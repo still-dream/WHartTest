@@ -150,8 +150,7 @@ services:
         condition: service_healthy
       qdrant:
         condition: service_started
-      weixin-plugin-host:
-        condition: service_started
+      # weixin-plugin-host 已加入 weixin profile 暂时下线，不再作为启动依赖。
     networks:
       - skillforge-network
     # 让容器内 host.docker.internal 解析到宿主机网关（Linux Docker 默认不识别该域名），
@@ -167,6 +166,9 @@ services:
       start_period: 40s
 
   weixin-plugin-host:
+    # ★ 微信插件宿主服务暂时下线：加入 weixin profile，默认 up 不启动、不构建。
+    #   需要时显式启用: docker compose --profile weixin up -d
+    profiles: [ "weixin" ]
     # image: ${DOCKER_WEIXIN_PLUGIN_HOST_IMAGE:-ghcr.io/mgdaaslab/skillforge-weixin-plugin-host:latest}
     # 如果需要本地构建，注释掉上面的image行，取消注释下面的build部分
     build:
@@ -237,11 +239,16 @@ services:
 
   # MCP 服务（独立容器）
   mcp:
-    image: ${DOCKER_MCP_IMAGE:-ghcr.io/mgdaaslab/skillforge-mcp:latest}
-    # 如果需要本地构建，注释掉上面的image行，取消注释下面的build部分
-    # build:
-    #   context: ./SkillForge_MCP
-    #   dockerfile: Dockerfile
+    # image: ${DOCKER_MCP_IMAGE:-ghcr.io/mgdaaslab/skillforge-mcp:latest}
+    # 如果需要使用远端预构建镜像，取消注释上面的image行，注释掉下面的build部分
+    build:
+      context: ./SkillForge_MCP
+      dockerfile: Dockerfile
+      args:
+        PYTHON_BASE_IMAGE: ${DOCKER_PYTHON_BASE_IMAGE:-docker.1ms.run/library/python:3.11-slim}
+        APT_BASE_URL: ${DOCKER_APT_BASE_URL:-https://mirrors.tuna.tsinghua.edu.cn}
+        PIP_INDEX_URL: ${DOCKER_PIP_INDEX_URL:-https://pypi.tuna.tsinghua.edu.cn/simple}
+        PIP_INDEX_FALLBACKS: ${DOCKER_PIP_INDEX_FALLBACKS:-https://pypi.org/simple}
     container_name: skillforge-mcp
     user: root
     environment:

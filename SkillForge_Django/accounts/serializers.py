@@ -439,6 +439,12 @@ class ContentTypeSerializer(serializers.ModelSerializer):
         if app_label == "prompts":
             return "LLM对话"
 
+        # 条件：APP 自动化模块下不同模型；动作：拆分到不同一级菜单；结果：APP 应用与 APPUI 自动化权限独立成根目录。
+        if app_label == "app_ui_automation":
+            if model_name in ["apppackage", "apppackageversion"]:
+                return "APP应用"
+            return "APPUI自动化"
+
         app_labels = {
             # 前端一级菜单
             "projects": "项目管理",
@@ -490,6 +496,12 @@ class ContentTypeSerializer(serializers.ModelSerializer):
 
         if app_label == "prompts":
             return "LLM Chat"
+
+        # APP automation models split into their own first-level categories.
+        if app_label == "app_ui_automation":
+            if model_name in ["apppackage", "apppackageversion"]:
+                return "APP Application"
+            return "APP UI Automation"
 
         app_labels = {
             "projects": "Project Management",
@@ -725,11 +737,13 @@ class ContentTypeSerializer(serializers.ModelSerializer):
             "需求管理": 2,
             "接口自动化": 3,
             "UI自动化": 4,
-            "任务中心": 5,
-            "测试管理": 6,
-            "LLM对话": 7,
-            "知识库管理": 8,
-            "系统管理": 9,
+            "APPUI自动化": 5,
+            "APP应用": 6,
+            "任务中心": 7,
+            "测试管理": 8,
+            "LLM对话": 9,
+            "知识库管理": 10,
+            "系统管理": 11,
         }
         return sort_order.get(app_label_cn, 99)
 

@@ -166,8 +166,8 @@ const APP_MESSAGES: MessageCatalog = {
     'en-US': 'Create an account',
   },
   'register.subtitle': {
-    'zh-CN': '欢迎加入WHartTest',
-    'en-US': 'Welcome to WHartTest',
+    'zh-CN': '欢迎加入SkillForge',
+    'en-US': 'Welcome to SkillForge',
   },
   'register.submit': {
     'zh-CN': '注册',
@@ -322,8 +322,8 @@ const APP_MESSAGES: MessageCatalog = {
     'en-US': 'Thinking',
   },
   'chat.empty': {
-    'zh-CN': '开始与 WHartTest 的对话吧',
-    'en-US': 'Start a conversation with WHartTest',
+    'zh-CN': '开始与 SkillForge 的对话吧',
+    'en-US': 'Start a conversation with SkillForge',
   },
   'chat.releaseToUpload': {
     'zh-CN': '释放以上传图片',
@@ -386,8 +386,8 @@ const APP_MESSAGES: MessageCatalog = {
     'en-US': 'Select a project first',
   },
   'chat.startConversation': {
-    'zh-CN': '开始与 WHartTest 的对话吧',
-    'en-US': 'Start a conversation with WHartTest',
+    'zh-CN': '开始与 SkillForge 的对话吧',
+    'en-US': 'Start a conversation with SkillForge',
   },
   'chat.toolScreenshot': {
     'zh-CN': '📷 工具截图',
@@ -471,7 +471,7 @@ const LEGACY_EXACT_EN_MAP: Record<string, string> = {
   '还没有账号?': 'No account yet?',
   '立即注册': 'Register now',
   '注册新账户': 'Create an account',
-  '欢迎加入WHartTest': 'Welcome to WHartTest',
+  '欢迎加入SkillForge': 'Welcome to SkillForge',
   '请输入邮箱地址': 'Enter email address',
   '请再次输入密码': 'Confirm password',
   '注册': 'Register',
@@ -489,7 +489,7 @@ const LEGACY_EXACT_EN_MAP: Record<string, string> = {
   '工具审批': 'Tool approval',
   '微信接入': 'WeChat access',
   '清除对话': 'Clear chat',
-  '开始与 WHartTest 的对话吧': 'Start a conversation with WHartTest',
+  '开始与 SkillForge 的对话吧': 'Start a conversation with SkillForge',
   '图表预览': 'Diagram preview',
   'HTML 预览': 'HTML preview',
   '工具执行审批': 'Tool execution approval',
