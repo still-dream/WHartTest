@@ -14,6 +14,7 @@ from accounts.feishu import (
     build_state,
     exchange_code_for_token,
     get_feishu_user,
+    get_feishu_user_detail,
     sign_state,
     verify_state,
 )
@@ -88,6 +89,13 @@ class FeishuServiceTests(SimpleTestCase):
         self.assertIn('state=my-state', url)
         self.assertIn(
             'redirect_uri=http%3A%2F%2Ftestserver%2Flogin%2Ffeishu%2Fcallback', url
+        )
+        # scope 决定 user_access_token 权限范围：须含接口权限与字段权限，空格编码为 %20。
+        self.assertIn(
+            'scope=contact%3Acontact.base%3Areadonly'
+            '%20contact%3Auser.base%3Areadonly'
+            '%20contact%3Auser.employee%3Areadonly',
+            url,
         )
 
     def test_state_roundtrip_verification(self):
@@ -204,6 +212,35 @@ class FeishuServiceTests(SimpleTestCase):
 
         self.assertIn('获取飞书用户信息失败', captured_logs.output[0])
 
+    @patch('accounts.feishu.httpx.get')
+    def test_get_feishu_user_detail_returns_v3_user(self, mock_get):
+        mock_get.return_value.json.return_value = {
+            'code': 0,
+            'data': {'user': {'name': '张三', 'email': 'zhangsan@example.com'}},
+        }
+
+        user = get_feishu_user_detail('u-access', 'ou_test')
+
+        self.assertEqual(user['email'], 'zhangsan@example.com')
+        self.assertEqual(
+            mock_get.call_args.args[0],
+            'https://open.feishu.cn/open-apis/contact/v3/users/ou_test',
+        )
+        self.assertEqual(mock_get.call_args.kwargs['params']['user_id_type'], 'open_id')
+        self.assertEqual(
+            mock_get.call_args.kwargs['headers']['Authorization'], 'Bearer u-access'
+        )
+
+    @patch('accounts.feishu.httpx.get')
+    def test_get_feishu_user_detail_raises_on_error_code(self, mock_get):
+        mock_get.return_value.json.return_value = {'code': 99991663, 'msg': '无权限'}
+
+        with self.assertLogs('accounts.feishu', level='WARNING') as captured_logs:
+            with self.assertRaises(FeishuAuthError):
+                get_feishu_user_detail('u-access', 'ou_test')
+
+        self.assertIn('获取飞书通讯录用户信息失败', captured_logs.output[0])
+
 
 @override_settings(
     FEISHU_APP_ID='cli_test',
@@ -219,12 +256,26 @@ class FeishuLoginViewTests(TestCase):
             'code': 0, 'access_token': 'u-access', 'refresh_token': 'u-refresh',
         }
         self.feishu_user_payload = {
-            'code': 0, 'data': {'name': '张三', 'email': 'zhangsan@example.com'},
+            'code': 0,
+            'data': {'name': '张三', 'open_id': 'ou_test', 'enterprise_email': 'zhangsan@example.com'},
         }
 
-    def _mock_feishu_apis(self, mock_post, mock_get):
+    def _mock_feishu_apis(self, mock_post, mock_get, legacy_data=None, v3_user=None):
+        """按调用顺序 mock 两次 GET：①旧版登录用户信息 ②通讯录 v3 详情。
+
+        legacy_data 覆盖旧版响应默认字段（name/open_id/enterprise_email）；v3_user 为
+        通讯录 data.user 内容，默认空 dict（合并不影响旧版数据）。
+        """
         mock_post.return_value.json.return_value = dict(self.feishu_token_payload)
-        mock_get.return_value.json.return_value = dict(self.feishu_user_payload)
+        legacy_payload = {
+            'code': 0,
+            'data': dict(
+                {'name': '张三', 'open_id': 'ou_test', 'enterprise_email': 'zhangsan@example.com'},
+                **(legacy_data or {}),
+            ),
+        }
+        v3_payload = {'code': 0, 'data': {'user': dict(v3_user or {})}}
+        mock_get.return_value.json.side_effect = [legacy_payload, v3_payload]
 
     def _post_feishu_login(self, code='auth-code', state=None):
         request = self.factory.post(
@@ -299,16 +350,75 @@ class FeishuLoginViewTests(TestCase):
 
     @patch('accounts.feishu.httpx.get')
     @patch('accounts.feishu.httpx.post')
-    def test_missing_email_rejected(self, mock_post, mock_get):
-        mock_post.return_value.json.return_value = dict(self.feishu_token_payload)
-        mock_get.return_value.json.return_value = {
-            'code': 0, 'data': {'name': '张三'},
-        }
+    def test_missing_enterprise_email_rejected(self, mock_post, mock_get):
+        # 无任何企业邮箱字段（即使个人邮箱存在）时应拒绝登录。
+        self._mock_feishu_apis(
+            mock_post, mock_get,
+            legacy_data={'email': '', 'enterprise_email': ''},
+            v3_user={'name': '张三', 'email': 'personal@example.com'},
+        )
 
         response = self._post_feishu_login()
 
         self.assertEqual(response.status_code, 400)
-        self.assertIn('邮箱', response.data['detail'])
+        self.assertIn('企业邮箱', response.data['detail'])
+
+    @patch('accounts.feishu.httpx.get')
+    @patch('accounts.feishu.httpx.post')
+    def test_v3_detail_supplies_enterprise_email(self, mock_post, mock_get):
+        # 旧版无企业邮箱、通讯录 v3 详情返回企业邮箱时，以其合并结果登录。
+        self._mock_feishu_apis(
+            mock_post, mock_get,
+            legacy_data={'enterprise_email': ''},
+            v3_user={'name': '张三', 'enterprise_email': 'zhangsan@example.com'},
+        )
+
+        response = self._post_feishu_login()
+
+        self.assertEqual(response.status_code, 200)
+        self.assertTrue(
+            User.objects.filter(email__iexact='zhangsan@example.com').exists()
+        )
+
+    @patch('accounts.feishu.httpx.get')
+    @patch('accounts.feishu.httpx.post')
+    def test_legacy_enterprise_email_fallback(self, mock_post, mock_get):
+        # 通讯录 v3 详情为空时，旧版响应中的企业邮箱同样可用。
+        self._mock_feishu_apis(
+            mock_post, mock_get,
+            legacy_data={'enterprise_email': 'zhangsan@example.com'},
+        )
+
+        response = self._post_feishu_login()
+
+        self.assertEqual(response.status_code, 200)
+        self.assertTrue(
+            User.objects.filter(email__iexact='zhangsan@example.com').exists()
+        )
+
+    @patch('accounts.feishu.httpx.get')
+    @patch('accounts.feishu.httpx.post')
+    def test_v3_detail_failure_falls_back_to_legacy_data(self, mock_post, mock_get):
+        # 通讯录 v3 详情获取失败（错误码）时降级使用旧版数据，登录不阻断。
+        mock_post.return_value.json.return_value = dict(self.feishu_token_payload)
+        legacy_payload = {
+            'code': 0,
+            'data': {
+                'name': '张三', 'open_id': 'ou_test',
+                'enterprise_email': 'zhangsan@example.com',
+            },
+        }
+        v3_payload = {'code': 99991663, 'msg': 'permission denied'}
+        mock_get.return_value.json.side_effect = [legacy_payload, v3_payload]
+
+        with self.assertLogs('accounts.views', level='WARNING') as captured_logs:
+            response = self._post_feishu_login()
+
+        self.assertEqual(response.status_code, 200)
+        self.assertTrue(
+            User.objects.filter(email__iexact='zhangsan@example.com').exists()
+        )
+        self.assertIn('降级使用登录用户信息', captured_logs.output[0])
 
     def test_invalid_state_rejected(self):
         response = self._post_feishu_login(state='123.deadbeef')

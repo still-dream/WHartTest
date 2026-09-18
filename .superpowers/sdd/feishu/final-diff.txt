@@ -1,0 +1,1419 @@
+﻿582cb62 feat: 新增飞书登录回调页与路由
+ff7001c feat: 登录页新增飞书登录入口
+8be5629 feat: authStore 新增飞书登录 action
+58adebe feat: authService 新增飞书授权地址与飞书登录接口
+6b86779 feat: 新增飞书登录视图与路由（邮箱匹配登录/自动建号）
+fc49fb6 feat: 新增飞书 OAuth 服务层（授权地址/state 签名/令牌交换/用户信息）
+2a3dd7d feat: 新增飞书 OAuth 登录回调地址配置
+ WHartTest_Django/.env.example                  |   7 +
+ WHartTest_Django/accounts/feishu.py            | 125 +++++++++++
+ WHartTest_Django/accounts/tests.py             | 275 ++++++++++++++++++++++++-
+ WHartTest_Django/accounts/urls.py              |   5 +-
+ WHartTest_Django/accounts/views.py             | 106 ++++++++++
+ WHartTest_Django/wharttest_django/settings.py  |   4 +
+ WHartTest_Vue/src/router/index.ts              |   8 +-
+ WHartTest_Vue/src/services/authService.ts      | 119 +++++++++++
+ WHartTest_Vue/src/store/authStore.ts           |  57 +++++
+ WHartTest_Vue/src/views/FeishuCallbackView.vue | 179 ++++++++++++++++
+ WHartTest_Vue/src/views/LoginView.vue          | 129 +++++++++---
+ 11 files changed, 985 insertions(+), 29 deletions(-)
+diff --git a/WHartTest_Django/.env.example b/WHartTest_Django/.env.example
+index fb4911b..ee1a040 100644
+--- a/WHartTest_Django/.env.example
++++ b/WHartTest_Django/.env.example
+@@ -96,10 +96,17 @@ DOCX_EDITOR_SERVICE_KEY=
+ # 外部可访问的基础 URL，用于生成通知消息中的链接（如飞书消息中的报告链接）
+ # 应设置为用户可从浏览器访问的实际地址
+ # DJANGO_PUBLIC_BASE_URL=http://10.66.110.24:8913
+ 
+ # ================================
+ # Qdrant 向量数据库配置
+ # ================================
+ # 本地开发：连接 Docker 容器中的 Qdrant（端口 8918）
+ # Docker 部署：使用 docker-compose.yml 中的配置（http://qdrant:6333）
+ QDRANT_URL=http://127.0.0.1:8918
++
++# ============================== 飞书 OAuth 登录 ==============================
++# 飞书开放平台应用凭证（OAuth 登录用；与上方通知功能共用同名变量，配置一个应用即可）
++# FEISHU_APP_ID=cli_xxx
++# FEISHU_APP_SECRET=xxx
++# OAuth 回调地址，必须与飞书开放平台「安全设置-重定向 URL」中登记的地址完全一致
++FEISHU_REDIRECT_URI=http://localhost:5173/login/feishu/callback
+diff --git a/WHartTest_Django/accounts/feishu.py b/WHartTest_Django/accounts/feishu.py
+new file mode 100644
+index 0000000..dfbb73b
+--- /dev/null
++++ b/WHartTest_Django/accounts/feishu.py
+@@ -0,0 +1,125 @@
++"""飞书 OAuth 登录服务层。
++
++负责构建授权页地址、签发/校验 state、与飞书开放平台交换令牌、获取用户信息。
++官方端点（2026-09 核实）：
++- 授权页: https://accounts.feishu.cn/open-apis/authen/v1/authorize （response_type=code 必填）
++- token(v3): https://accounts.feishu.cn/oauth/v3/token （扁平响应，成功依据 code == 0）
++- 用户信息: https://open.feishu.cn/open-apis/authen/v1/user_info （Bearer user_access_token）
++"""
++
++import hashlib
++import hmac
++import logging
++import time
++from urllib.parse import urlencode
++
++import httpx
++from django.conf import settings
++
++logger = logging.getLogger(__name__)
++
++FEISHU_AUTHORIZE_URL = "https://accounts.feishu.cn/open-apis/authen/v1/authorize"
++FEISHU_TOKEN_URL = "https://accounts.feishu.cn/oauth/v3/token"
++FEISHU_USER_INFO_URL = "https://open.feishu.cn/open-apis/authen/v1/user_info"
++
++# state 有效期（秒）：覆盖“跳转授权页 → 用户操作 → 回调”完整流程。
++STATE_TTL_SECONDS = 600
++HTTP_TIMEOUT_SECONDS = 10
++
++
++class FeishuAuthError(Exception):
++    """飞书认证失败（配置缺失 / token 交换失败 / 用户信息获取失败）。"""
++
++    def __init__(self, message: str, code: int | None = None):
++        super().__init__(message)
++        self.code = code
++
++
++def sign_state(timestamp: str) -> str:
++    """对时间戳做 HMAC-SHA256 签名（密钥为 Django SECRET_KEY）。"""
++    secret = settings.SECRET_KEY.encode("utf-8")
++    return hmac.new(secret, timestamp.encode("utf-8"), hashlib.sha256).hexdigest()
++
++
++def build_state() -> str:
++    """生成防伪造/防重放的 state：`时间戳.HMAC签名`。"""
++    timestamp = str(int(time.time()))
++    return f"{timestamp}.{sign_state(timestamp)}"
++
++
++def verify_state(state: str) -> bool:
++    """校验 state 的签名与有效期。"""
++    if not state or state.count(".") != 1:
++        return False
++    timestamp, signature = state.split(".", 1)
++    if not timestamp.isdigit():
++        return False
++    if not hmac.compare_digest(signature, sign_state(timestamp)):
++        return False
++    return time.time() - int(timestamp) <= STATE_TTL_SECONDS
++
++
++def build_authorize_url(state: str) -> str:
++    """构建飞书 OAuth 授权页地址。"""
++    params = {
++        "client_id": settings.FEISHU_APP_ID,
++        "redirect_uri": settings.FEISHU_REDIRECT_URI,
++        "response_type": "code",
++        "state": state,
++    }
++    return f"{FEISHU_AUTHORIZE_URL}?{urlencode(params)}"
++
++
++def exchange_code_for_token(code: str) -> dict:
++    """用授权码换取 user_access_token，返回飞书扁平结构响应。"""
++    app_id = getattr(settings, "FEISHU_APP_ID", "")
++    app_secret = getattr(settings, "FEISHU_APP_SECRET", "")
++    if not app_id or not app_secret:
++        raise FeishuAuthError("飞书登录未配置（FEISHU_APP_ID / FEISHU_APP_SECRET 缺失）")
++
++    payload = {
++        "grant_type": "authorization_code",
++        "client_id": app_id,
++        "client_secret": app_secret,
++        "code": code,
++        "redirect_uri": settings.FEISHU_REDIRECT_URI,
++    }
++    try:
++        response = httpx.post(FEISHU_TOKEN_URL, json=payload, timeout=HTTP_TIMEOUT_SECONDS)
++    except httpx.HTTPError as exc:
++        raise FeishuAuthError(f"请求飞书令牌接口失败：{exc}") from exc
++
++    try:
++        data = response.json()
++    except ValueError as exc:
++        raise FeishuAuthError("飞书令牌接口返回了非 JSON 响应。") from exc
++
++    if data.get("code") != 0 or not data.get("access_token"):
++        logger.warning("飞书授权码换取令牌失败：%s", data)
++        description = data.get("error_description") or data.get("error") or data
++        raise FeishuAuthError(f"飞书授权失败：{description}", code=data.get("code"))
++    return data
++
++
++def get_feishu_user(access_token: str) -> dict:
++    """用 user_access_token 获取飞书用户信息（返回 data 字段：name/email 等）。"""
++    try:
++        response = httpx.get(
++            FEISHU_USER_INFO_URL,
++            headers={"Authorization": f"Bearer {access_token}"},
++            timeout=HTTP_TIMEOUT_SECONDS,
++        )
++    except httpx.HTTPError as exc:
++        raise FeishuAuthError(f"请求飞书用户信息失败：{exc}") from exc
++
++    try:
++        data = response.json()
++    except ValueError as exc:
++        raise FeishuAuthError("飞书用户信息接口返回了非 JSON 响应。") from exc
++
++    if data.get("code") != 0:
++        logger.warning("获取飞书用户信息失败：%s", data)
++        raise FeishuAuthError(
++            f"获取飞书用户信息失败：{data.get('msg') or data}", code=data.get("code")
++        )
++    return data.get("data") or {}
+diff --git a/WHartTest_Django/accounts/tests.py b/WHartTest_Django/accounts/tests.py
+index 0a4ddac..0ae3425 100644
+--- a/WHartTest_Django/accounts/tests.py
++++ b/WHartTest_Django/accounts/tests.py
+@@ -1,19 +1,33 @@
++import time
+ from unittest.mock import patch
+ from types import SimpleNamespace
+ 
++from django.contrib.auth.models import User
+ from django.db.utils import OperationalError
+-from django.test import SimpleTestCase
++from django.test import SimpleTestCase, TestCase, override_settings
+ from rest_framework.test import APIRequestFactory
+ 
++from accounts.feishu import (
++    FeishuAuthError,
++    build_authorize_url,
++    build_state,
++    exchange_code_for_token,
++    get_feishu_user,
++    sign_state,
++    verify_state,
++)
+ from accounts.serializers import ContentTypeSerializer
+-from accounts.views import MyTokenObtainPairView
++from accounts.views import (
++    FeishuLoginView,
++    MyTokenObtainPairView,
++)
+ 
+ 
+ class MyTokenObtainPairViewTests(SimpleTestCase):
+     def setUp(self):
+         # 构造 DRF 请求工厂，模拟 token 登录请求。
+         self.factory = APIRequestFactory()
+ 
+     def test_returns_503_when_database_not_ready(self):
+         # 模拟数据库尚未就绪时的登录请求，验证接口返回 503 而不是 500 traceback。
+         request = self.factory.post(
+@@ -49,10 +63,267 @@ class ContentTypeSerializerMenuGroupingTests(SimpleTestCase):
+ 
+         self.assertEqual(self.serializer.get_app_label_cn(content_type), '任务中心')
+         self.assertEqual(self.serializer.get_app_label_subcategory(content_type), '任务调度')
+         self.assertEqual(self.serializer.get_app_label_sort(content_type), 5)
+ 
+     def test_django_celery_beat_is_grouped_under_task_center(self):
+         content_type = SimpleNamespace(app_label='django_celery_beat', model='periodictask')
+ 
+         self.assertEqual(self.serializer.get_app_label_cn(content_type), '任务中心')
+         self.assertEqual(self.serializer.get_app_label_subcategory(content_type), '任务调度')
++
++
++@override_settings(
++    FEISHU_APP_ID='cli_test',
++    FEISHU_APP_SECRET='secret_test',
++    FEISHU_REDIRECT_URI='http://testserver/login/feishu/callback',
++)
++class FeishuServiceTests(SimpleTestCase):
++    def test_build_authorize_url_contains_required_params(self):
++        url = build_authorize_url('my-state')
++
++        self.assertTrue(url.startswith('https://accounts.feishu.cn/open-apis/authen/v1/authorize?'))
++        self.assertIn('response_type=code', url)
++        self.assertIn('client_id=cli_test', url)
++        self.assertIn('state=my-state', url)
++        self.assertIn(
++            'redirect_uri=http%3A%2F%2Ftestserver%2Flogin%2Ffeishu%2Fcallback', url
++        )
++
++    def test_state_roundtrip_verification(self):
++        self.assertTrue(verify_state(build_state()))
++
++    def test_verify_state_rejects_tampered_signature(self):
++        timestamp = str(int(time.time()))
++        self.assertFalse(verify_state(f'{timestamp}.deadbeef'))
++
++    def test_verify_state_rejects_expired_timestamp(self):
++        expired_timestamp = str(int(time.time()) - 601)
++        expired_state = f'{expired_timestamp}.{sign_state(expired_timestamp)}'
++        self.assertFalse(verify_state(expired_state))
++
++    def test_verify_state_rejects_malformed_state(self):
++        self.assertFalse(verify_state('not-a-signed-state'))
++
++    @patch('accounts.feishu.httpx.post')
++    def test_exchange_code_for_token_returns_flat_payload(self, mock_post):
++        mock_post.return_value.json.return_value = {
++            'code': 0,
++            'access_token': 'u-access',
++            'refresh_token': 'u-refresh',
++            'token_type': 'Bearer',
++            'expires_in': 6900,
++        }
++
++        token_data = exchange_code_for_token('auth-code')
++
++        self.assertEqual(token_data['access_token'], 'u-access')
++        self.assertEqual(mock_post.call_args.kwargs['json']['grant_type'], 'authorization_code')
++        self.assertEqual(mock_post.call_args.kwargs['json']['client_id'], 'cli_test')
++        self.assertEqual(mock_post.call_args.kwargs['json']['code'], 'auth-code')
++        self.assertEqual(
++            mock_post.call_args.args[0], 'https://accounts.feishu.cn/oauth/v3/token'
++        )
++
++    @patch('accounts.feishu.httpx.post')
++    def test_exchange_code_for_token_raises_on_error_code(self, mock_post):
++        mock_post.return_value.json.return_value = {
++            'code': 20004, 'error': 'invalid_code', 'error_description': 'code 已过期',
++        }
++
++        # assertLogs 捕获服务层 warning，既断言日志内容，也避免其经 lastResort 打到 stderr。
++        with self.assertLogs('accounts.feishu', level='WARNING') as captured_logs:
++            with self.assertRaises(FeishuAuthError):
++                exchange_code_for_token('expired-code')
++
++        self.assertIn('飞书授权码换取令牌失败', captured_logs.output[0])
++
++    @patch('accounts.feishu.httpx.get')
++    def test_get_feishu_user_returns_data_payload(self, mock_get):
++        mock_get.return_value.json.return_value = {
++            'code': 0,
++            'data': {'name': '张三', 'email': 'zhangsan@example.com'},
++        }
++
++        feishu_user = get_feishu_user('u-access')
++
++        self.assertEqual(feishu_user['email'], 'zhangsan@example.com')
++        self.assertEqual(
++            mock_get.call_args.kwargs['headers']['Authorization'], 'Bearer u-access'
++        )
++        self.assertEqual(
++            mock_get.call_args.args[0],
++            'https://open.feishu.cn/open-apis/authen/v1/user_info',
++        )
++
++    @patch('accounts.feishu.httpx.get')
++    def test_get_feishu_user_raises_on_error_code(self, mock_get):
++        mock_get.return_value.json.return_value = {'code': 99991668, 'msg': 'token 无效'}
++
++        # assertLogs 捕获服务层 warning，既断言日志内容，也避免其经 lastResort 打到 stderr。
++        with self.assertLogs('accounts.feishu', level='WARNING') as captured_logs:
++            with self.assertRaises(FeishuAuthError):
++                get_feishu_user('bad-token')
++
++        self.assertIn('获取飞书用户信息失败', captured_logs.output[0])
++
++
++@override_settings(
++    FEISHU_APP_ID='cli_test',
++    FEISHU_APP_SECRET='secret_test',
++    FEISHU_REDIRECT_URI='http://testserver/login/feishu/callback',
++)
++class FeishuLoginViewTests(TestCase):
++    def setUp(self):
++        self.factory = APIRequestFactory()
++        self.feishu_token_payload = {
++            'code': 0, 'access_token': 'u-access', 'refresh_token': 'u-refresh',
++        }
++        self.feishu_user_payload = {
++            'code': 0, 'data': {'name': '张三', 'email': 'zhangsan@example.com'},
++        }
++
++    def _mock_feishu_apis(self, mock_post, mock_get):
++        mock_post.return_value.json.return_value = dict(self.feishu_token_payload)
++        mock_get.return_value.json.return_value = dict(self.feishu_user_payload)
++
++    def _post_feishu_login(self, code='auth-code', state=None):
++        request = self.factory.post(
++            '/api/accounts/feishu/login/',
++            {'code': code, 'state': state if state is not None else build_state()},
++            format='json',
++        )
++        return FeishuLoginView.as_view()(request)
++
++    @patch('accounts.feishu.httpx.get')
++    @patch('accounts.feishu.httpx.post')
++    def test_existing_user_login_by_email(self, mock_post, mock_get):
++        self._mock_feishu_apis(mock_post, mock_get)
++        User.objects.create_user(
++            username='zhangsan', email='zhangsan@example.com', password='old-secret'
++        )
++
++        response = self._post_feishu_login()
++
++        self.assertEqual(response.status_code, 200)
++        self.assertIn('access', response.data)
++        self.assertIn('refresh', response.data)
++        self.assertEqual(response.data['user']['username'], 'zhangsan')
++        user = User.objects.get(email__iexact='zhangsan@example.com')
++        self.assertEqual(user.username, 'zhangsan')
++
++    @patch('accounts.feishu.httpx.get')
++    @patch('accounts.feishu.httpx.post')
++    def test_new_user_created_with_default_password(self, mock_post, mock_get):
++        self._mock_feishu_apis(mock_post, mock_get)
++
++        response = self._post_feishu_login()
++
++        self.assertEqual(response.status_code, 200)
++        user = User.objects.get(email__iexact='zhangsan@example.com')
++        self.assertEqual(user.username, 'zhangsan')
++        self.assertEqual(user.first_name, '张三')
++        self.assertTrue(user.is_active)
++        self.assertTrue(user.check_password('Jt123456'))
++
++    @patch('accounts.feishu.httpx.get')
++    @patch('accounts.feishu.httpx.post')
++    def test_new_user_username_conflict_appends_suffix(self, mock_post, mock_get):
++        self._mock_feishu_apis(mock_post, mock_get)
++        User.objects.create_user(
++            username='zhangsan', email='other@example.com', password='old-secret'
++        )
++
++        response = self._post_feishu_login()
++
++        self.assertEqual(response.status_code, 200)
++        new_user = User.objects.get(email__iexact='zhangsan@example.com')
++        self.assertEqual(new_user.username, 'zhangsan1')
++
++    @patch('accounts.feishu.httpx.get')
++    @patch('accounts.feishu.httpx.post')
++    def test_inactive_user_treated_as_absent_creates_new_account(self, mock_post, mock_get):
++        self._mock_feishu_apis(mock_post, mock_get)
++        User.objects.create_user(
++            username='zhangsan', email='zhangsan@example.com',
++            password='old-secret', is_active=False,
++        )
++
++        response = self._post_feishu_login()
++
++        self.assertEqual(response.status_code, 200)
++        new_user = User.objects.filter(
++            email__iexact='zhangsan@example.com', is_active=True
++        ).first()
++        self.assertIsNotNone(new_user)
++        self.assertEqual(new_user.username, 'zhangsan1')
++
++    @patch('accounts.feishu.httpx.get')
++    @patch('accounts.feishu.httpx.post')
++    def test_missing_email_rejected(self, mock_post, mock_get):
++        mock_post.return_value.json.return_value = dict(self.feishu_token_payload)
++        mock_get.return_value.json.return_value = {
++            'code': 0, 'data': {'name': '张三'},
++        }
++
++        response = self._post_feishu_login()
++
++        self.assertEqual(response.status_code, 400)
++        self.assertIn('邮箱', response.data['detail'])
++
++    def test_invalid_state_rejected(self):
++        response = self._post_feishu_login(state='123.deadbeef')
++
++        self.assertEqual(response.status_code, 400)
++        self.assertIn('state', response.data['detail'])
++
++    def test_missing_code_or_state_rejected(self):
++        request = self.factory.post(
++            '/api/accounts/feishu/login/', {'code': 'auth-code'}, format='json'
++        )
++
++        response = FeishuLoginView.as_view()(request)
++
++        self.assertEqual(response.status_code, 400)
++
++    @patch('accounts.feishu.httpx.get')
++    @patch('accounts.feishu.httpx.post')
++    def test_feishu_token_error_returns_400(self, mock_post, mock_get):
++        mock_post.return_value.json.return_value = {
++            'code': 20004, 'error': 'invalid_code', 'error_description': 'code 已过期',
++        }
++        mock_get.return_value.json.return_value = dict(self.feishu_user_payload)
++
++        # assertLogs 捕获服务层 warning，避免其经 lastResort 打到 stderr 污染测试输出。
++        with self.assertLogs('accounts.feishu', level='WARNING'):
++            response = self._post_feishu_login()
++
++        self.assertEqual(response.status_code, 400)
++        self.assertIn('飞书授权失败', response.data['detail'])
++
++
++class FeishuAuthorizeUrlViewTests(SimpleTestCase):
++    def setUp(self):
++        self.factory = APIRequestFactory()
++
++    @override_settings(FEISHU_APP_ID='cli_test', FEISHU_APP_SECRET='secret_test')
++    def test_returns_authorize_url_and_state(self):
++        from accounts.views import FeishuAuthorizeUrlView
++
++        request = self.factory.get('/api/accounts/feishu/authorize-url/')
++
++        response = FeishuAuthorizeUrlView.as_view()(request)
++
++        self.assertEqual(response.status_code, 200)
++        self.assertIn('state', response.data)
++        self.assertIn('response_type=code', response.data['authorize_url'])
++
++    @override_settings(FEISHU_APP_ID='', FEISHU_APP_SECRET='')
++    def test_returns_503_when_feishu_not_configured(self):
++        from accounts.views import FeishuAuthorizeUrlView
++
++        request = self.factory.get('/api/accounts/feishu/authorize-url/')
++
++        response = FeishuAuthorizeUrlView.as_view()(request)
++
++        self.assertEqual(response.status_code, 503)
++        self.assertIn('未配置', response.data['detail'])
+diff --git a/WHartTest_Django/accounts/urls.py b/WHartTest_Django/accounts/urls.py
+index 8fdf1e7..bb62dad 100644
+--- a/WHartTest_Django/accounts/urls.py
++++ b/WHartTest_Django/accounts/urls.py
+@@ -1,27 +1,30 @@
+ # 导入 include/path 以挂载路由器与显式端点。
+ from django.urls import include, path
+ 
+ # 导入 DRF 默认路由器用于自动生成 ViewSet 路由。
+ from rest_framework.routers import DefaultRouter
+ 
+ # 导入账户模块下的视图。
+ from .views import (
+     UserCreateAPIView, CurrentUserAPIView,
+-    GroupViewSet, PermissionViewSet, UserViewSet, ContentTypeViewSet
++    GroupViewSet, PermissionViewSet, UserViewSet, ContentTypeViewSet,
++    FeishuAuthorizeUrlView, FeishuLoginView
+ )
+ 
+ # 创建账户模块路由器实例。
+ router = DefaultRouter()
+ router.register(r'users', UserViewSet, basename='user')  # 用户管理路由。
+ router.register(r'groups', GroupViewSet, basename='group')  # 组织/用户组管理路由。
+ router.register(r'permissions', PermissionViewSet, basename='permission')  # 权限查询与分配路由。
+ router.register(r'content-types', ContentTypeViewSet, basename='content-type')  # 模型内容类型查询路由。
+ 
+ # 声明账户模块 URL 列表。
+ urlpatterns = [
+     path('', include(router.urls)),  # 挂载 ViewSet 自动路由。
+     path('register/', UserCreateAPIView.as_view(), name='user-register'),  # 用户注册端点。
+     path('me/', CurrentUserAPIView.as_view(), name='user-me'),  # 当前登录用户信息端点。
++    path('feishu/authorize-url/', FeishuAuthorizeUrlView.as_view(), name='feishu-authorize-url'),
++    path('feishu/login/', FeishuLoginView.as_view(), name='feishu-login'),
+     # 挂载操作日志路由（GET/列表、统计、清理旧日志等）。
+     path('', include('accounts.operation_logs.urls')),
+ ]
+diff --git a/WHartTest_Django/accounts/views.py b/WHartTest_Django/accounts/views.py
+index b5a5a00..9be3232 100644
+--- a/WHartTest_Django/accounts/views.py
++++ b/WHartTest_Django/accounts/views.py
+@@ -4,39 +4,49 @@ from django.shortcuts import get_object_or_404
+ from django.db.utils import OperationalError
+ from django.db.models import Q
+ from rest_framework import generics, status, viewsets
+ from rest_framework.decorators import action
+ from rest_framework.filters import SearchFilter
+ from rest_framework.permissions import AllowAny, IsAuthenticated, IsAdminUser
+ from rest_framework.response import Response
+ from rest_framework.views import APIView
+ from wharttest_django.permissions import HasModelPermission, permission_required
+ 
++from django.conf import settings
++from rest_framework_simplejwt.tokens import RefreshToken
+ from rest_framework_simplejwt.views import (
+     TokenObtainPairView as BaseTokenObtainPairView,
+ )
+ from .serializers import (
+     UserSerializer,
+     UserDetailSerializer,
+     UserUpdateSerializer,
+     GroupSerializer,
+     PermissionSerializer,
+     ContentTypeSerializer,
+     UserGroupOperationSerializer,
+     PermissionAssignToUserSerializer,
+     PermissionAssignToGroupSerializer,
+     BatchUserPermissionOperationSerializer,
+     BatchGroupPermissionOperationSerializer,
+     UpdateUserPermissionsSerializer,
+     UpdateGroupPermissionsSerializer,
+     MyTokenObtainPairSerializer,
+ )
++from .feishu import (
++    FeishuAuthError,
++    build_authorize_url,
++    build_state,
++    exchange_code_for_token,
++    get_feishu_user,
++    verify_state,
++)
+ 
+ 
+ class UserCreateAPIView(generics.CreateAPIView):
+     """
+     用户注册接口。
+     """
+ 
+     queryset = User.objects.all()
+     serializer_class = UserSerializer
+     permission_classes = [AllowAny]
+@@ -902,10 +912,106 @@ class MyTokenObtainPairView(BaseTokenObtainPairView):
+         """
+         当数据库尚未就绪时，返回可识别的友好错误，避免直接暴露 500 调试堆栈。
+         """
+         try:
+             return super().post(request, *args, **kwargs)
+         except OperationalError:
+             return Response(
+                 {"detail": "认证服务正在启动，请稍后重试。"},
+                 status=status.HTTP_503_SERVICE_UNAVAILABLE,
+             )
++
++
++class FeishuAuthorizeUrlView(APIView):
++    """返回飞书 OAuth 授权页地址（供前端整页跳转）。"""
++
++    permission_classes = [AllowAny]
++
++    def get(self, request, *args, **kwargs):
++        if not getattr(settings, "FEISHU_APP_ID", "") or not getattr(
++            settings, "FEISHU_APP_SECRET", ""
++        ):
++            return Response(
++                {"detail": "飞书登录未配置，请联系管理员。"},
++                status=status.HTTP_503_SERVICE_UNAVAILABLE,
++            )
++        state = build_state()
++        return Response(
++            {"authorize_url": build_authorize_url(state), "state": state},
++            status=status.HTTP_200_OK,
++        )
++
++
++def _generate_feishu_username(email: str) -> str:
++    """用邮箱前缀生成用户名，与现有用户名冲突（不区分大小写）时追加数字后缀。"""
++    base = email.split("@", 1)[0] or "feishu_user"
++    if not User.objects.filter(username__iexact=base).exists():
++        return base
++    index = 1
++    while True:
++        candidate = f"{base}{index}"
++        if not User.objects.filter(username__iexact=candidate).exists():
++            return candidate
++        index += 1
++
++
++class FeishuLoginView(APIView):
++    """飞书授权码登录：按邮箱匹配活跃账号，未匹配则自动创建（默认密码 Jt123456）。"""
++
++    permission_classes = [AllowAny]
++
++    def post(self, request, *args, **kwargs):
++        code = request.data.get("code")
++        state = request.data.get("state")
++        if not code or not state:
++            return Response(
++                {"detail": "缺少 code 或 state 参数。"},
++                status=status.HTTP_400_BAD_REQUEST,
++            )
++        if not verify_state(state):
++            return Response(
++                {"detail": "登录 state 校验失败，请重新发起飞书登录。"},
++                status=status.HTTP_400_BAD_REQUEST,
++            )
++
++        try:
++            token_data = exchange_code_for_token(code)
++            feishu_user = get_feishu_user(token_data["access_token"])
++            email = (feishu_user.get("email") or "").strip()
++            feishu_name = (feishu_user.get("name") or "").strip()
++            if not email:
++                return Response(
++                    {"detail": "飞书账号未绑定邮箱，无法登录，请使用账号密码登录。"},
++                    status=status.HTTP_400_BAD_REQUEST,
++                )
++
++            user = User.objects.filter(email__iexact=email, is_active=True).first()
++            if user is None:
++                user = User.objects.create_user(
++                    username=_generate_feishu_username(email),
++                    email=email,
++                    password="Jt123456",
++                    first_name=feishu_name,
++                    is_active=True,
++                )
++            elif feishu_name and user.first_name != feishu_name:
++                user.first_name = feishu_name
++                user.save(update_fields=["first_name"])
++        except FeishuAuthError as exc:
++            return Response(
++                {"detail": str(exc)}, status=status.HTTP_400_BAD_REQUEST
++            )
++        except OperationalError:
++            return Response(
++                {"detail": "认证服务正在启动，请稍后重试。"},
++                status=status.HTTP_503_SERVICE_UNAVAILABLE,
++            )
++
++        refresh = RefreshToken.for_user(user)
++        return Response(
++            {
++                "access": str(refresh.access_token),
++                "refresh": str(refresh),
++                "user": UserDetailSerializer(user).data,
++            },
++            status=status.HTTP_200_OK,
++        )
+diff --git a/WHartTest_Django/wharttest_django/settings.py b/WHartTest_Django/wharttest_django/settings.py
+index b1b7fb5..7905fe6 100644
+--- a/WHartTest_Django/wharttest_django/settings.py
++++ b/WHartTest_Django/wharttest_django/settings.py
+@@ -747,10 +747,14 @@ AIRTEST_REPORT_LANG = 'zh'
+ # 自定义报告模板路径
+ AIRTEST_REPORT_TEMPLATE = os.path.join(
+     BASE_DIR, 'testcases', 'appuitest', 'log_template.html'
+ )
+ 
+ # ============================== 飞书开放平台配置 ==============================
+ # 用于图片上传（报告截图嵌入飞书消息卡片）
+ # 不配置时跳过截图，仅发送文本通知
+ FEISHU_APP_ID = os.environ.get('FEISHU_APP_ID', '')
+ FEISHU_APP_SECRET = os.environ.get('FEISHU_APP_SECRET', '')
++# 飞书 OAuth 登录回调地址（前端回调页路由），需与飞书开放平台「重定向 URL」一致
++FEISHU_REDIRECT_URI = os.environ.get(
++    'FEISHU_REDIRECT_URI', 'http://localhost:5173/login/feishu/callback'
++)
+diff --git a/WHartTest_Vue/src/router/index.ts b/WHartTest_Vue/src/router/index.ts
+index 78ad48d..6f80059 100644
+--- a/WHartTest_Vue/src/router/index.ts
++++ b/WHartTest_Vue/src/router/index.ts
+@@ -1,14 +1,15 @@
+ import { createRouter, createWebHistory, type RouteRecordRaw } from 'vue-router'; // 导入路由创建函数、HTML5 History 模式和路由类型定义。
+ import { useAuthStore } from '../store/authStore.ts'; // 导入认证 store 获取函数，用于守卫中读取登录态。
+ import MainLayout from '../layouts/MainLayout.vue'; // 导入主布局组件，作为受保护页面的统一壳层。
+ import LoginView from '../views/LoginView.vue'; // 导入登录页面组件。
++import FeishuCallbackView from '@/views/FeishuCallbackView.vue'; // 导入飞书登录回调页面组件。
+ import RegisterView from '../views/RegisterView.vue'; // 导入注册页面组件。
+ import DashboardView from '../views/DashboardView.vue'; // 导入首页仪表盘页面组件。
+ import UserManagementView from '../views/UserManagementView.vue'; // 导入用户管理页面组件。
+ import OrganizationManagementView from '../views/OrganizationManagementView.vue'; // 导入组织管理页面组件。
+ import PermissionManagementView from '../views/PermissionManagementView.vue'; // 导入权限管理页面组件。
+ import ProjectManagementView from '../views/ProjectManagementView.vue'; // 导入项目管理页面组件。
+ import TestCaseManagementView from '../views/TestCaseManagementView.vue'; // 导入测试用例管理页面组件。
+ import TestSuiteManagementView from '../views/TestSuiteManagementView.vue'; // 导入测试套件管理页面组件。
+ import TestExecutionHistoryView from '../views/TestExecutionHistoryView.vue'; // 导入测试执行历史页面组件。
+ import LlmConfigManagementView from '@/features/langgraph/views/LlmConfigManagementView.vue'; // 导入 LLM 配置管理页面组件。
+@@ -35,20 +36,25 @@ const routes: Array<RouteRecordRaw> = [ // 声明路由表数组，类型约束
+   {
+     path: '/login', // 定义登录页访问路径。
+     name: 'Login', // 定义登录路由名称，便于命名跳转。
+     component: LoginView // 指定该路由渲染的页面组件。
+   },
+   {
+     path: '/register', // 定义注册页访问路径。
+     name: 'Register', // 定义注册路由名称。
+     component: RegisterView // 指定注册路由对应组件。
+   },
++  {
++    path: '/login/feishu/callback', // 飞书 OAuth 回调地址，与后端 FEISHU_REDIRECT_URI 默认值一致。
++    name: 'FeishuCallback', // 定义飞书回调路由名称。
++    component: FeishuCallbackView // 指定回调页组件，负责用 code 完成登录。
++  },
+   {
+     path: '/', // 定义主应用根路径。
+     component: MainLayout, // 指定根路径使用主布局组件承载子页面。
+     meta: { requiresAuth: true }, // 标记该分支路由默认需要认证。
+     redirect: '/dashboard', // 访问根路径时默认重定向到仪表盘。
+     children: [
+       {
+         path: 'dashboard', // 定义仪表盘子路径（最终为 /dashboard）。
+         name: 'Dashboard', // 定义仪表盘路由名称。
+         component: DashboardView, // 指定仪表盘组件。
+@@ -260,21 +266,21 @@ router.beforeEach((to, _from, next) => { // 注册全局前置守卫，在每次
+ 
+   // 确保在每次导航前检查认证状态，特别是对于首次加载或刷新
+   if (!authStore.isAuthenticated && typeof localStorage !== 'undefined') { // 当内存态未登录且浏览器环境可用时进入状态恢复分支。
+     authStore.checkAuthStatus(); // 从本地持久化信息恢复登录态，避免刷新后误判未登录。
+   }
+ 
+   const isLoggedIn = authStore.isAuthenticated; // 读取当前是否已登录，作为路由放行判定依据。
+   console.log('[Router Guard] 认证状态:', { isLoggedIn, toName: to.name }); // 输出鉴权判定前的状态日志。
+ 
+   // 不需要认证的白名单路由
+-  const publicRoutes = ['Login', 'Register']; // 声明公开路由名称白名单。
++  const publicRoutes = ['Login', 'Register', 'FeishuCallback']; // 声明公开路由名称白名单。
+   const isPublicRoute = publicRoutes.includes(to.name as string); // 判断目标路由是否属于公开白名单。
+ 
+   if (!isLoggedIn && !isPublicRoute) { // 未登录且访问受保护路由时触发重定向。
+     // 未登录且不是公开路由，重定向到登录页
+     console.log('[Router Guard] 未登录，重定向到登录页'); // 输出未登录拦截日志。
+     next({ name: 'Login', query: { redirect: to.fullPath } }); // 跳转登录页并携带原目标地址以支持登录后回跳。
+   } else if (isLoggedIn && isPublicRoute) { // 已登录但访问登录/注册页时触发反向重定向。
+     // 已登录但访问登录/注册页，重定向到首页
+     console.log('[Router Guard] 已登录，重定向到首页'); // 输出已登录访问公开页的重定向日志。
+     next({ name: 'Dashboard' }); // 直接跳到仪表盘，避免重复登录/注册操作。
+diff --git a/WHartTest_Vue/src/services/authService.ts b/WHartTest_Vue/src/services/authService.ts
+index ad5a3a7..cb0a12a 100644
+--- a/WHartTest_Vue/src/services/authService.ts
++++ b/WHartTest_Vue/src/services/authService.ts
+@@ -208,10 +208,129 @@ export const register = async (username: string, email: string, password: string
+         errorMessage = '网络连接超时或服务器无响应。';
+       }
+     }
+     return {
+       success: false,
+       error: errorMessage,
+       statusCode,
+     };
+   }
+ };
++
++// 飞书授权地址接口响应的数据结构
++export interface FeishuAuthorizeUrlResponseData {
++  authorize_url: string;
++  state: string;
++}
++
++// 飞书授权地址函数返回的结构
++export interface FeishuAuthorizeUrlResponse {
++  success: boolean;
++  data?: FeishuAuthorizeUrlResponseData;
++  error?: string;
++  statusCode?: number;
++}
++
++/**
++ * 获取飞书 OAuth 授权页地址
++ * @returns 返回一个 Promise，解析为包含授权地址与 state 的对象
++ */
++export const getFeishuAuthorizeUrl = async (): Promise<FeishuAuthorizeUrlResponse> => {
++  const API_URL = '/accounts/feishu/authorize-url/';
++
++  try {
++    const response = await request<FeishuAuthorizeUrlResponseData>({
++      url: API_URL,
++      method: 'GET',
++      headers: {
++        'accept': 'application/json',
++      }
++    });
++
++    if (response.success && response.data) {
++      return { success: true, data: response.data, statusCode: 200 };
++    }
++
++    return {
++      success: false,
++      error: response.error || '获取飞书授权地址失败：响应数据格式不正确。',
++      statusCode: (response as any).status ?? 500,
++    };
++  } catch (error) {
++    let errorMessage = '获取飞书授权地址失败，请稍后再试。';
++    let statusCode: number | undefined;
++
++    if (axios.isAxiosError(error)) {
++      if (error.response) {
++        statusCode = error.response.status;
++        const responseData = error.response.data;
++        if (responseData && typeof responseData.message === 'string') {
++          errorMessage = responseData.message;
++        } else if (responseData && typeof responseData.detail === 'string') {
++          errorMessage = responseData.detail;
++        }
++      } else if (error.request) {
++        errorMessage = '认证服务暂未就绪，请稍后重试。';
++      }
++    }
++    return { success: false, error: errorMessage, statusCode };
++  }
++};
++
++/**
++ * 使用飞书授权码登录（返回结构与账号登录一致）
++ * @param code 飞书回调携带的授权码
++ * @param state 飞书回调携带的防 CSRF 状态
++ * @returns 返回一个 Promise，解析为包含认证结果的对象
++ */
++export const feishuLogin = async (code: string, state: string): Promise<AuthServiceLoginResponse> => {
++  const API_URL = '/accounts/feishu/login/';
++  const CSRF_TOKEN = 'kMNlyN2uN6c2QRr9r2rDQbfxBGsVzjPFY1h1as93VNMRTjo5kRpDbVq5ii8FFcKW';
++
++  try {
++    const response = await request<ApiTokenResponseData>({
++      url: API_URL,
++      method: 'POST',
++      data: { code, state },
++      headers: {
++        'Content-Type': 'application/json',
++        'X-CSRFTOKEN': CSRF_TOKEN,
++        'accept': 'application/json',
++      }
++    });
++
++    if (response.success && response.data) {
++      return { success: true, data: response.data, statusCode: 200 };
++    }
++
++    const responseStatus = (response as any).status as number | undefined;
++    let errorMessage = response.error || '飞书登录失败：响应数据格式不正确。';
++    if (responseStatus === 503) {
++      errorMessage = response.error || '认证服务正在启动，请稍后重试。';
++    } else if (errorMessage.includes('服务器无响应') || errorMessage.includes('Network Error')) {
++      errorMessage = '认证服务暂未就绪，请稍后重试。';
++    }
++    return { success: false, error: errorMessage, statusCode: responseStatus ?? 500 };
++  } catch (error) {
++    let errorMessage = '飞书登录暂时不可用，请稍后再试。';
++    let statusCode: number | undefined;
++
++    if (axios.isAxiosError(error)) {
++      if (error.response) {
++        statusCode = error.response.status;
++        const responseData = error.response.data;
++        if (statusCode === 503) {
++          errorMessage = '认证服务正在启动，请稍后重试。';
++        } else if (responseData && typeof responseData.message === 'string') {
++          errorMessage = responseData.message;
++        } else if (responseData && typeof responseData.detail === 'string') {
++          errorMessage = responseData.detail;
++        } else {
++          errorMessage = `飞书登录失败：服务器错误 (${statusCode})。`;
++        }
++      } else if (error.request) {
++        errorMessage = '认证服务暂未就绪，请稍后重试。';
++      }
++    }
++    return { success: false, error: errorMessage, statusCode };
++  }
++};
+diff --git a/WHartTest_Vue/src/store/authStore.ts b/WHartTest_Vue/src/store/authStore.ts
+index 630e159..b537bf3 100644
+--- a/WHartTest_Vue/src/store/authStore.ts
++++ b/WHartTest_Vue/src/store/authStore.ts
+@@ -1,14 +1,15 @@
+ import { defineStore } from 'pinia';
+ import {
+   login as loginService,
+   register as registerService,
++  feishuLogin as feishuLoginService,
+   type AuthServiceLoginResponse,
+   type AuthServiceRegisterResponse,
+ } from '@/services/authService';
+ import { getUserPermissions } from '@/services/permissionService';
+ import { useStorage } from '@vueuse/core';
+ import { useProjectStore } from '@/store/projectStore';
+ 
+ // 用户信息结构
+ interface User {
+   id: number;
+@@ -140,20 +141,76 @@ export const useAuthStore = defineStore('auth', {
+         this.loginError = error.message || '发生未知错误，请稍后再试。';
+         // 清理 localStorage
+         localStorage.removeItem('auth-isAuthenticated');
+         localStorage.removeItem('auth-user');
+         localStorage.removeItem('auth-accessToken');
+         localStorage.removeItem('auth-refreshToken');
+         this.isLoading = false;
+         return false;
+       }
+     },
++    /**
++     * 飞书登录 Action（邮箱匹配已有账号，否则后端自动创建）
++     * @param code 飞书回调携带的授权码
++     * @param state 飞书回调携带的防 CSRF 状态
++     * @returns 返回一个 Promise，解析为登录是否成功 (boolean)
++     */
++    async loginWithFeishu(code: string, state: string): Promise<boolean> {
++      this.isLoading = true;
++      this.loginError = null;
++      try {
++        const response: AuthServiceLoginResponse = await feishuLoginService(code, state);
++        if (response.success && response.data) {
++          this.isAuthenticated = true;
++          this.user = response.data.user;
++          this.accessToken = response.data.access;
++          this.refreshToken = response.data.refresh;
++
++          localStorage.setItem('auth-isAuthenticated', 'true');
++          localStorage.setItem('auth-user', JSON.stringify(this.user));
++          localStorage.setItem('auth-accessToken', this.accessToken);
++          localStorage.setItem('auth-refreshToken', this.refreshToken);
++
++          // 异步获取用户权限（不阻塞登录流程）
++          this.loadUserPermissions().catch(error => {
++            console.error('获取用户权限失败:', error);
++          });
++
++          this.isLoading = false;
++          return true;
++        }
++
++        this.isAuthenticated = false;
++        this.user = null;
++        this.accessToken = null;
++        this.refreshToken = null;
++        this.loginError = response.error || '飞书登录失败，请重试。';
++        localStorage.removeItem('auth-isAuthenticated');
++        localStorage.removeItem('auth-user');
++        localStorage.removeItem('auth-accessToken');
++        localStorage.removeItem('auth-refreshToken');
++        this.isLoading = false;
++        return false;
++      } catch (error: any) {
++        this.isAuthenticated = false;
++        this.user = null;
++        this.accessToken = null;
++        this.refreshToken = null;
++        this.loginError = error.message || '发生未知错误，请稍后再试。';
++        localStorage.removeItem('auth-isAuthenticated');
++        localStorage.removeItem('auth-user');
++        localStorage.removeItem('auth-accessToken');
++        localStorage.removeItem('auth-refreshToken');
++        this.isLoading = false;
++        return false;
++      }
++    },
+     logout() {
+       this.isAuthenticated = false;
+       this.user = null;
+       this.accessToken = null;
+       this.refreshToken = null;
+       this.loginError = null;
+       this.userPermissions = []; // 清理权限
+       // 清理 localStorage
+       localStorage.removeItem('auth-isAuthenticated');
+       localStorage.removeItem('auth-user');
+diff --git a/WHartTest_Vue/src/views/FeishuCallbackView.vue b/WHartTest_Vue/src/views/FeishuCallbackView.vue
+new file mode 100644
+index 0000000..20833c8
+--- /dev/null
++++ b/WHartTest_Vue/src/views/FeishuCallbackView.vue
+@@ -0,0 +1,179 @@
++<template>
++  <div class="feishu-callback-page">
++    <canvas ref="canvasRef" class="starry-canvas" />
++
++    <div class="callback-card">
++      <template v-if="status === 'loading'">
++        <svg class="spinner" viewBox="0 0 24 24" fill="none">
++          <circle cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4" opacity="0.25" />
++          <path fill="currentColor" opacity="0.75" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />
++        </svg>
++        <h2>飞书登录中</h2>
++        <p>正在验证飞书授权信息，请稍候...</p>
++      </template>
++
++      <template v-else>
++        <div class="callback-icon">
++          <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor">
++            <path stroke-linecap="round" stroke-linejoin="round" d="M12 9v3.75m9-.75a9 9 0 11-18 0 9 9 0 0118 0zm-9 3.75h.008v.008H12v-.008z" />
++          </svg>
++        </div>
++        <h2>{{ status === 'denied' ? '已取消授权' : '登录失败' }}</h2>
++        <p>{{ errorMessage }}</p>
++        <button type="button" class="back-button" @click="goLogin">返回登录</button>
++      </template>
++    </div>
++  </div>
++</template>
++
++<script setup lang="ts">
++import { onMounted, ref } from 'vue'
++import { Message } from '@arco-design/web-vue'
++import { useRoute, useRouter } from 'vue-router'
++import { useStarryBackground } from '@/composables/useStarryBackground'
++import { useAuthStore } from '@/store/authStore'
++
++type CallbackStatus = 'loading' | 'denied' | 'error'
++
++const canvasRef = ref<HTMLCanvasElement | null>(null)
++const status = ref<CallbackStatus>('loading')
++const errorMessage = ref('')
++
++useStarryBackground(canvasRef)
++
++const route = useRoute()
++const router = useRouter()
++const authStore = useAuthStore()
++
++const goLogin = () => {
++  router.replace({ name: 'Login' })
++}
++
++onMounted(async () => {
++  // 分支一：飞书携带 error 回调（用户拒绝授权等）
++  const queryError = typeof route.query.error === 'string' ? route.query.error : ''
++  if (queryError) {
++    status.value = queryError === 'access_denied' ? 'denied' : 'error'
++    errorMessage.value = queryError === 'access_denied'
++      ? '您取消了飞书授权，可返回使用其他方式登录。'
++      : '飞书授权失败，请返回重试。'
++    return
++  }
++
++  const code = typeof route.query.code === 'string' ? route.query.code : ''
++  const state = typeof route.query.state === 'string' ? route.query.state : ''
++  if (!code || !state) {
++    status.value = 'error'
++    errorMessage.value = '回调参数缺失，无法完成飞书登录。'
++    return
++  }
++
++  // 分支二：正常回调，交给后端换取令牌并登录
++  const success = await authStore.loginWithFeishu(code, state)
++  if (success) {
++    Message.success('登录成功！')
++    await router.replace({ name: 'Dashboard' })
++    return
++  }
++
++  // 分支三：登录失败，展示后端返回的错误信息
++  status.value = 'error'
++  errorMessage.value = authStore.getLoginError || '飞书登录失败，请返回重试。'
++})
++</script>
++
++<style scoped>
++.feishu-callback-page {
++  position: relative;
++  min-height: 100vh;
++  overflow: hidden;
++  display: flex;
++  align-items: center;
++  justify-content: center;
++  padding: 24px;
++  background: radial-gradient(ellipse at 20% 50%, #0a1628 0%, #020810 100%);
++}
++
++.starry-canvas {
++  position: absolute;
++  inset: 0;
++  z-index: 0;
++}
++
++.callback-card {
++  position: relative;
++  z-index: 1;
++  width: min(100%, 380px);
++  padding: 36px 32px;
++  border: 1px solid rgba(255, 255, 255, 0.18);
++  border-radius: 24px;
++  background: rgba(9, 20, 38, 0.72);
++  backdrop-filter: blur(18px);
++  box-shadow: 0 16px 40px rgba(0, 0, 0, 0.35);
++  color: #e8f0ff;
++  text-align: center;
++  animation: fade-in-up 0.6s ease-out;
++}
++
++.spinner {
++  width: 44px;
++  height: 44px;
++  animation: spin 1s linear infinite;
++}
++
++.callback-card h2 {
++  margin: 16px 0 8px;
++  font-size: 20px;
++  font-weight: 700;
++}
++
++.callback-card p {
++  margin: 0;
++  color: rgba(180, 210, 255, 0.75);
++  font-size: 14px;
++  line-height: 1.6;
++}
++
++.callback-icon {
++  display: inline-flex;
++  align-items: center;
++  justify-content: center;
++  width: 56px;
++  height: 56px;
++  border-radius: 50%;
++  background: rgba(245, 83, 61, 0.16);
++  color: #f87171;
++}
++
++.callback-icon svg {
++  width: 30px;
++  height: 30px;
++}
++
++.back-button {
++  margin-top: 20px;
++  padding: 10px 28px;
++  border: none;
++  border-radius: 999px;
++  background: linear-gradient(135deg, #2563eb, #38bdf8);
++  color: #fff;
++  font-size: 14px;
++  font-weight: 600;
++  cursor: pointer;
++  transition: transform 0.2s ease, box-shadow 0.2s ease;
++}
++
++.back-button:hover {
++  transform: translateY(-2px);
++  box-shadow: 0 10px 24px rgba(37, 99, 235, 0.35);
++}
++
++@keyframes spin {
++  to { transform: rotate(360deg); }
++}
++
++@keyframes fade-in-up {
++  from { opacity: 0; transform: translateY(24px); }
++  to { opacity: 1; transform: translateY(0); }
++}
++</style>
+diff --git a/WHartTest_Vue/src/views/LoginView.vue b/WHartTest_Vue/src/views/LoginView.vue
+index 4ee8195..2f137e4 100644
+--- a/WHartTest_Vue/src/views/LoginView.vue
++++ b/WHartTest_Vue/src/views/LoginView.vue
+@@ -5,45 +5,70 @@
+     <div class="content-layer">
+       <div class="brand-area">
+         <img :src="brandLogoUrl" alt="Logo" class="brand-logo" />
+         <h1 class="brand-title">SkillForgeTest</h1>
+         <p class="brand-subtitle">J&T智萃平台</p>
+         <div class="brand-tags">
+           <span v-for="tag in featureTags" :key="tag" class="tag">{{ tag }}</span>
+         </div>
+       </div>
+ 
+-      <button
+-        ref="launcherButtonRef"
+-        type="button"
+-        class="login-launcher"
+-        aria-label="打开登录弹窗"
+-        @click="openLoginDialog"
+-      >
+-        <span class="launcher-aura" />
+-        <span class="launcher-icon" aria-hidden="true">
+-          <img
+-            v-if="!fingerprintImageLoadFailed && currentFingerprintAsset"
+-            :src="currentFingerprintAsset"
+-            alt=""
+-            class="launcher-fingerprint-img"
+-            @error="handleFingerprintAssetError"
+-          />
+-          <svg v-else xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.8" stroke="currentColor">
+-            <path stroke-linecap="round" stroke-linejoin="round" d="M16.5 10.5V7.875a4.5 4.5 0 00-9 0V10.5m9 0h.75A2.25 2.25 0 0119.5 12.75v5.625a2.25 2.25 0 01-2.25 2.25h-10.5a2.25 2.25 0 01-2.25-2.25V12.75A2.25 2.25 0 016.75 10.5h.75" />
+-          </svg>
+-        </span>
+-        <span class="launcher-copy">
+-          <strong>账号登录</strong>
+-          <span>点击展开登录框</span>
+-        </span>
+-      </button>
++      <div class="launcher-row">
++        <button
++          ref="launcherButtonRef"
++          type="button"
++          class="login-launcher"
++          aria-label="打开登录弹窗"
++          @click="openLoginDialog"
++        >
++          <span class="launcher-aura" />
++          <span class="launcher-icon" aria-hidden="true">
++            <img
++              v-if="!fingerprintImageLoadFailed && currentFingerprintAsset"
++              :src="currentFingerprintAsset"
++              alt=""
++              class="launcher-fingerprint-img"
++              @error="handleFingerprintAssetError"
++            />
++            <svg v-else xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.8" stroke="currentColor">
++              <path stroke-linecap="round" stroke-linejoin="round" d="M16.5 10.5V7.875a4.5 4.5 0 00-9 0V10.5m9 0h.75A2.25 2.25 0 0119.5 12.75v5.625a2.25 2.25 0 01-2.25 2.25h-10.5a2.25 2.25 0 01-2.25-2.25V12.75A2.25 2.25 0 016.75 10.5h.75" />
++            </svg>
++          </span>
++          <span class="launcher-copy">
++            <strong>账号登录</strong>
++            <span>点击展开登录框</span>
++          </span>
++        </button>
++
++        <button
++          type="button"
++          class="login-launcher feishu-launcher"
++          aria-label="使用飞书登录"
++          :disabled="feishuLoading"
++          @click="handleFeishuLogin"
++        >
++          <span class="launcher-aura feishu-aura" />
++          <span class="launcher-icon feishu-icon" aria-hidden="true">
++            <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
++              <path d="M10.9 10.9H2A8.9 8.9 0 0 1 10.9 2v8.9Z" fill="#3370FF" />
++              <path d="M13.1 13.1H22A8.9 8.9 0 0 1 13.1 22v-8.9Z" fill="#3370FF" />
++              <path d="M13.1 2A8.9 8.9 0 0 1 22 10.9h-8.9V2Z" fill="#00D6B9" />
++              <path d="M10.9 22A8.9 8.9 0 0 1 2 13.1h8.9V22Z" fill="#00D6B9" />
++              <circle cx="12" cy="12" r="2.4" fill="#fff" />
++            </svg>
++          </span>
++          <span class="launcher-copy">
++            <strong>飞书登录</strong>
++            <span>使用飞书账号快捷登录</span>
++          </span>
++        </button>
++      </div>
+     </div>
+ 
+     <Transition name="login-dialog">
+       <div v-if="loginDialogVisible" class="login-overlay" @click.self="closeLoginDialog">
+         <div
+           ref="loginDialogRef"
+           class="login-card"
+           role="dialog"
+           aria-modal="true"
+           aria-labelledby="login-title"
+@@ -148,20 +173,21 @@
+       </div>
+     </Transition>
+   </div>
+ </template>
+ 
+ <script setup lang="ts">
+ import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
+ import { Message } from '@arco-design/web-vue'
+ import { useRouter } from 'vue-router'
+ import { useStarryBackground } from '@/composables/useStarryBackground'
++import { getFeishuAuthorizeUrl } from '@/services/authService'
+ import { useAuthStore } from '@/store/authStore'
+ import { brandLogoUrl } from '@/utils/assetUrl'
+ 
+ const canvasRef = ref<HTMLCanvasElement | null>(null)
+ const usernameInputRef = ref<HTMLInputElement | null>(null)
+ const launcherButtonRef = ref<HTMLButtonElement | null>(null)
+ const loginDialogRef = ref<HTMLDivElement | null>(null)
+ const username = ref('')
+ const password = ref('')
+ const rememberMe = ref(false)
+@@ -196,20 +222,43 @@ const focusUsernameInput = async () => {
+ 
+ const handleFingerprintAssetError = () => {
+   if (currentFingerprintAssetIndex.value < fingerprintAssetCandidates.length - 1) {
+     currentFingerprintAssetIndex.value += 1
+     return
+   }
+ 
+   fingerprintImageLoadFailed.value = true
+ }
+ 
++const feishuLoading = ref(false)
++
++const handleFeishuLogin = async () => {
++  if (feishuLoading.value) {
++    return
++  }
++
++  feishuLoading.value = true
++  try {
++    const response = await getFeishuAuthorizeUrl()
++    if (response.success && response.data) {
++      // 整页跳转到飞书授权页，授权完成后由回调页接管
++      window.location.href = response.data.authorize_url
++      return
++    }
++    Message.error(response.error || '无法获取飞书授权地址，请稍后重试。')
++  } catch {
++    Message.error('无法获取飞书授权地址，请稍后重试。')
++  } finally {
++    feishuLoading.value = false
++  }
++}
++
+ const openLoginDialog = async () => {
+   previousFocusedElement.value = document.activeElement instanceof HTMLElement ? document.activeElement : launcherButtonRef.value
+   loginDialogVisible.value = true
+   await focusUsernameInput()
+ }
+ 
+ const closeLoginDialog = () => {
+   if (isLoading.value) {
+     return
+   }
+@@ -482,20 +531,44 @@ onBeforeUnmount(() => {
+ .launcher-copy strong {
+   font-size: 18px;
+   font-weight: 700;
+ }
+ 
+ .launcher-copy span {
+   color: rgba(180, 210, 255, 0.72);
+   font-size: 13px;
+ }
+ 
++.launcher-row {
++  position: relative;
++  z-index: 1;
++  display: flex;
++  flex-wrap: wrap;
++  justify-content: center;
++  gap: 20px;
++}
++
++.feishu-launcher .launcher-icon {
++  background: linear-gradient(135deg, rgba(0, 102, 255, 0.9), rgba(0, 214, 185, 0.9));
++  box-shadow: 0 12px 28px rgba(51, 112, 255, 0.35);
++}
++
++.feishu-launcher .launcher-aura {
++  background: radial-gradient(circle, rgba(0, 214, 185, 0.22), transparent 72%);
++}
++
++.feishu-launcher:disabled {
++  opacity: 0.6;
++  cursor: not-allowed;
++  transform: none;
++}
++
+ .login-overlay {
+   position: fixed;
+   z-index: 3;
+   display: flex;
+   align-items: center;
+   justify-content: center;
+   padding: 24px;
+   background: transparent;
+   backdrop-filter: none;
+ }
+@@ -782,20 +855,26 @@ onBeforeUnmount(() => {
+     width: min(100%, 320px);
+     gap: 12px;
+     padding-right: 18px;
+   }
+ 
+   .launcher-icon {
+     width: 50px;
+     height: 50px;
+   }
+ 
++  .launcher-row {
++    flex-direction: column;
++    align-items: center;
++    gap: 16px;
++  }
++
+   .login-overlay {
+     padding: 16px;
+   }
+ 
+   .login-card {
+     padding: 32px 24px 24px;
+   }
+ 
+   .brand-tags {
+     gap: 6px;

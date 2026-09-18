@@ -536,6 +536,12 @@ LOGGING = {
             "level": "INFO",
             "propagate": False,
         },
+        # 账号与飞书认证日志（含 OAuth 降级等告警，便于线上排查）
+        "accounts": {
+            "handlers": ["console", "app_file", "error_file"],
+            "level": "INFO",
+            "propagate": False,
+        },
         # Requirements应用日志
         "requirements": {
             "handlers": ["console", "requirements_file", "error_file"],

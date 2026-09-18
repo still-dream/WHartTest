@@ -138,9 +138,11 @@ services:
       HF_ENDPOINT: ${DOCKER_HF_ENDPOINT:-https://hf-mirror.com}
       # APPUI 自动化配置 - 使用 airtest CLI（非 AirtestIDE GUI）
       AIRTEST_IDE_PATH: airtest
-      # 飞书开放平台应用配置（用于报告截图上传）
+      # 飞书开放平台应用配置（用于报告截图上传与 OAuth 登录）
       FEISHU_APP_ID: ${FEISHU_APP_ID:-}
       FEISHU_APP_SECRET: ${FEISHU_APP_SECRET:-}
+      # OAuth 回调地址（浏览器实际访问的前端地址），必须与飞书开放平台「安全设置-重定向 URL」完全一致
+      FEISHU_REDIRECT_URI: ${FEISHU_REDIRECT_URI:-http://localhost:5173/login/feishu/callback}
     depends_on:
       postgres:
         condition: service_healthy

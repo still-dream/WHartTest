@@ -6,6 +6,12 @@ from rest_framework_simplejwt.serializers import (
     TokenObtainPairSerializer as BaseTokenObtainPairSerializer,
 )
 
+from .feishu import get_feishu_user_name_by_email
+
+import logging
+
+logger = logging.getLogger(__name__)
+
 # 权限名称翻译映射
 # 您可以根据实际的权限名称进行扩展
 PERMISSION_NAME_TRANSLATIONS = {
@@ -250,6 +256,9 @@ class UserSerializer(serializers.ModelSerializer):
         write_only=True, required=True, style={"input_type": "password"}
     )
     email = serializers.EmailField(required=True)
+    # 「姓名」保存字段：前端用户管理界面将 last_name 作为姓名提交/展示。
+    first_name = serializers.CharField(required=False, allow_blank=True, max_length=150)
+    last_name = serializers.CharField(required=False, allow_blank=True, max_length=150)
 
     class Meta:
         model = User
@@ -258,17 +267,30 @@ class UserSerializer(serializers.ModelSerializer):
             "username",
             "email",
             "password",
+            "first_name",
+            "last_name",
             "is_staff",
             "is_active",
         )  # 添加管理员相关字段
 
     def create(self, validated_data):
+        # 关联飞书账号：按邮箱反查飞书用户中文名，优先作为「姓名」（last_name）保存；
+        # 反查失败（未配置应用身份/邮箱未匹配飞书用户等）时回退使用表单提交的姓名。
+        email = validated_data.get("email", "")
+        try:
+            feishu_name = get_feishu_user_name_by_email(email) or ""
+        except Exception:
+            logger.warning("创建用户时按邮箱反查飞书姓名异常，回退使用表单姓名。", exc_info=True)
+            feishu_name = ""
+
         # 信号处理器会自动处理管理员权限分配，这里只需要正常创建用户
         # 统一走 create_user，确保密码会被哈希而不是明文入库。
         user = User.objects.create_user(
             username=validated_data["username"],
-            email=validated_data["email"],
+            email=email,
             password=validated_data["password"],
+            first_name=validated_data.get("first_name", ""),
+            last_name=feishu_name or validated_data.get("last_name", ""),
             is_staff=validated_data.get("is_staff", False),
             is_active=validated_data.get("is_active", True),
         )

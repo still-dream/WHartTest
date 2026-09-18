@@ -1,0 +1,100 @@
+﻿8be5629 feat: authStore 新增飞书登录 action
+ WHartTest_Vue/src/store/authStore.ts | 57 ++++++++++++++++++++++++++++++++++++
+ 1 file changed, 57 insertions(+)
+diff --git a/WHartTest_Vue/src/store/authStore.ts b/WHartTest_Vue/src/store/authStore.ts
+index 630e159..b537bf3 100644
+--- a/WHartTest_Vue/src/store/authStore.ts
++++ b/WHartTest_Vue/src/store/authStore.ts
+@@ -1,14 +1,15 @@
+ import { defineStore } from 'pinia';
+ import {
+   login as loginService,
+   register as registerService,
++  feishuLogin as feishuLoginService,
+   type AuthServiceLoginResponse,
+   type AuthServiceRegisterResponse,
+ } from '@/services/authService';
+ import { getUserPermissions } from '@/services/permissionService';
+ import { useStorage } from '@vueuse/core';
+ import { useProjectStore } from '@/store/projectStore';
+ 
+ // 用户信息结构
+ interface User {
+   id: number;
+@@ -140,20 +141,76 @@ export const useAuthStore = defineStore('auth', {
+         this.loginError = error.message || '发生未知错误，请稍后再试。';
+         // 清理 localStorage
+         localStorage.removeItem('auth-isAuthenticated');
+         localStorage.removeItem('auth-user');
+         localStorage.removeItem('auth-accessToken');
+         localStorage.removeItem('auth-refreshToken');
+         this.isLoading = false;
+         return false;
+       }
+     },
++    /**
++     * 飞书登录 Action（邮箱匹配已有账号，否则后端自动创建）
++     * @param code 飞书回调携带的授权码
++     * @param state 飞书回调携带的防 CSRF 状态
++     * @returns 返回一个 Promise，解析为登录是否成功 (boolean)
++     */
++    async loginWithFeishu(code: string, state: string): Promise<boolean> {
++      this.isLoading = true;
++      this.loginError = null;
++      try {
++        const response: AuthServiceLoginResponse = await feishuLoginService(code, state);
++        if (response.success && response.data) {
++          this.isAuthenticated = true;
++          this.user = response.data.user;
++          this.accessToken = response.data.access;
++          this.refreshToken = response.data.refresh;
++
++          localStorage.setItem('auth-isAuthenticated', 'true');
++          localStorage.setItem('auth-user', JSON.stringify(this.user));
++          localStorage.setItem('auth-accessToken', this.accessToken);
++          localStorage.setItem('auth-refreshToken', this.refreshToken);
++
++          // 异步获取用户权限（不阻塞登录流程）
++          this.loadUserPermissions().catch(error => {
++            console.error('获取用户权限失败:', error);
++          });
++
++          this.isLoading = false;
++          return true;
++        }
++
++        this.isAuthenticated = false;
++        this.user = null;
++        this.accessToken = null;
++        this.refreshToken = null;
++        this.loginError = response.error || '飞书登录失败，请重试。';
++        localStorage.removeItem('auth-isAuthenticated');
++        localStorage.removeItem('auth-user');
++        localStorage.removeItem('auth-accessToken');
++        localStorage.removeItem('auth-refreshToken');
++        this.isLoading = false;
++        return false;
++      } catch (error: any) {
++        this.isAuthenticated = false;
++        this.user = null;
++        this.accessToken = null;
++        this.refreshToken = null;
++        this.loginError = error.message || '发生未知错误，请稍后再试。';
++        localStorage.removeItem('auth-isAuthenticated');
++        localStorage.removeItem('auth-user');
++        localStorage.removeItem('auth-accessToken');
++        localStorage.removeItem('auth-refreshToken');
++        this.isLoading = false;
++        return false;
++      }
++    },
+     logout() {
+       this.isAuthenticated = false;
+       this.user = null;
+       this.accessToken = null;
+       this.refreshToken = null;
+       this.loginError = null;
+       this.userPermissions = []; // 清理权限
+       // 清理 localStorage
+       localStorage.removeItem('auth-isAuthenticated');
+       localStorage.removeItem('auth-user');

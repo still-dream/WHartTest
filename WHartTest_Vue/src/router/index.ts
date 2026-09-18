@@ -242,6 +242,7 @@ const routes: Array<RouteRecordRaw> = [ // 声明路由表数组，类型约束�
         path: 'system/message-templates',
         name: 'MessageTemplateManagement',
         component: MessageTemplateView,
+        meta: { requiresAdmin: true },
       },
       // 其他受保护的子路由可以加在这里
     ]
@@ -284,6 +285,10 @@ router.beforeEach((to, _from, next) => { // 注册全局前置守卫，在每次
     // 已登录但访问登录/注册页，重定向到首页
     console.log('[Router Guard] 已登录，重定向到首页'); // 输出已登录访问公开页的重定向日志。
     next({ name: 'Dashboard' }); // 直接跳到仪表盘，避免重复登录/注册操作。
+  } else if (to.meta.requiresAdmin && !authStore.user?.is_staff) { // 需要管理员权限的路由，非管理员一律拦截。
+    // 无管理员权限访问受限路由，重定向到首页，避免直接输入 URL 绕过菜单显隐控制。
+    console.log('[Router Guard] 非管理员访问受限路由，重定向到首页'); // 输出权限拦截日志。
+    next({ name: 'Dashboard' }); // 跳到仪表盘。
   } else {
     console.log('[Router Guard] 放行'); // 输出路由放行日志。
     next(); // 满足条件时继续当前导航流程。

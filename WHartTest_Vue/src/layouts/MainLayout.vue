@@ -206,7 +206,7 @@
               <template #icon><icon-message /></template>
               <a href="#" @click="checkProjectAndNavigate($event, '/system/webhook-addresses')">{{ webhookMenuLabel }}</a>
             </a-menu-item>
-            <a-menu-item key="message-templates">
+            <a-menu-item key="message-templates" v-if="hasMessageTemplatePermission">
               <template #icon><icon-file /></template>
               <a href="#" @click="checkProjectAndNavigate($event, '/system/message-templates')">{{ templateMenuLabel }}</a>
             </a-menu-item>
@@ -468,6 +468,10 @@ const hasWebhookPermission = computed(() => {
   return !!authStore.user?.is_staff;
 });
 
+const hasMessageTemplatePermission = computed(() => {
+  return !!authStore.user?.is_staff;
+});
+
 // 检查是否有测试管理菜单项的权限
 const hasTestManagementMenuItems = computed(() => {
   return hasTestcasesPermission.value ||
@@ -486,7 +490,7 @@ const hasSystemMenuItems = computed(() => {
          hasSkillsPermission.value ||
          hasOperationLogsPermission.value ||
          hasWebhookPermission.value ||
-         true; // 消息模板对所有认证用户可见
+         hasMessageTemplatePermission.value;
 });
 
 // 切换侧边栏收起状态

@@ -1,0 +1,274 @@
+﻿fc49fb6 feat: 新增飞书 OAuth 服务层（授权地址/state 签名/令牌交换/用户信息）
+ WHartTest_Django/accounts/feishu.py | 125 ++++++++++++++++++++++++++++++++++++
+ WHartTest_Django/accounts/tests.py  | 107 +++++++++++++++++++++++++++++-
+ 2 files changed, 231 insertions(+), 1 deletion(-)
+diff --git a/WHartTest_Django/accounts/feishu.py b/WHartTest_Django/accounts/feishu.py
+new file mode 100644
+index 0000000..dfbb73b
+--- /dev/null
++++ b/WHartTest_Django/accounts/feishu.py
+@@ -0,0 +1,125 @@
++"""飞书 OAuth 登录服务层。
++
++负责构建授权页地址、签发/校验 state、与飞书开放平台交换令牌、获取用户信息。
++官方端点（2026-09 核实）：
++- 授权页: https://accounts.feishu.cn/open-apis/authen/v1/authorize （response_type=code 必填）
++- token(v3): https://accounts.feishu.cn/oauth/v3/token （扁平响应，成功依据 code == 0）
++- 用户信息: https://open.feishu.cn/open-apis/authen/v1/user_info （Bearer user_access_token）
++"""
++
++import hashlib
++import hmac
++import logging
++import time
++from urllib.parse import urlencode
++
++import httpx
++from django.conf import settings
++
++logger = logging.getLogger(__name__)
++
++FEISHU_AUTHORIZE_URL = "https://accounts.feishu.cn/open-apis/authen/v1/authorize"
++FEISHU_TOKEN_URL = "https://accounts.feishu.cn/oauth/v3/token"
++FEISHU_USER_INFO_URL = "https://open.feishu.cn/open-apis/authen/v1/user_info"
++
++# state 有效期（秒）：覆盖“跳转授权页 → 用户操作 → 回调”完整流程。
++STATE_TTL_SECONDS = 600
++HTTP_TIMEOUT_SECONDS = 10
++
++
++class FeishuAuthError(Exception):
++    """飞书认证失败（配置缺失 / token 交换失败 / 用户信息获取失败）。"""
++
++    def __init__(self, message: str, code: int | None = None):
++        super().__init__(message)
++        self.code = code
++
++
++def sign_state(timestamp: str) -> str:
++    """对时间戳做 HMAC-SHA256 签名（密钥为 Django SECRET_KEY）。"""
++    secret = settings.SECRET_KEY.encode("utf-8")
++    return hmac.new(secret, timestamp.encode("utf-8"), hashlib.sha256).hexdigest()
++
++
++def build_state() -> str:
++    """生成防伪造/防重放的 state：`时间戳.HMAC签名`。"""
++    timestamp = str(int(time.time()))
++    return f"{timestamp}.{sign_state(timestamp)}"
++
++
++def verify_state(state: str) -> bool:
++    """校验 state 的签名与有效期。"""
++    if not state or state.count(".") != 1:
++        return False
++    timestamp, signature = state.split(".", 1)
++    if not timestamp.isdigit():
++        return False
++    if not hmac.compare_digest(signature, sign_state(timestamp)):
++        return False
++    return time.time() - int(timestamp) <= STATE_TTL_SECONDS
++
++
++def build_authorize_url(state: str) -> str:
++    """构建飞书 OAuth 授权页地址。"""
++    params = {
++        "client_id": settings.FEISHU_APP_ID,
++        "redirect_uri": settings.FEISHU_REDIRECT_URI,
++        "response_type": "code",
++        "state": state,
++    }
++    return f"{FEISHU_AUTHORIZE_URL}?{urlencode(params)}"
++
++
++def exchange_code_for_token(code: str) -> dict:
++    """用授权码换取 user_access_token，返回飞书扁平结构响应。"""
++    app_id = getattr(settings, "FEISHU_APP_ID", "")
++    app_secret = getattr(settings, "FEISHU_APP_SECRET", "")
++    if not app_id or not app_secret:
++        raise FeishuAuthError("飞书登录未配置（FEISHU_APP_ID / FEISHU_APP_SECRET 缺失）")
++
++    payload = {
++        "grant_type": "authorization_code",
++        "client_id": app_id,
++        "client_secret": app_secret,
++        "code": code,
++        "redirect_uri": settings.FEISHU_REDIRECT_URI,
++    }
++    try:
++        response = httpx.post(FEISHU_TOKEN_URL, json=payload, timeout=HTTP_TIMEOUT_SECONDS)
++    except httpx.HTTPError as exc:
++        raise FeishuAuthError(f"请求飞书令牌接口失败：{exc}") from exc
++
++    try:
++        data = response.json()
++    except ValueError as exc:
++        raise FeishuAuthError("飞书令牌接口返回了非 JSON 响应。") from exc
++
++    if data.get("code") != 0 or not data.get("access_token"):
++        logger.warning("飞书授权码换取令牌失败：%s", data)
++        description = data.get("error_description") or data.get("error") or data
++        raise FeishuAuthError(f"飞书授权失败：{description}", code=data.get("code"))
++    return data
++
++
++def get_feishu_user(access_token: str) -> dict:
++    """用 user_access_token 获取飞书用户信息（返回 data 字段：name/email 等）。"""
++    try:
++        response = httpx.get(
++            FEISHU_USER_INFO_URL,
++            headers={"Authorization": f"Bearer {access_token}"},
++            timeout=HTTP_TIMEOUT_SECONDS,
++        )
++    except httpx.HTTPError as exc:
++        raise FeishuAuthError(f"请求飞书用户信息失败：{exc}") from exc
++
++    try:
++        data = response.json()
++    except ValueError as exc:
++        raise FeishuAuthError("飞书用户信息接口返回了非 JSON 响应。") from exc
++
++    if data.get("code") != 0:
++        logger.warning("获取飞书用户信息失败：%s", data)
++        raise FeishuAuthError(
++            f"获取飞书用户信息失败：{data.get('msg') or data}", code=data.get("code")
++        )
++    return data.get("data") or {}
+diff --git a/WHartTest_Django/accounts/tests.py b/WHartTest_Django/accounts/tests.py
+index 0a4ddac..6b1c885 100644
+--- a/WHartTest_Django/accounts/tests.py
++++ b/WHartTest_Django/accounts/tests.py
+@@ -1,17 +1,27 @@
++import time
+ from unittest.mock import patch
+ from types import SimpleNamespace
+ 
+ from django.db.utils import OperationalError
+-from django.test import SimpleTestCase
++from django.test import SimpleTestCase, override_settings
+ from rest_framework.test import APIRequestFactory
+ 
++from accounts.feishu import (
++    FeishuAuthError,
++    build_authorize_url,
++    build_state,
++    exchange_code_for_token,
++    get_feishu_user,
++    sign_state,
++    verify_state,
++)
+ from accounts.serializers import ContentTypeSerializer
+ from accounts.views import MyTokenObtainPairView
+ 
+ 
+ class MyTokenObtainPairViewTests(SimpleTestCase):
+     def setUp(self):
+         # 构造 DRF 请求工厂，模拟 token 登录请求。
+         self.factory = APIRequestFactory()
+ 
+     def test_returns_503_when_database_not_ready(self):
+@@ -49,10 +59,105 @@ class ContentTypeSerializerMenuGroupingTests(SimpleTestCase):
+ 
+         self.assertEqual(self.serializer.get_app_label_cn(content_type), '任务中心')
+         self.assertEqual(self.serializer.get_app_label_subcategory(content_type), '任务调度')
+         self.assertEqual(self.serializer.get_app_label_sort(content_type), 5)
+ 
+     def test_django_celery_beat_is_grouped_under_task_center(self):
+         content_type = SimpleNamespace(app_label='django_celery_beat', model='periodictask')
+ 
+         self.assertEqual(self.serializer.get_app_label_cn(content_type), '任务中心')
+         self.assertEqual(self.serializer.get_app_label_subcategory(content_type), '任务调度')
++
++
++@override_settings(
++    FEISHU_APP_ID='cli_test',
++    FEISHU_APP_SECRET='secret_test',
++    FEISHU_REDIRECT_URI='http://testserver/login/feishu/callback',
++)
++class FeishuServiceTests(SimpleTestCase):
++    def test_build_authorize_url_contains_required_params(self):
++        url = build_authorize_url('my-state')
++
++        self.assertTrue(url.startswith('https://accounts.feishu.cn/open-apis/authen/v1/authorize?'))
++        self.assertIn('response_type=code', url)
++        self.assertIn('client_id=cli_test', url)
++        self.assertIn('state=my-state', url)
++        self.assertIn(
++            'redirect_uri=http%3A%2F%2Ftestserver%2Flogin%2Ffeishu%2Fcallback', url
++        )
++
++    def test_state_roundtrip_verification(self):
++        self.assertTrue(verify_state(build_state()))
++
++    def test_verify_state_rejects_tampered_signature(self):
++        timestamp = str(int(time.time()))
++        self.assertFalse(verify_state(f'{timestamp}.deadbeef'))
++
++    def test_verify_state_rejects_expired_timestamp(self):
++        expired_timestamp = str(int(time.time()) - 601)
++        expired_state = f'{expired_timestamp}.{sign_state(expired_timestamp)}'
++        self.assertFalse(verify_state(expired_state))
++
++    def test_verify_state_rejects_malformed_state(self):
++        self.assertFalse(verify_state('not-a-signed-state'))
++
++    @patch('accounts.feishu.httpx.post')
++    def test_exchange_code_for_token_returns_flat_payload(self, mock_post):
++        mock_post.return_value.json.return_value = {
++            'code': 0,
++            'access_token': 'u-access',
++            'refresh_token': 'u-refresh',
++            'token_type': 'Bearer',
++            'expires_in': 6900,
++        }
++
++        token_data = exchange_code_for_token('auth-code')
++
++        self.assertEqual(token_data['access_token'], 'u-access')
++        self.assertEqual(mock_post.call_args.kwargs['json']['grant_type'], 'authorization_code')
++        self.assertEqual(mock_post.call_args.kwargs['json']['client_id'], 'cli_test')
++        self.assertEqual(mock_post.call_args.kwargs['json']['code'], 'auth-code')
++        self.assertEqual(
++            mock_post.call_args.args[0], 'https://accounts.feishu.cn/oauth/v3/token'
++        )
++
++    @patch('accounts.feishu.httpx.post')
++    def test_exchange_code_for_token_raises_on_error_code(self, mock_post):
++        mock_post.return_value.json.return_value = {
++            'code': 20004, 'error': 'invalid_code', 'error_description': 'code 已过期',
++        }
++
++        # assertLogs 捕获服务层 warning，既断言日志内容，也避免其经 lastResort 打到 stderr。
++        with self.assertLogs('accounts.feishu', level='WARNING') as captured_logs:
++            with self.assertRaises(FeishuAuthError):
++                exchange_code_for_token('expired-code')
++
++        self.assertIn('飞书授权码换取令牌失败', captured_logs.output[0])
++
++    @patch('accounts.feishu.httpx.get')
++    def test_get_feishu_user_returns_data_payload(self, mock_get):
++        mock_get.return_value.json.return_value = {
++            'code': 0,
++            'data': {'name': '张三', 'email': 'zhangsan@example.com'},
++        }
++
++        feishu_user = get_feishu_user('u-access')
++
++        self.assertEqual(feishu_user['email'], 'zhangsan@example.com')
++        self.assertEqual(
++            mock_get.call_args.kwargs['headers']['Authorization'], 'Bearer u-access'
++        )
++        self.assertEqual(
++            mock_get.call_args.args[0],
++            'https://open.feishu.cn/open-apis/authen/v1/user_info',
++        )
++
++    @patch('accounts.feishu.httpx.get')
++    def test_get_feishu_user_raises_on_error_code(self, mock_get):
++        mock_get.return_value.json.return_value = {'code': 99991668, 'msg': 'token 无效'}
++
++        # assertLogs 捕获服务层 warning，既断言日志内容，也避免其经 lastResort 打到 stderr。
++        with self.assertLogs('accounts.feishu', level='WARNING') as captured_logs:
++            with self.assertRaises(FeishuAuthError):
++                get_feishu_user('bad-token')
++
++        self.assertIn('获取飞书用户信息失败', captured_logs.output[0])

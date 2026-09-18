@@ -1,0 +1,415 @@
+﻿6b86779 feat: 新增飞书登录视图与路由（邮箱匹配登录/自动建号）
+ WHartTest_Django/accounts/tests.py | 170 ++++++++++++++++++++++++++++++++++++-
+ WHartTest_Django/accounts/urls.py  |   5 +-
+ WHartTest_Django/accounts/views.py | 106 +++++++++++++++++++++++
+ 3 files changed, 278 insertions(+), 3 deletions(-)
+diff --git a/WHartTest_Django/accounts/tests.py b/WHartTest_Django/accounts/tests.py
+index 6b1c885..0ae3425 100644
+--- a/WHartTest_Django/accounts/tests.py
++++ b/WHartTest_Django/accounts/tests.py
+@@ -1,29 +1,33 @@
+ import time
+ from unittest.mock import patch
+ from types import SimpleNamespace
+ 
++from django.contrib.auth.models import User
+ from django.db.utils import OperationalError
+-from django.test import SimpleTestCase, override_settings
++from django.test import SimpleTestCase, TestCase, override_settings
+ from rest_framework.test import APIRequestFactory
+ 
+ from accounts.feishu import (
+     FeishuAuthError,
+     build_authorize_url,
+     build_state,
+     exchange_code_for_token,
+     get_feishu_user,
+     sign_state,
+     verify_state,
+ )
+ from accounts.serializers import ContentTypeSerializer
+-from accounts.views import MyTokenObtainPairView
++from accounts.views import (
++    FeishuLoginView,
++    MyTokenObtainPairView,
++)
+ 
+ 
+ class MyTokenObtainPairViewTests(SimpleTestCase):
+     def setUp(self):
+         # 构造 DRF 请求工厂，模拟 token 登录请求。
+         self.factory = APIRequestFactory()
+ 
+     def test_returns_503_when_database_not_ready(self):
+         # 模拟数据库尚未就绪时的登录请求，验证接口返回 503 而不是 500 traceback。
+         request = self.factory.post(
+@@ -154,10 +158,172 @@ class FeishuServiceTests(SimpleTestCase):
+     @patch('accounts.feishu.httpx.get')
+     def test_get_feishu_user_raises_on_error_code(self, mock_get):
+         mock_get.return_value.json.return_value = {'code': 99991668, 'msg': 'token 无效'}
+ 
+         # assertLogs 捕获服务层 warning，既断言日志内容，也避免其经 lastResort 打到 stderr。
+         with self.assertLogs('accounts.feishu', level='WARNING') as captured_logs:
+             with self.assertRaises(FeishuAuthError):
+                 get_feishu_user('bad-token')
+ 
+         self.assertIn('获取飞书用户信息失败', captured_logs.output[0])
++
++
++@override_settings(
++    FEISHU_APP_ID='cli_test',
++    FEISHU_APP_SECRET='secret_test',
++    FEISHU_REDIRECT_URI='http://testserver/login/feishu/callback',
++)
++class FeishuLoginViewTests(TestCase):
++    def setUp(self):
++        self.factory = APIRequestFactory()
++        self.feishu_token_payload = {
++            'code': 0, 'access_token': 'u-access', 'refresh_token': 'u-refresh',
++        }
++        self.feishu_user_payload = {
++            'code': 0, 'data': {'name': '张三', 'email': 'zhangsan@example.com'},
++        }
++
++    def _mock_feishu_apis(self, mock_post, mock_get):
++        mock_post.return_value.json.return_value = dict(self.feishu_token_payload)
++        mock_get.return_value.json.return_value = dict(self.feishu_user_payload)
++
++    def _post_feishu_login(self, code='auth-code', state=None):
++        request = self.factory.post(
++            '/api/accounts/feishu/login/',
++            {'code': code, 'state': state if state is not None else build_state()},
++            format='json',
++        )
++        return FeishuLoginView.as_view()(request)
++
++    @patch('accounts.feishu.httpx.get')
++    @patch('accounts.feishu.httpx.post')
++    def test_existing_user_login_by_email(self, mock_post, mock_get):
++        self._mock_feishu_apis(mock_post, mock_get)
++        User.objects.create_user(
++            username='zhangsan', email='zhangsan@example.com', password='old-secret'
++        )
++
++        response = self._post_feishu_login()
++
++        self.assertEqual(response.status_code, 200)
++        self.assertIn('access', response.data)
++        self.assertIn('refresh', response.data)
++        self.assertEqual(response.data['user']['username'], 'zhangsan')
++        user = User.objects.get(email__iexact='zhangsan@example.com')
++        self.assertEqual(user.username, 'zhangsan')
++
++    @patch('accounts.feishu.httpx.get')
++    @patch('accounts.feishu.httpx.post')
++    def test_new_user_created_with_default_password(self, mock_post, mock_get):
++        self._mock_feishu_apis(mock_post, mock_get)
++
++        response = self._post_feishu_login()
++
++        self.assertEqual(response.status_code, 200)
++        user = User.objects.get(email__iexact='zhangsan@example.com')
++        self.assertEqual(user.username, 'zhangsan')
++        self.assertEqual(user.first_name, '张三')
++        self.assertTrue(user.is_active)
++        self.assertTrue(user.check_password('Jt123456'))
++
++    @patch('accounts.feishu.httpx.get')
++    @patch('accounts.feishu.httpx.post')
++    def test_new_user_username_conflict_appends_suffix(self, mock_post, mock_get):
++        self._mock_feishu_apis(mock_post, mock_get)
++        User.objects.create_user(
++            username='zhangsan', email='other@example.com', password='old-secret'
++        )
++
++        response = self._post_feishu_login()
++
++        self.assertEqual(response.status_code, 200)
++        new_user = User.objects.get(email__iexact='zhangsan@example.com')
++        self.assertEqual(new_user.username, 'zhangsan1')
++
++    @patch('accounts.feishu.httpx.get')
++    @patch('accounts.feishu.httpx.post')
++    def test_inactive_user_treated_as_absent_creates_new_account(self, mock_post, mock_get):
++        self._mock_feishu_apis(mock_post, mock_get)
++        User.objects.create_user(
++            username='zhangsan', email='zhangsan@example.com',
++            password='old-secret', is_active=False,
++        )
++
++        response = self._post_feishu_login()
++
++        self.assertEqual(response.status_code, 200)
++        new_user = User.objects.filter(
++            email__iexact='zhangsan@example.com', is_active=True
++        ).first()
++        self.assertIsNotNone(new_user)
++        self.assertEqual(new_user.username, 'zhangsan1')
++
++    @patch('accounts.feishu.httpx.get')
++    @patch('accounts.feishu.httpx.post')
++    def test_missing_email_rejected(self, mock_post, mock_get):
++        mock_post.return_value.json.return_value = dict(self.feishu_token_payload)
++        mock_get.return_value.json.return_value = {
++            'code': 0, 'data': {'name': '张三'},
++        }
++
++        response = self._post_feishu_login()
++
++        self.assertEqual(response.status_code, 400)
++        self.assertIn('邮箱', response.data['detail'])
++
++    def test_invalid_state_rejected(self):
++        response = self._post_feishu_login(state='123.deadbeef')
++
++        self.assertEqual(response.status_code, 400)
++        self.assertIn('state', response.data['detail'])
++
++    def test_missing_code_or_state_rejected(self):
++        request = self.factory.post(
++            '/api/accounts/feishu/login/', {'code': 'auth-code'}, format='json'
++        )
++
++        response = FeishuLoginView.as_view()(request)
++
++        self.assertEqual(response.status_code, 400)
++
++    @patch('accounts.feishu.httpx.get')
++    @patch('accounts.feishu.httpx.post')
++    def test_feishu_token_error_returns_400(self, mock_post, mock_get):
++        mock_post.return_value.json.return_value = {
++            'code': 20004, 'error': 'invalid_code', 'error_description': 'code 已过期',
++        }
++        mock_get.return_value.json.return_value = dict(self.feishu_user_payload)
++
++        # assertLogs 捕获服务层 warning，避免其经 lastResort 打到 stderr 污染测试输出。
++        with self.assertLogs('accounts.feishu', level='WARNING'):
++            response = self._post_feishu_login()
++
++        self.assertEqual(response.status_code, 400)
++        self.assertIn('飞书授权失败', response.data['detail'])
++
++
++class FeishuAuthorizeUrlViewTests(SimpleTestCase):
++    def setUp(self):
++        self.factory = APIRequestFactory()
++
++    @override_settings(FEISHU_APP_ID='cli_test', FEISHU_APP_SECRET='secret_test')
++    def test_returns_authorize_url_and_state(self):
++        from accounts.views import FeishuAuthorizeUrlView
++
++        request = self.factory.get('/api/accounts/feishu/authorize-url/')
++
++        response = FeishuAuthorizeUrlView.as_view()(request)
++
++        self.assertEqual(response.status_code, 200)
++        self.assertIn('state', response.data)
++        self.assertIn('response_type=code', response.data['authorize_url'])
++
++    @override_settings(FEISHU_APP_ID='', FEISHU_APP_SECRET='')
++    def test_returns_503_when_feishu_not_configured(self):
++        from accounts.views import FeishuAuthorizeUrlView
++
++        request = self.factory.get('/api/accounts/feishu/authorize-url/')
++
++        response = FeishuAuthorizeUrlView.as_view()(request)
++
++        self.assertEqual(response.status_code, 503)
++        self.assertIn('未配置', response.data['detail'])
+diff --git a/WHartTest_Django/accounts/urls.py b/WHartTest_Django/accounts/urls.py
+index 8fdf1e7..bb62dad 100644
+--- a/WHartTest_Django/accounts/urls.py
++++ b/WHartTest_Django/accounts/urls.py
+@@ -1,27 +1,30 @@
+ # 导入 include/path 以挂载路由器与显式端点。
+ from django.urls import include, path
+ 
+ # 导入 DRF 默认路由器用于自动生成 ViewSet 路由。
+ from rest_framework.routers import DefaultRouter
+ 
+ # 导入账户模块下的视图。
+ from .views import (
+     UserCreateAPIView, CurrentUserAPIView,
+-    GroupViewSet, PermissionViewSet, UserViewSet, ContentTypeViewSet
++    GroupViewSet, PermissionViewSet, UserViewSet, ContentTypeViewSet,
++    FeishuAuthorizeUrlView, FeishuLoginView
+ )
+ 
+ # 创建账户模块路由器实例。
+ router = DefaultRouter()
+ router.register(r'users', UserViewSet, basename='user')  # 用户管理路由。
+ router.register(r'groups', GroupViewSet, basename='group')  # 组织/用户组管理路由。
+ router.register(r'permissions', PermissionViewSet, basename='permission')  # 权限查询与分配路由。
+ router.register(r'content-types', ContentTypeViewSet, basename='content-type')  # 模型内容类型查询路由。
+ 
+ # 声明账户模块 URL 列表。
+ urlpatterns = [
+     path('', include(router.urls)),  # 挂载 ViewSet 自动路由。
+     path('register/', UserCreateAPIView.as_view(), name='user-register'),  # 用户注册端点。
+     path('me/', CurrentUserAPIView.as_view(), name='user-me'),  # 当前登录用户信息端点。
++    path('feishu/authorize-url/', FeishuAuthorizeUrlView.as_view(), name='feishu-authorize-url'),
++    path('feishu/login/', FeishuLoginView.as_view(), name='feishu-login'),
+     # 挂载操作日志路由（GET/列表、统计、清理旧日志等）。
+     path('', include('accounts.operation_logs.urls')),
+ ]
+diff --git a/WHartTest_Django/accounts/views.py b/WHartTest_Django/accounts/views.py
+index b5a5a00..9be3232 100644
+--- a/WHartTest_Django/accounts/views.py
++++ b/WHartTest_Django/accounts/views.py
+@@ -4,39 +4,49 @@ from django.shortcuts import get_object_or_404
+ from django.db.utils import OperationalError
+ from django.db.models import Q
+ from rest_framework import generics, status, viewsets
+ from rest_framework.decorators import action
+ from rest_framework.filters import SearchFilter
+ from rest_framework.permissions import AllowAny, IsAuthenticated, IsAdminUser
+ from rest_framework.response import Response
+ from rest_framework.views import APIView
+ from wharttest_django.permissions import HasModelPermission, permission_required
+ 
++from django.conf import settings
++from rest_framework_simplejwt.tokens import RefreshToken
+ from rest_framework_simplejwt.views import (
+     TokenObtainPairView as BaseTokenObtainPairView,
+ )
+ from .serializers import (
+     UserSerializer,
+     UserDetailSerializer,
+     UserUpdateSerializer,
+     GroupSerializer,
+     PermissionSerializer,
+     ContentTypeSerializer,
+     UserGroupOperationSerializer,
+     PermissionAssignToUserSerializer,
+     PermissionAssignToGroupSerializer,
+     BatchUserPermissionOperationSerializer,
+     BatchGroupPermissionOperationSerializer,
+     UpdateUserPermissionsSerializer,
+     UpdateGroupPermissionsSerializer,
+     MyTokenObtainPairSerializer,
+ )
++from .feishu import (
++    FeishuAuthError,
++    build_authorize_url,
++    build_state,
++    exchange_code_for_token,
++    get_feishu_user,
++    verify_state,
++)
+ 
+ 
+ class UserCreateAPIView(generics.CreateAPIView):
+     """
+     用户注册接口。
+     """
+ 
+     queryset = User.objects.all()
+     serializer_class = UserSerializer
+     permission_classes = [AllowAny]
+@@ -902,10 +912,106 @@ class MyTokenObtainPairView(BaseTokenObtainPairView):
+         """
+         当数据库尚未就绪时，返回可识别的友好错误，避免直接暴露 500 调试堆栈。
+         """
+         try:
+             return super().post(request, *args, **kwargs)
+         except OperationalError:
+             return Response(
+                 {"detail": "认证服务正在启动，请稍后重试。"},
+                 status=status.HTTP_503_SERVICE_UNAVAILABLE,
+             )
++
++
++class FeishuAuthorizeUrlView(APIView):
++    """返回飞书 OAuth 授权页地址（供前端整页跳转）。"""
++
++    permission_classes = [AllowAny]
++
++    def get(self, request, *args, **kwargs):
++        if not getattr(settings, "FEISHU_APP_ID", "") or not getattr(
++            settings, "FEISHU_APP_SECRET", ""
++        ):
++            return Response(
++                {"detail": "飞书登录未配置，请联系管理员。"},
++                status=status.HTTP_503_SERVICE_UNAVAILABLE,
++            )
++        state = build_state()
++        return Response(
++            {"authorize_url": build_authorize_url(state), "state": state},
++            status=status.HTTP_200_OK,
++        )
++
++
++def _generate_feishu_username(email: str) -> str:
++    """用邮箱前缀生成用户名，与现有用户名冲突（不区分大小写）时追加数字后缀。"""
++    base = email.split("@", 1)[0] or "feishu_user"
++    if not User.objects.filter(username__iexact=base).exists():
++        return base
++    index = 1
++    while True:
++        candidate = f"{base}{index}"
++        if not User.objects.filter(username__iexact=candidate).exists():
++            return candidate
++        index += 1
++
++
++class FeishuLoginView(APIView):
++    """飞书授权码登录：按邮箱匹配活跃账号，未匹配则自动创建（默认密码 Jt123456）。"""
++
++    permission_classes = [AllowAny]
++
++    def post(self, request, *args, **kwargs):
++        code = request.data.get("code")
++        state = request.data.get("state")
++        if not code or not state:
++            return Response(
++                {"detail": "缺少 code 或 state 参数。"},
++                status=status.HTTP_400_BAD_REQUEST,
++            )
++        if not verify_state(state):
++            return Response(
++                {"detail": "登录 state 校验失败，请重新发起飞书登录。"},
++                status=status.HTTP_400_BAD_REQUEST,
++            )
++
++        try:
++            token_data = exchange_code_for_token(code)
++            feishu_user = get_feishu_user(token_data["access_token"])
++            email = (feishu_user.get("email") or "").strip()
++            feishu_name = (feishu_user.get("name") or "").strip()
++            if not email:
++                return Response(
++                    {"detail": "飞书账号未绑定邮箱，无法登录，请使用账号密码登录。"},
++                    status=status.HTTP_400_BAD_REQUEST,
++                )
++
++            user = User.objects.filter(email__iexact=email, is_active=True).first()
++            if user is None:
++                user = User.objects.create_user(
++                    username=_generate_feishu_username(email),
++                    email=email,
++                    password="Jt123456",
++                    first_name=feishu_name,
++                    is_active=True,
++                )
++            elif feishu_name and user.first_name != feishu_name:
++                user.first_name = feishu_name
++                user.save(update_fields=["first_name"])
++        except FeishuAuthError as exc:
++            return Response(
++                {"detail": str(exc)}, status=status.HTTP_400_BAD_REQUEST
++            )
++        except OperationalError:
++            return Response(
++                {"detail": "认证服务正在启动，请稍后重试。"},
++                status=status.HTTP_503_SERVICE_UNAVAILABLE,
++            )
++
++        refresh = RefreshToken.for_user(user)
++        return Response(
++            {
++                "access": str(refresh.access_token),
++                "refresh": str(refresh),
++                "user": UserDetailSerializer(user).data,
++            },
++            status=status.HTTP_200_OK,
++        )

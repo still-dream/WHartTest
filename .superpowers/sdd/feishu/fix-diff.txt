@@ -1,0 +1,364 @@
+﻿2c0e7eb fix: state 增加随机串防重放，飞书匿名端点添加限流
+ WHartTest_Django/accounts/feishu.py | 22 ++++++-----
+ WHartTest_Django/accounts/tests.py  | 75 +++++++++++++++++++++++++++++++++++--
+ WHartTest_Django/accounts/views.py  | 10 +++++
+ 3 files changed, 94 insertions(+), 13 deletions(-)
+diff --git a/WHartTest_Django/accounts/feishu.py b/WHartTest_Django/accounts/feishu.py
+index dfbb73b..a4bdfbe 100644
+--- a/WHartTest_Django/accounts/feishu.py
++++ b/WHartTest_Django/accounts/feishu.py
+@@ -3,20 +3,21 @@
+ 负责构建授权页地址、签发/校验 state、与飞书开放平台交换令牌、获取用户信息。
+ 官方端点（2026-09 核实）：
+ - 授权页: https://accounts.feishu.cn/open-apis/authen/v1/authorize （response_type=code 必填）
+ - token(v3): https://accounts.feishu.cn/oauth/v3/token （扁平响应，成功依据 code == 0）
+ - 用户信息: https://open.feishu.cn/open-apis/authen/v1/user_info （Bearer user_access_token）
+ """
+ 
+ import hashlib
+ import hmac
+ import logging
++import secrets
+ import time
+ from urllib.parse import urlencode
+ 
+ import httpx
+ from django.conf import settings
+ 
+ logger = logging.getLogger(__name__)
+ 
+ FEISHU_AUTHORIZE_URL = "https://accounts.feishu.cn/open-apis/authen/v1/authorize"
+ FEISHU_TOKEN_URL = "https://accounts.feishu.cn/oauth/v3/token"
+@@ -28,40 +29,41 @@ HTTP_TIMEOUT_SECONDS = 10
+ 
+ 
+ class FeishuAuthError(Exception):
+     """飞书认证失败（配置缺失 / token 交换失败 / 用户信息获取失败）。"""
+ 
+     def __init__(self, message: str, code: int | None = None):
+         super().__init__(message)
+         self.code = code
+ 
+ 
+-def sign_state(timestamp: str) -> str:
+-    """对时间戳做 HMAC-SHA256 签名（密钥为 Django SECRET_KEY）。"""
++def sign_state(payload: str) -> str:
++    """对 state 载荷（随机串+时间戳）做 HMAC-SHA256 签名（密钥为 Django SECRET_KEY）。"""
+     secret = settings.SECRET_KEY.encode("utf-8")
+-    return hmac.new(secret, timestamp.encode("utf-8"), hashlib.sha256).hexdigest()
++    return hmac.new(secret, payload.encode("utf-8"), hashlib.sha256).hexdigest()
+ 
+ 
+ def build_state() -> str:
+-    """生成防伪造/防重放的 state：`时间戳.HMAC签名`。"""
++    """生成防伪造/防重放的 state：`随机串.时间戳.HMAC签名(随机串+时间戳)`。"""
++    nonce = secrets.token_urlsafe(16)
+     timestamp = str(int(time.time()))
+-    return f"{timestamp}.{sign_state(timestamp)}"
++    return f"{nonce}.{timestamp}.{sign_state(f'{nonce}{timestamp}')}"
+ 
+ 
+ def verify_state(state: str) -> bool:
+-    """校验 state 的签名与有效期。"""
+-    if not state or state.count(".") != 1:
++    """校验 state 的结构、签名与有效期（TTL 以时间戳为准）。"""
++    if not state or state.count(".") != 2:
+         return False
+-    timestamp, signature = state.split(".", 1)
+-    if not timestamp.isdigit():
++    nonce, timestamp, signature = state.split(".", 2)
++    if not nonce or not timestamp.isdigit():
+         return False
+-    if not hmac.compare_digest(signature, sign_state(timestamp)):
++    if not hmac.compare_digest(signature, sign_state(f"{nonce}{timestamp}")):
+         return False
+     return time.time() - int(timestamp) <= STATE_TTL_SECONDS
+ 
+ 
+ def build_authorize_url(state: str) -> str:
+     """构建飞书 OAuth 授权页地址。"""
+     params = {
+         "client_id": settings.FEISHU_APP_ID,
+         "redirect_uri": settings.FEISHU_REDIRECT_URI,
+         "response_type": "code",
+diff --git a/WHartTest_Django/accounts/tests.py b/WHartTest_Django/accounts/tests.py
+index 0ae3425..ad50000 100644
+--- a/WHartTest_Django/accounts/tests.py
++++ b/WHartTest_Django/accounts/tests.py
+@@ -1,15 +1,16 @@
+ import time
+ from unittest.mock import patch
+ from types import SimpleNamespace
+ 
+ from django.contrib.auth.models import User
++from django.core.cache import cache
+ from django.db.utils import OperationalError
+ from django.test import SimpleTestCase, TestCase, override_settings
+ from rest_framework.test import APIRequestFactory
+ 
+ from accounts.feishu import (
+     FeishuAuthError,
+     build_authorize_url,
+     build_state,
+     exchange_code_for_token,
+     get_feishu_user,
+@@ -83,33 +84,70 @@ class FeishuServiceTests(SimpleTestCase):
+ 
+         self.assertTrue(url.startswith('https://accounts.feishu.cn/open-apis/authen/v1/authorize?'))
+         self.assertIn('response_type=code', url)
+         self.assertIn('client_id=cli_test', url)
+         self.assertIn('state=my-state', url)
+         self.assertIn(
+             'redirect_uri=http%3A%2F%2Ftestserver%2Flogin%2Ffeishu%2Fcallback', url
+         )
+ 
+     def test_state_roundtrip_verification(self):
+-        self.assertTrue(verify_state(build_state()))
++        state = build_state()
++
++        # state 为「随机串.时间戳.签名」三段结构，且可通过校验。
++        parts = state.split('.')
++        self.assertEqual(len(parts), 3)
++        self.assertTrue(parts[0])
++        self.assertTrue(parts[1].isdigit())
++        self.assertTrue(verify_state(state))
++
++    @patch('accounts.feishu.time.time', return_value=1_700_000_000)
++    def test_build_state_generates_unique_nonce(self, _mock_time):
++        # 同一秒内两次生成的 state 必须不同（随机串防预伪造重放）。
++        self.assertNotEqual(build_state(), build_state())
++
++    def test_verify_state_accepts_nonce_signed_state(self):
++        # 手工按「随机串+时间戳」构造签名，验证签名确实覆盖随机串。
++        nonce = 'fixed-nonce'
++        timestamp = str(int(time.time()))
++        state = f'{nonce}.{timestamp}.{sign_state(f"{nonce}{timestamp}")}'
++
++        self.assertTrue(verify_state(state))
+ 
+     def test_verify_state_rejects_tampered_signature(self):
++        nonce = 'nonce-abc'
+         timestamp = str(int(time.time()))
+-        self.assertFalse(verify_state(f'{timestamp}.deadbeef'))
++        self.assertFalse(verify_state(f'{nonce}.{timestamp}.deadbeef'))
++
++    def test_verify_state_rejects_tampered_nonce(self):
++        state = build_state()
++        _, timestamp, signature = state.split('.')
++
++        # 随机串被替换后签名不再匹配，必须拒绝。
++        self.assertFalse(verify_state(f'tampered-nonce.{timestamp}.{signature}'))
+ 
+     def test_verify_state_rejects_expired_timestamp(self):
+         expired_timestamp = str(int(time.time()) - 601)
+-        expired_state = f'{expired_timestamp}.{sign_state(expired_timestamp)}'
++        expired_state = (
++            f'nonce.{expired_timestamp}.{sign_state(f"nonce{expired_timestamp}")}'
++        )
+         self.assertFalse(verify_state(expired_state))
+ 
+     def test_verify_state_rejects_malformed_state(self):
++        timestamp = str(int(time.time()))
++        valid_signature = sign_state(f'nonce{timestamp}')
++        # 缺段 / 多段 / 空随机串 / 非数字时间戳 均拒绝。
+         self.assertFalse(verify_state('not-a-signed-state'))
++        self.assertFalse(verify_state(f'nonce.{timestamp}'))
++        self.assertFalse(verify_state(f'a.{timestamp}.{valid_signature}.extra'))
++        self.assertFalse(verify_state(f'.{timestamp}.{valid_signature}'))
++        self.assertFalse(verify_state(f'nonce.abc123.{valid_signature}'))
+ 
+     @patch('accounts.feishu.httpx.post')
+     def test_exchange_code_for_token_returns_flat_payload(self, mock_post):
+         mock_post.return_value.json.return_value = {
+             'code': 0,
+             'access_token': 'u-access',
+             'refresh_token': 'u-refresh',
+             'token_type': 'Bearer',
+             'expires_in': 6900,
+         }
+@@ -167,20 +205,22 @@ class FeishuServiceTests(SimpleTestCase):
+         self.assertIn('获取飞书用户信息失败', captured_logs.output[0])
+ 
+ 
+ @override_settings(
+     FEISHU_APP_ID='cli_test',
+     FEISHU_APP_SECRET='secret_test',
+     FEISHU_REDIRECT_URI='http://testserver/login/feishu/callback',
+ )
+ class FeishuLoginViewTests(TestCase):
+     def setUp(self):
++        # DRF 节流基于 locmem cache 按 IP 计数，且 cache 跨测试用例共享，先清空避免互相污染。
++        cache.clear()
+         self.factory = APIRequestFactory()
+         self.feishu_token_payload = {
+             'code': 0, 'access_token': 'u-access', 'refresh_token': 'u-refresh',
+         }
+         self.feishu_user_payload = {
+             'code': 0, 'data': {'name': '张三', 'email': 'zhangsan@example.com'},
+         }
+ 
+     def _mock_feishu_apis(self, mock_post, mock_get):
+         mock_post.return_value.json.return_value = dict(self.feishu_token_payload)
+@@ -269,20 +309,30 @@ class FeishuLoginViewTests(TestCase):
+ 
+         self.assertEqual(response.status_code, 400)
+         self.assertIn('邮箱', response.data['detail'])
+ 
+     def test_invalid_state_rejected(self):
+         response = self._post_feishu_login(state='123.deadbeef')
+ 
+         self.assertEqual(response.status_code, 400)
+         self.assertIn('state', response.data['detail'])
+ 
++    def test_login_throttled_after_rate_limit(self):
++        # 节流先于业务逻辑执行：无效 state（400）也累计计数，超过阈值后返回 429。
++        for _ in range(10):
++            response = self._post_feishu_login(state='invalid.state')
++            self.assertEqual(response.status_code, 400)
++
++        response = self._post_feishu_login(state='invalid.state')
++
++        self.assertEqual(response.status_code, 429)
++
+     def test_missing_code_or_state_rejected(self):
+         request = self.factory.post(
+             '/api/accounts/feishu/login/', {'code': 'auth-code'}, format='json'
+         )
+ 
+         response = FeishuLoginView.as_view()(request)
+ 
+         self.assertEqual(response.status_code, 400)
+ 
+     @patch('accounts.feishu.httpx.get')
+@@ -296,20 +346,22 @@ class FeishuLoginViewTests(TestCase):
+         # assertLogs 捕获服务层 warning，避免其经 lastResort 打到 stderr 污染测试输出。
+         with self.assertLogs('accounts.feishu', level='WARNING'):
+             response = self._post_feishu_login()
+ 
+         self.assertEqual(response.status_code, 400)
+         self.assertIn('飞书授权失败', response.data['detail'])
+ 
+ 
+ class FeishuAuthorizeUrlViewTests(SimpleTestCase):
+     def setUp(self):
++        # DRF 节流基于 locmem cache 按 IP 计数，且 cache 跨测试用例共享，先清空避免互相污染。
++        cache.clear()
+         self.factory = APIRequestFactory()
+ 
+     @override_settings(FEISHU_APP_ID='cli_test', FEISHU_APP_SECRET='secret_test')
+     def test_returns_authorize_url_and_state(self):
+         from accounts.views import FeishuAuthorizeUrlView
+ 
+         request = self.factory.get('/api/accounts/feishu/authorize-url/')
+ 
+         response = FeishuAuthorizeUrlView.as_view()(request)
+ 
+@@ -320,10 +372,27 @@ class FeishuAuthorizeUrlViewTests(SimpleTestCase):
+     @override_settings(FEISHU_APP_ID='', FEISHU_APP_SECRET='')
+     def test_returns_503_when_feishu_not_configured(self):
+         from accounts.views import FeishuAuthorizeUrlView
+ 
+         request = self.factory.get('/api/accounts/feishu/authorize-url/')
+ 
+         response = FeishuAuthorizeUrlView.as_view()(request)
+ 
+         self.assertEqual(response.status_code, 503)
+         self.assertIn('未配置', response.data['detail'])
++
++    @override_settings(FEISHU_APP_ID='cli_test', FEISHU_APP_SECRET='secret_test')
++    def test_throttled_after_rate_limit(self):
++        from accounts.views import FeishuAuthorizeUrlView
++
++        # 同一 IP 请求达到 10/min 阈值后返回 429（节流先于业务逻辑执行）。
++        for _ in range(10):
++            response = FeishuAuthorizeUrlView.as_view()(
++                self.factory.get('/api/accounts/feishu/authorize-url/')
++            )
++            self.assertEqual(response.status_code, 200)
++
++        response = FeishuAuthorizeUrlView.as_view()(
++            self.factory.get('/api/accounts/feishu/authorize-url/')
++        )
++
++        self.assertEqual(response.status_code, 429)
+diff --git a/WHartTest_Django/accounts/views.py b/WHartTest_Django/accounts/views.py
+index 9be3232..94df4bd 100644
+--- a/WHartTest_Django/accounts/views.py
++++ b/WHartTest_Django/accounts/views.py
+@@ -1,20 +1,21 @@
+ from django.contrib.auth.models import User, Group, Permission
+ from django.contrib.contenttypes.models import ContentType
+ from django.shortcuts import get_object_or_404
+ from django.db.utils import OperationalError
+ from django.db.models import Q
+ from rest_framework import generics, status, viewsets
+ from rest_framework.decorators import action
+ from rest_framework.filters import SearchFilter
+ from rest_framework.permissions import AllowAny, IsAuthenticated, IsAdminUser
+ from rest_framework.response import Response
++from rest_framework.throttling import AnonRateThrottle
+ from rest_framework.views import APIView
+ from wharttest_django.permissions import HasModelPermission, permission_required
+ 
+ from django.conf import settings
+ from rest_framework_simplejwt.tokens import RefreshToken
+ from rest_framework_simplejwt.views import (
+     TokenObtainPairView as BaseTokenObtainPairView,
+ )
+ from .serializers import (
+     UserSerializer,
+@@ -914,24 +915,32 @@ class MyTokenObtainPairView(BaseTokenObtainPairView):
+         """
+         try:
+             return super().post(request, *args, **kwargs)
+         except OperationalError:
+             return Response(
+                 {"detail": "认证服务正在启动，请稍后重试。"},
+                 status=status.HTTP_503_SERVICE_UNAVAILABLE,
+             )
+ 
+ 
++class FeishuAuthThrottle(AnonRateThrottle):
++    """飞书匿名端点限流：按 IP 每分钟 10 次，防止滥用放大消耗飞书 API 配额。"""
++
++    # 直接使用类属性限速，不依赖全局 REST_FRAMEWORK DEFAULT_THROTTLE_RATES 配置。
++    rate = "10/min"
++
++
+ class FeishuAuthorizeUrlView(APIView):
+     """返回飞书 OAuth 授权页地址（供前端整页跳转）。"""
+ 
+     permission_classes = [AllowAny]
++    throttle_classes = [FeishuAuthThrottle]
+ 
+     def get(self, request, *args, **kwargs):
+         if not getattr(settings, "FEISHU_APP_ID", "") or not getattr(
+             settings, "FEISHU_APP_SECRET", ""
+         ):
+             return Response(
+                 {"detail": "飞书登录未配置，请联系管理员。"},
+                 status=status.HTTP_503_SERVICE_UNAVAILABLE,
+             )
+         state = build_state()
+@@ -951,20 +960,21 @@ def _generate_feishu_username(email: str) -> str:
+         candidate = f"{base}{index}"
+         if not User.objects.filter(username__iexact=candidate).exists():
+             return candidate
+         index += 1
+ 
+ 
+ class FeishuLoginView(APIView):
+     """飞书授权码登录：按邮箱匹配活跃账号，未匹配则自动创建（默认密码 Jt123456）。"""
+ 
+     permission_classes = [AllowAny]
++    throttle_classes = [FeishuAuthThrottle]
+ 
+     def post(self, request, *args, **kwargs):
+         code = request.data.get("code")
+         state = request.data.get("state")
+         if not code or not state:
+             return Response(
+                 {"detail": "缺少 code 或 state 参数。"},
+                 status=status.HTTP_400_BAD_REQUEST,
+             )
+         if not verify_state(state):

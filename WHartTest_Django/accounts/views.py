@@ -1,3 +1,5 @@
+import logging
+
 from django.contrib.auth.models import User, Group, Permission
 from django.contrib.contenttypes.models import ContentType
 from django.shortcuts import get_object_or_404
@@ -39,8 +41,11 @@ from .feishu import (
     build_state,
     exchange_code_for_token,
     get_feishu_user,
+    get_feishu_user_detail,
     verify_state,
 )
+
+logger = logging.getLogger(__name__)
 
 
 class UserCreateAPIView(generics.CreateAPIView):
@@ -986,11 +991,34 @@ class FeishuLoginView(APIView):
         try:
             token_data = exchange_code_for_token(code)
             feishu_user = get_feishu_user(token_data["access_token"])
-            email = (feishu_user.get("email") or "").strip()
+            # 通讯录 v3 详情与登录场景的字段权限模型一致（name → contact:user.base:readonly，
+            # email → contact:user.email:readonly）。获取成功时用其非空字段覆盖旧版数据；
+            # 失败仅记录日志并降级使用旧版 get_feishu_user 的数据，不阻断登录。
+            # 诊断日志：记录飞书接口实际返回的用户信息（不含令牌），便于排查
+            # 「已授权但拿不到企业邮箱」类问题（对比开放平台权限配置）。
+            logger.info("飞书登录接口返回用户信息：%s", feishu_user)
+            open_id = (feishu_user.get("open_id") or "").strip()
+            if open_id:
+                try:
+                    detail = get_feishu_user_detail(
+                        token_data["access_token"], open_id
+                    )
+                    logger.info("飞书通讯录接口返回用户信息：%s", detail)
+                    feishu_user = {
+                        **feishu_user,
+                        **{k: v for k, v in detail.items() if v},
+                    }
+                except FeishuAuthError as exc:
+                    logger.warning("飞书通讯录详情获取失败，降级使用登录用户信息：%s", exc)
+            # 邮箱：仅支持企业邮箱（enterprise_email），个人邮箱与企业邮箱别名不参与登录；
+            # 用户名：通讯录「姓名」字段（name）。
+            email = (feishu_user.get("enterprise_email") or "").strip()
             feishu_name = (feishu_user.get("name") or "").strip()
             if not email:
                 return Response(
-                    {"detail": "飞书账号未绑定邮箱，无法登录，请使用账号密码登录。"},
+                    {
+                        "detail": "飞书账号未绑定企业邮箱，无法登录。请在飞书维护企业邮箱后重试，或使用账号密码登录。"
+                    },
                     status=status.HTTP_400_BAD_REQUEST,
                 )
 
@@ -1000,12 +1028,13 @@ class FeishuLoginView(APIView):
                     username=_generate_feishu_username(email),
                     email=email,
                     password="Jt123456",
-                    first_name=feishu_name,
+                    # 「姓名」统一存 last_name，与用户管理界面（前端）字段口径一致。
+                    last_name=feishu_name,
                     is_active=True,
                 )
-            elif feishu_name and user.first_name != feishu_name:
-                user.first_name = feishu_name
-                user.save(update_fields=["first_name"])
+            elif feishu_name and user.last_name != feishu_name:
+                user.last_name = feishu_name
+                user.save(update_fields=["last_name"])
         except FeishuAuthError as exc:
             return Response(
                 {"detail": str(exc)}, status=status.HTTP_400_BAD_REQUEST
