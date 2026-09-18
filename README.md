@@ -1,13 +1,12 @@
-# WHartTest - AI驱动的智能测试用例生成平台
+# SkillForge - AI驱动的智能测试用例生成平台
 
 中文 | [English](README_EN.md)
 
 ## 项目简介
 
-WHartTest 是基于 **Django 5.2 + DRF** 与现代大模型技术打造的 **AI 驱动智能测试平台**。平台采用前后端分离的 Monorepo 架构，由 6 个子项目组成（Django 后端、Vue 前端、UI 自动化执行器、MCP 工具服务、Agent 技能库、在线文档编辑器），聚合自然语言理解、知识库检索与嵌入搜索能力，结合 **LangChain/LangGraph** 与 **MCP（Model Context Protocol）** 工具调用，实现从需求到可执行测试用例的自动化生成、管理与执行，为测试团队提供完整的智能测试管理解决方案。
+SkillForge 是基于 **Django 5.2 + DRF** 与现代大模型技术打造的 **AI 驱动智能测试平台**。平台采用前后端分离的 Monorepo 架构，由 6 个核心子项目组成（Django 后端、Vue 前端、UI 自动化执行器、MCP 工具服务、Agent 技能库、文档站点），聚合自然语言理解、知识库检索与嵌入搜索能力，结合 **LangChain/LangGraph** 与 **MCP（Model Context Protocol）** 工具调用，实现从需求到可执行测试用例的自动化生成、管理与执行，测试能力覆盖 **API 测试**与 **Web/APP UI 自动化**，为测试团队提供完整的智能测试管理解决方案。
 
-## 文档
-详细文档请访问：https://docs.wharttest.mgdaas.cn:4430/
+
 
 ## 快速开始
 
@@ -15,8 +14,8 @@ WHartTest 是基于 **Django 5.2 + DRF** 与现代大模型技术打造的 **AI 
 
 ```bash
 # 1. 克隆仓库
-git clone https://github.com/MGdaasLab/WHartTest.git
-cd WHartTest
+git clone https://github.com/still-dream/SkillForge.git
+cd SkillForge
 
 # 2. 准备配置（使用默认配置，包含自动生成的API Key）
 cp .env.example .env
@@ -29,7 +28,7 @@ cp .env.example .env
 docker-compose up -d
 
 # 4. 访问系统
-# http://localhost:8913 (admin/admin123456)
+# http://localhost:80 (admin/admin123456)
 ```
 
 **就这么简单！** 系统会自动创建默认API Key，MCP服务开箱即用。
@@ -59,9 +58,12 @@ docker-compose up -d
 qq群：
 1. 8xxxxxxxx0（已满）
 2. 1017708746
+
 ---
+
 ## 【重要安全警示】关于 v1.4.0 以及后续版本 Skills 权限及部署安全的声明
 鉴于 Skills 模块具备较高的系统执行权限，为了保障您的数据与环境安全，我们做出以下严正提示：
 
-部署建议：强烈建议仅在内网环境或受信任的私有网络中部署使用。 访问控制：切勿将服务直接暴露于公网（Public Internet），或授予任何未经身份验证及不可信人员访问权限。 免责声明：本项目（WHartTest）仅供学习与研究使用。用户需自行承担因违规部署（如开放公网、未做鉴权等）所导致的一切安全风险与后果。对于因不当配置引发的数据泄露、服务器被入侵等安全事故，WHartTest 团队不承担任何法律及连带责任。
-**WHartTest** - AI驱动测试用例生成，让测试更智能，让开发更高效！
+部署建议：强烈建议仅在内网环境或受信任的私有网络中部署使用。 访问控制：切勿将服务直接暴露于公网（Public Internet），或授予任何未经身份验证及不可信人员访问权限。 免责声明：本项目（SkillForge）仅供学习与研究使用。用户需自行承担因违规部署（如开放公网、未做鉴权等）所导致的一切安全风险与后果。对于因不当配置引发的数据泄露、服务器被入侵等安全事故，SkillForge 团队不承担任何法律及连带责任。
+
+**SkillForge** - AI驱动测试用例生成，让测试更智能，让开发更高效！
