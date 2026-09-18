@@ -1,10 +1,10 @@
 ﻿8be5629 feat: authStore 新增飞书登录 action
- WHartTest_Vue/src/store/authStore.ts | 57 ++++++++++++++++++++++++++++++++++++
+ SkillForge_Vue/src/store/authStore.ts | 57 ++++++++++++++++++++++++++++++++++++
  1 file changed, 57 insertions(+)
-diff --git a/WHartTest_Vue/src/store/authStore.ts b/WHartTest_Vue/src/store/authStore.ts
+diff --git a/SkillForge_Vue/src/store/authStore.ts b/SkillForge_Vue/src/store/authStore.ts
 index 630e159..b537bf3 100644
---- a/WHartTest_Vue/src/store/authStore.ts
-+++ b/WHartTest_Vue/src/store/authStore.ts
+--- a/SkillForge_Vue/src/store/authStore.ts
++++ b/SkillForge_Vue/src/store/authStore.ts
 @@ -1,14 +1,15 @@
  import { defineStore } from 'pinia';
  import {

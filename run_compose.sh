@@ -893,9 +893,9 @@ EOF2
       ;;
     ghcr)
       cat <<'EOF2'
-ghcr.io/mgdaaslab/wharttest-backend:latest
-ghcr.io/mgdaaslab/wharttest-frontend:latest
-ghcr.io/mgdaaslab/wharttest-mcp:latest
+ghcr.io/mgdaaslab/skillforge-backend:latest
+ghcr.io/mgdaaslab/skillforge-frontend:latest
+ghcr.io/mgdaaslab/skillforge-mcp:latest
 EOF2
       ;;
     mcr)
@@ -1605,9 +1605,9 @@ configure_remote_image_sources() {
   ghcr_candidate=$(select_remote_candidate ghcr "$profile")
   mcr_candidate=$(select_remote_candidate mcr "$profile")
 
-  apply_remote_image_override DOCKER_BACKEND_IMAGE "ghcr.io/mgdaaslab/wharttest-backend:latest" "$ghcr_candidate"
-  apply_remote_image_override DOCKER_FRONTEND_IMAGE "ghcr.io/mgdaaslab/wharttest-frontend:latest" "$ghcr_candidate"
-  apply_remote_image_override DOCKER_MCP_IMAGE "ghcr.io/mgdaaslab/wharttest-mcp:latest" "$ghcr_candidate"
+  apply_remote_image_override DOCKER_BACKEND_IMAGE "ghcr.io/mgdaaslab/skillforge-backend:latest" "$ghcr_candidate"
+  apply_remote_image_override DOCKER_FRONTEND_IMAGE "ghcr.io/mgdaaslab/skillforge-frontend:latest" "$ghcr_candidate"
+  apply_remote_image_override DOCKER_MCP_IMAGE "ghcr.io/mgdaaslab/skillforge-mcp:latest" "$ghcr_candidate"
 
   apply_remote_image_override DOCKER_POSTGRES_IMAGE "postgres:16-alpine" "$dockerhub_candidate"
   apply_remote_image_override DOCKER_REDIS_IMAGE "redis:7-alpine" "$dockerhub_candidate"
@@ -1780,7 +1780,7 @@ prepare_backend_for_db_action() {
 
       if [ "${DOCKER_REMOTE_PULL:-1}" = "1" ]; then
         echo "准备数据库维护所需远程镜像..."
-        pull_image_with_fallback DOCKER_BACKEND_IMAGE "ghcr.io/mgdaaslab/wharttest-backend:latest" ghcr
+        pull_image_with_fallback DOCKER_BACKEND_IMAGE "ghcr.io/mgdaaslab/skillforge-backend:latest" ghcr
         if [ "${DATABASE_TYPE:-postgres}" = "postgres" ]; then
           pull_image_with_fallback DOCKER_POSTGRES_IMAGE "postgres:16-alpine" dockerhub
         fi
@@ -1892,9 +1892,9 @@ run_remote_mode() {
     echo "开始逐个拉取远程预构建镜像（支持自动回退备选源）..."
     local pull_failed=0
 
-    pull_image_with_fallback DOCKER_BACKEND_IMAGE "ghcr.io/mgdaaslab/wharttest-backend:latest" ghcr || pull_failed=1
-    pull_image_with_fallback DOCKER_FRONTEND_IMAGE "ghcr.io/mgdaaslab/wharttest-frontend:latest" ghcr || pull_failed=1
-    pull_image_with_fallback DOCKER_MCP_IMAGE "ghcr.io/mgdaaslab/wharttest-mcp:latest" ghcr || pull_failed=1
+    pull_image_with_fallback DOCKER_BACKEND_IMAGE "ghcr.io/mgdaaslab/skillforge-backend:latest" ghcr || pull_failed=1
+    pull_image_with_fallback DOCKER_FRONTEND_IMAGE "ghcr.io/mgdaaslab/skillforge-frontend:latest" ghcr || pull_failed=1
+    pull_image_with_fallback DOCKER_MCP_IMAGE "ghcr.io/mgdaaslab/skillforge-mcp:latest" ghcr || pull_failed=1
     pull_image_with_fallback DOCKER_POSTGRES_IMAGE "postgres:16-alpine" dockerhub || pull_failed=1
     pull_image_with_fallback DOCKER_REDIS_IMAGE "redis:7-alpine" dockerhub || pull_failed=1
     pull_image_with_fallback DOCKER_QDRANT_IMAGE "qdrant/qdrant:latest" dockerhub || pull_failed=1

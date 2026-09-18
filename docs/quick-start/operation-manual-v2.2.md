@@ -106,9 +106,9 @@ Windows源码部署启动Celery Beat 服务方式如下：
 
 开启两个终端窗口分别运行：
 
-uv run celery -A wharttest_django worker --loglevel=info -Q celery,task_center
+uv run celery -A skillforge_django worker --loglevel=info -Q celery,task_center
 
-uv run celery -A wharttest_django beat --loglevel=info
+uv run celery -A skillforge_django beat --loglevel=info
 
 ## 🔗 相关资源
 

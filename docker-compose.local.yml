@@ -11,7 +11,7 @@ services:
   # PostgreSQL 数据库服务（生产环境默认启用）
   postgres:
     image: ${DOCKER_POSTGRES_IMAGE:-postgres:16-alpine}
-    container_name: wharttest-postgres
+    container_name: skillforge-postgres
     environment:
       POSTGRES_USER: ${POSTGRES_USER:-postgres}
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-postgres}
@@ -21,7 +21,7 @@ services:
     volumes:
       - postgres-data:/var/lib/postgresql/data
     networks:
-      - wharttest-network
+      - skillforge-network
     restart: unless-stopped
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-postgres}"]
@@ -32,13 +32,13 @@ services:
   # Redis 服务 - Celery的broker和backend
   redis:
     image: ${DOCKER_REDIS_IMAGE:-redis:7-alpine}
-    container_name: wharttest-redis
+    container_name: skillforge-redis
     ports:
       - "0.0.0.0:8911:6379"
     volumes:
       - redis-data:/data
     networks:
-      - wharttest-network
+      - skillforge-network
     restart: unless-stopped
     healthcheck:
       test: [ "CMD", "redis-cli", "ping" ]
@@ -51,7 +51,7 @@ services:
   backend:
     # 本地构建模式
     build:
-      context: ./WHartTest_Django
+      context: ./SkillForge_Django
       dockerfile: Dockerfile
       args:
         # 基础镜像走第三方镜像代理，绕开 daemon 的 registry-mirrors（sjtug）抽风。
@@ -75,14 +75,14 @@ services:
         # Chrome for Testing 走 npmmirror 镜像，避开 storage.googleapis.com 抽风。
         CHROME_FOR_TESTING_MIRROR: ${DOCKER_CHROME_FOR_TESTING_MIRROR:-https://cdn.npmmirror.com/binaries/chrome-for-testing}
         CHROME_VERSION: ${DOCKER_CHROME_VERSION:-stable}
-    container_name: wharttest-backend
+    container_name: skillforge-backend
     # 启动逻辑已移至 Dockerfile 的 ENTRYPOINT 和 supervisord.conf
     ports:
       - "0.0.0.0:8912:8000"
     volumes:
       - ./data:/app/data
       - backend-static:/app/static
-      - ./WHartTest_Skills:/app/bundled_skills:ro
+      - ./SkillForge_Skills:/app/bundled_skills:ro
     extra_hosts:
       - "host.docker.internal:host-gateway"
     environment:
@@ -132,7 +132,7 @@ services:
       weixin-plugin-host:
         condition: service_started
     networks:
-      - wharttest-network
+      - skillforge-network
     restart: unless-stopped
     healthcheck:
       test: [ "CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/admin/login/')" ]
@@ -143,14 +143,14 @@ services:
 
   weixin-plugin-host:
     build:
-      context: ./WHartTest_WeixinPluginHost
+      context: ./SkillForge_WeixinPluginHost
       dockerfile: Dockerfile
       args:
         # 基础镜像走第三方镜像代理，绕开 daemon 的 registry-mirrors（sjtug）抽风。
         NODE_BASE_IMAGE: ${DOCKER_NODE_22_BASE_IMAGE:-docker.1ms.run/library/node:22-alpine}
         # npm 包源走 npmmirror，国内拉包更稳。
         NPM_REGISTRY: ${DOCKER_NPM_REGISTRY:-https://registry.npmmirror.com}
-    container_name: wharttest-weixin-plugin-host
+    container_name: skillforge-weixin-plugin-host
     ports:
       - "0.0.0.0:8922:3001"
     volumes:
@@ -162,14 +162,14 @@ services:
       # - Docker 全量部署（后端也在容器内）：http://backend:8000（使用 Docker 内部网络）
       # - 本地开发（后端在宿主机上）：http://host.docker.internal:8000
       #   注意：后端必须监听 0.0.0.0（不能是 127.0.0.1），否则容器无法访问
-      #   启动命令示例：uvicorn wharttest_django.asgi:application --host 0.0.0.0 --port 8000
+      #   启动命令示例：uvicorn skillforge_django.asgi:application --host 0.0.0.0 --port 8000
       - WHARTTEST_BACKEND_URL=${WHARTTEST_BACKEND_URL:-http://backend:8000}
       - WHARTTEST_API_KEY=${WHARTTEST_API_KEY:-wharttest-default-mcp-key-2025}
       - WHARTTEST_SHARED_DATA_DIR=/app/data
       - OPENCLAW_STATE_DIR=/app/data/openclaw-state
       - OPENCLAW_CONFIG=/app/data/openclaw-state/openclaw.json
     networks:
-      - wharttest-network
+      - skillforge-network
     restart: unless-stopped
     healthcheck:
       test: [ "CMD", "wget", "--quiet", "--tries=1", "--spider", "http://127.0.0.1:3001/health" ]
@@ -182,7 +182,7 @@ services:
   frontend:
     # 本地构建模式
     build:
-      context: ./WHartTest_Vue
+      context: ./SkillForge_Vue
       dockerfile: Dockerfile
       args:
         # 基础镜像走第三方镜像代理，避免 daemon 的 registry-mirrors（sjtug 等）抽风时拖垮构建。
@@ -190,13 +190,13 @@ services:
         NGINX_BASE_IMAGE: ${DOCKER_NGINX_BASE_IMAGE:-docker.1ms.run/library/nginx:alpine}
         # npm 包源走 npmmirror，国内拉包更稳。
         NPM_REGISTRY: ${DOCKER_NPM_REGISTRY:-https://registry.npmmirror.com}
-    container_name: wharttest-frontend
+    container_name: skillforge-frontend
     ports:
       - "0.0.0.0:8913:80"
     depends_on:
       - backend
     networks:
-      - wharttest-network
+      - skillforge-network
     restart: unless-stopped
     healthcheck:
       test: [ "CMD", "wget", "--quiet", "--tries=1", "--spider", "http://127.0.0.1/" ]
@@ -209,7 +209,7 @@ services:
   mcp:
     # 本地构建模式
     build:
-      context: ./WHartTest_MCP
+      context: ./SkillForge_MCP
       dockerfile: Dockerfile
       args:
         # 基础镜像走第三方镜像代理，绕开 daemon 的 registry-mirrors（sjtug）抽风。
@@ -220,7 +220,7 @@ services:
         # ★ 国内 pip 源
         PIP_INDEX_URL: ${DOCKER_PIP_INDEX_URL:-https://pypi.tuna.tsinghua.edu.cn/simple}
         PIP_INDEX_FALLBACKS: ${DOCKER_PIP_INDEX_FALLBACKS:-https://pypi.org/simple}
-    container_name: wharttest-mcp
+    container_name: skillforge-mcp
     user: root
     environment:
       # WHartTest Tools 配置
@@ -232,14 +232,14 @@ services:
       - MS_ACCESS_KEY=${MS_ACCESS_KEY:-your_16byte_key1}
       - MS_SECRET_KEY=${MS_SECRET_KEY:-your_16byte_key2}
     ports:
-      - "0.0.0.0:8914:8006" # WHartTest_tools 服务端口
+      - "0.0.0.0:8914:8006" # SkillForge_tools 服务端口
       - "0.0.0.0:8915:8007" # ms_mcp_api 服务端口
     volumes:
       - ./data/playwright-screenshots:/tmp/playwright-output # 使用本地目录挂载
     depends_on:
       - backend
     networks:
-      - wharttest-network
+      - skillforge-network
     restart: unless-stopped
     healthcheck:
       test: [ "CMD", "python", "-c", "import socket; socket.create_connection(('127.0.0.1', 8006), 5).close(); socket.create_connection(('127.0.0.1', 8007), 5).close()" ]
@@ -251,7 +251,7 @@ services:
   # Playwright MCP 服务（官方Docker镜像）
   playwright-mcp:
     image: ${DOCKER_PLAYWRIGHT_MCP_IMAGE:-mcr.microsoft.com/playwright/mcp}
-    container_name: wharttest-playwright-mcp
+    container_name: skillforge-playwright-mcp
     user: root # 以 root 用户运行,确保有权限写入挂载目录
     entrypoint: [ "node", "/app/cli.js" ]
     command: [ "--no-sandbox", "--host", "0.0.0.0", "--allowed-hosts", "*", "--config", "/app/playwright-mcp-config.json" ]
@@ -259,9 +259,9 @@ services:
       - "0.0.0.0:8916:8931"
     volumes:
       - ./data/playwright-screenshots:/tmp/playwright-output # 使用本地目录挂载
-      - ./WHartTest_MCP/playwright-mcp-config.json:/app/playwright-mcp-config.json:ro # 挂载配置文件
+      - ./SkillForge_MCP/playwright-mcp-config.json:/app/playwright-mcp-config.json:ro # 挂载配置文件
     networks:
-      - wharttest-network
+      - skillforge-network
     restart: unless-stopped
     healthcheck:
       test: [ "CMD", "node", "-e", "require('http').get('http://localhost:8931/mcp', res => process.exit(res.statusCode ? 0 : 1)).on('error', () => process.exit(1))" ]
@@ -273,7 +273,7 @@ services:
   # Xinference 模型推理服务（Embedding + Reranker）
   # xinference:
   #   image: xprobe/xinference:latest-cpu
-  #   container_name: wharttest-xinference
+  #   container_name: skillforge-xinference
   #   ports:
   #     - "0.0.0.0:8917:9997"
   #   volumes:
@@ -282,7 +282,7 @@ services:
   #   environment:
   #     - HF_ENDPOINT=https://hf-mirror.com
   #   networks:
-  #     - wharttest-network
+  #     - skillforge-network
   #   restart: unless-stopped
   #   command: xinference-local -H 0.0.0.0
   #   healthcheck:
@@ -302,17 +302,17 @@ services:
   # Qdrant 向量数据库 - 知识库检索
   qdrant:
     image: ${DOCKER_QDRANT_IMAGE:-qdrant/qdrant:latest}
-    container_name: wharttest-qdrant
+    container_name: skillforge-qdrant
     ports:
       - "0.0.0.0:8918:6333"  # REST API
     volumes:
       - qdrant-data:/qdrant/storage
     networks:
-      - wharttest-network
+      - skillforge-network
     restart: unless-stopped
 
 networks:
-  wharttest-network:
+  skillforge-network:
     driver: bridge
 
 volumes:

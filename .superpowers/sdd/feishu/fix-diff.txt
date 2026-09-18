@@ -1,12 +1,12 @@
 ﻿2c0e7eb fix: state 增加随机串防重放，飞书匿名端点添加限流
- WHartTest_Django/accounts/feishu.py | 22 ++++++-----
- WHartTest_Django/accounts/tests.py  | 75 +++++++++++++++++++++++++++++++++++--
- WHartTest_Django/accounts/views.py  | 10 +++++
+ SkillForge_Django/accounts/feishu.py | 22 ++++++-----
+ SkillForge_Django/accounts/tests.py  | 75 +++++++++++++++++++++++++++++++++++--
+ SkillForge_Django/accounts/views.py  | 10 +++++
  3 files changed, 94 insertions(+), 13 deletions(-)
-diff --git a/WHartTest_Django/accounts/feishu.py b/WHartTest_Django/accounts/feishu.py
+diff --git a/SkillForge_Django/accounts/feishu.py b/SkillForge_Django/accounts/feishu.py
 index dfbb73b..a4bdfbe 100644
---- a/WHartTest_Django/accounts/feishu.py
-+++ b/WHartTest_Django/accounts/feishu.py
+--- a/SkillForge_Django/accounts/feishu.py
++++ b/SkillForge_Django/accounts/feishu.py
 @@ -3,20 +3,21 @@
  负责构建授权页地址、签发/校验 state、与飞书开放平台交换令牌、获取用户信息。
  官方端点（2026-09 核实）：
@@ -81,10 +81,10 @@ index dfbb73b..a4bdfbe 100644
          "client_id": settings.FEISHU_APP_ID,
          "redirect_uri": settings.FEISHU_REDIRECT_URI,
          "response_type": "code",
-diff --git a/WHartTest_Django/accounts/tests.py b/WHartTest_Django/accounts/tests.py
+diff --git a/SkillForge_Django/accounts/tests.py b/SkillForge_Django/accounts/tests.py
 index 0ae3425..ad50000 100644
---- a/WHartTest_Django/accounts/tests.py
-+++ b/WHartTest_Django/accounts/tests.py
+--- a/SkillForge_Django/accounts/tests.py
++++ b/SkillForge_Django/accounts/tests.py
 @@ -1,15 +1,16 @@
  import time
  from unittest.mock import patch
@@ -281,10 +281,10 @@ index 0ae3425..ad50000 100644
 +        )
 +
 +        self.assertEqual(response.status_code, 429)
-diff --git a/WHartTest_Django/accounts/views.py b/WHartTest_Django/accounts/views.py
+diff --git a/SkillForge_Django/accounts/views.py b/SkillForge_Django/accounts/views.py
 index 9be3232..94df4bd 100644
---- a/WHartTest_Django/accounts/views.py
-+++ b/WHartTest_Django/accounts/views.py
+--- a/SkillForge_Django/accounts/views.py
++++ b/SkillForge_Django/accounts/views.py
 @@ -1,20 +1,21 @@
  from django.contrib.auth.models import User, Group, Permission
  from django.contrib.contenttypes.models import ContentType
@@ -298,7 +298,7 @@ index 9be3232..94df4bd 100644
  from rest_framework.response import Response
 +from rest_framework.throttling import AnonRateThrottle
  from rest_framework.views import APIView
- from wharttest_django.permissions import HasModelPermission, permission_required
+ from skillforge_django.permissions import HasModelPermission, permission_required
  
  from django.conf import settings
  from rest_framework_simplejwt.tokens import RefreshToken

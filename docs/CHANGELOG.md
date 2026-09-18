@@ -82,7 +82,7 @@ v2.2.0 聚焦 **任务调度、技能生态与 AI 交互体验**。新增任务�
 
 ### 📦 升级说明
 1. 升级后请执行数据库迁移：`python manage.py migrate`。
-2. 启用定时任务需确保 Celery Worker 与 Beat 正常运行：`uv run celery -A wharttest_django worker --loglevel=info -Q celery,task_center -B`。
+2. 启用定时任务需确保 Celery Worker 与 Beat 正常运行：`uv run celery -A skillforge_django worker --loglevel=info -Q celery,task_center -B`。
 
 ---
 
@@ -262,7 +262,7 @@ v1.4.0 版本重点增强了 AI 智能交互能力和自动化测试生态。新
 - 新增 Docker 镜像加速源推荐列表，优化国内下载体验
 
 #### Skills 生态扩展
-- 新增 `wharttest_skills` 工具集，支持测试用例管理、项目查询及截图上传
+- 新增 `skillforge_skills` 工具集，支持测试用例管理、项目查询及截图上传
 - 新增 `playwright-skill` 工具，提供专业的 Playwright 自动化测试能力
 - 适配标题生成模式知识库参数，并增加 Prompt 模块 ID 支持
 

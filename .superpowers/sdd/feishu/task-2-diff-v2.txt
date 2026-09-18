@@ -1,12 +1,12 @@
 ﻿fc49fb6 feat: 新增飞书 OAuth 服务层（授权地址/state 签名/令牌交换/用户信息）
- WHartTest_Django/accounts/feishu.py | 125 ++++++++++++++++++++++++++++++++++++
- WHartTest_Django/accounts/tests.py  | 107 +++++++++++++++++++++++++++++-
+ SkillForge_Django/accounts/feishu.py | 125 ++++++++++++++++++++++++++++++++++++
+ SkillForge_Django/accounts/tests.py  | 107 +++++++++++++++++++++++++++++-
  2 files changed, 231 insertions(+), 1 deletion(-)
-diff --git a/WHartTest_Django/accounts/feishu.py b/WHartTest_Django/accounts/feishu.py
+diff --git a/SkillForge_Django/accounts/feishu.py b/SkillForge_Django/accounts/feishu.py
 new file mode 100644
 index 0000000..dfbb73b
 --- /dev/null
-+++ b/WHartTest_Django/accounts/feishu.py
++++ b/SkillForge_Django/accounts/feishu.py
 @@ -0,0 +1,125 @@
 +"""飞书 OAuth 登录服务层。
 +
@@ -133,10 +133,10 @@ index 0000000..dfbb73b
 +            f"获取飞书用户信息失败：{data.get('msg') or data}", code=data.get("code")
 +        )
 +    return data.get("data") or {}
-diff --git a/WHartTest_Django/accounts/tests.py b/WHartTest_Django/accounts/tests.py
+diff --git a/SkillForge_Django/accounts/tests.py b/SkillForge_Django/accounts/tests.py
 index 0a4ddac..6b1c885 100644
---- a/WHartTest_Django/accounts/tests.py
-+++ b/WHartTest_Django/accounts/tests.py
+--- a/SkillForge_Django/accounts/tests.py
++++ b/SkillForge_Django/accounts/tests.py
 @@ -1,17 +1,27 @@
 +import time
  from unittest.mock import patch

@@ -2,7 +2,7 @@
 
 **Files:**
 
-- Modify: `WHartTest_Vue\src\views\LoginView.vue`（模板 / script / style 三处）
+- Modify: `SkillForge_Vue\src\views\LoginView.vue`（模板 / script / style 三处）
 
 **Interfaces:**
 
@@ -154,7 +154,7 @@ npx vue-tsc -b
 **Step 5: Commit**
 
 ```
-git add WHartTest_Vue/src/views/LoginView.vue
+git add SkillForge_Vue/src/views/LoginView.vue
 git commit -m "feat: 登录页新增飞书登录入口"
 ```
 

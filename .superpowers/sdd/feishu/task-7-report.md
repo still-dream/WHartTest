@@ -2,7 +2,7 @@
 
 ## 实现内容
 
-### 1. 新建 `WHartTest_Vue/src/views/FeishuCallbackView.vue`（179 行，按简报逐字转写）
+### 1. 新建 `SkillForge_Vue/src/views/FeishuCallbackView.vue`（179 行，按简报逐字转写）
 
 - 模板：`feishu-callback-page` 容器 + `starry-canvas` 星空画布 + `callback-card` 卡片
   - `loading` 分支：spinner SVG +「飞书登录中 / 正在验证飞书授权信息，请稍候...」
@@ -15,7 +15,7 @@
 - 复用 `useStarryBackground(canvasRef)`（已核实签名 `Ref<HTMLCanvasElement | null>` 匹配）
 - 样式：callback-card 毛玻璃（`rgba(9,20,38,0.72)` + `backdrop-filter: blur(18px)` + 圆角 24px）、spin / fade-in-up 动画、渐变返回按钮，与简报逐字一致
 
-### 2. 修改 `WHartTest_Vue/src/router/index.ts`（+8/-1）
+### 2. 修改 `SkillForge_Vue/src/router/index.ts`（+8/-1）
 
 - 在 `LoginView` import 之后新增：`import FeishuCallbackView from '@/views/FeishuCallbackView.vue';`
 - 在 `Register` 路由之后新增路由：`path: '/login/feishu/callback'`、`name: 'FeishuCallback'`、`component: FeishuCallbackView`（与后端 `FEISHU_REDIRECT_URI` 默认值一致）
@@ -23,7 +23,7 @@
 
 ## 验证命令与输出摘要
 
-`npx vue-tsc -b`（cwd：`WHartTest_Vue`），exit code 1，错误列表与基线完全一致（4 个历史遗留，0 新增）：
+`npx vue-tsc -b`（cwd：`SkillForge_Vue`），exit code 1，错误列表与基线完全一致（4 个历史遗留，0 新增）：
 
 ```
 src/features/api-testing/components/testtasks/TestTaskExecutionDetail.vue(80,5): error TS2322
@@ -34,8 +34,8 @@ src/views/OperationLogManagementView.vue(152,54): error TS2339
 
 ## Files changed
 
-- 新建：`WHartTest_Vue/src/views/FeishuCallbackView.vue`
-- 修改：`WHartTest_Vue/src/router/index.ts`
+- 新建：`SkillForge_Vue/src/views/FeishuCallbackView.vue`
+- 修改：`SkillForge_Vue/src/router/index.ts`
 
 ## Commit
 

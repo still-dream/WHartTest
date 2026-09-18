@@ -6,7 +6,7 @@
 ## 前置要求
 - Windows 10/11 专业版或企业版
 - Docker Desktop for Windows 已安装并运行
-- 项目代码已克隆到本地目录（如：c:\app\WHartTest）
+- 项目代码已克隆到本地目录（如：c:\app\SkillForge）
 - PowerShell 或 Git Bash 终端
 
 ---
@@ -18,7 +18,7 @@
 #### 方式一：使用 Django 自动迁移（推荐）
 ```powershell
 # 进入项目目录
-cd c:\app\WHartTest
+cd c:\app\SkillForge
 
 # 启动数据库服务
 docker-compose up -d postgres
@@ -39,7 +39,7 @@ docker-compose exec postgres psql -U postgres -d wharttest -c "\d operation_logs
 #### 方式二：使用 SQL 脚本手动创建
 ```powershell
 # 进入项目目录
-cd c:\app\WHartTest
+cd c:\app\SkillForge
 
 # 启动数据库服务
 docker-compose up -d postgres
@@ -58,7 +58,7 @@ docker-compose exec postgres psql -U postgres -d wharttest -c "\d operation_logs
 
 ```powershell
 # 进入项目目录
-cd c:\app\WHartTest
+cd c:\app\SkillForge
 
 # 设置环境变量使用 SQLite
 $env:DATABASE_TYPE="sqlite"
@@ -80,7 +80,7 @@ docker-compose exec backend python manage.py dbshell "SELECT name FROM sqlite_ma
 ### 2.1 重新构建后端镜像
 ```powershell
 # 进入项目目录
-cd c:\app\WHartTest
+cd c:\app\SkillForge
 
 # 停止并删除旧的后端容器
 docker-compose stop backend
@@ -115,7 +115,7 @@ docker-compose logs --tail=50 backend
 ### 3.1 重新构建前端镜像
 ```powershell
 # 进入项目目录
-cd c:\app\WHartTest
+cd c:\app\SkillForge
 
 # 停止并删除旧的前端容器
 docker-compose stop frontend
@@ -150,7 +150,7 @@ curl http://localhost:8913/
 ### 4.1 完整重新部署所有服务
 ```powershell
 # 进入项目目录
-cd c:\app\WHartTest
+cd c:\app\SkillForge
 
 # 停止所有服务
 docker-compose down
@@ -175,7 +175,7 @@ docker-compose ps
 ### 4.2 仅重新部署操作日志相关服务
 ```powershell
 # 进入项目目录
-cd c:\app\WHartTest
+cd c:\app\SkillForge
 
 # 停止后端和前端服务
 docker-compose stop backend frontend
@@ -215,16 +215,16 @@ volumes:
 ```
 
 **持久化位置：**
-- Windows: `\\wsl$\docker-desktop-data\data\docker\volumes\wharttest_postgres-data\_data`
+- Windows: `\\wsl$\docker-desktop-data\data\docker\volumes\skillforge_postgres-data\_data`
 - 或通过 Docker Desktop 查看：Settings > Resources > Volumes
 
 **备份 PostgreSQL 数据：**
 ```powershell
 # 备份数据库到本地文件
-docker-compose exec postgres pg_dump -U postgres wharttest > backup_wharttest_$(Get-Date -Format "yyyyMMdd_HHmmss").sql
+docker-compose exec postgres pg_dump -U postgres wharttest > backup_skillforge_$(Get-Date -Format "yyyyMMdd_HHmmss").sql
 
 # 恢复数据库
-docker-compose exec -T postgres psql -U postgres wharttest < backup_wharttest_20250414_120000.sql
+docker-compose exec -T postgres psql -U postgres wharttest < backup_skillforge_20250414_120000.sql
 ```
 
 ### 5.2 SQLite 数据持久化
@@ -238,12 +238,12 @@ volumes:
 ```
 
 **持久化位置：**
-- Windows: `c:\app\WHartTest\data\db.sqlite3`
+- Windows: `c:\app\SkillForge\data\db.sqlite3`
 
 **备份 SQLite 数据：**
 ```powershell
 # 复制数据库文件
-Copy-Item c:\app\WHartTest\data\db.sqlite3 c:\app\WHartTest\backup\db.sqlite3_$(Get-Date -Format "yyyyMMdd_HHmmss")
+Copy-Item c:\app\SkillForge\data\db.sqlite3 c:\app\SkillForge\backup\db.sqlite3_$(Get-Date -Format "yyyyMMdd_HHmmss")
 ```
 
 ### 5.3 其他数据持久化

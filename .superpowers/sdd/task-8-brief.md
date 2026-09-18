@@ -1,8 +1,8 @@
 ## Task 8: Frontend WebhookAddress management page
 
 **Files:**
-- Create: `WHartTest_Vue/src/features/notifications/views/WebhookAddressView.vue`
-- Create: `WHartTest_Vue/src/features/notifications/components/WebhookFormModal.vue`
+- Create: `SkillForge_Vue/src/features/notifications/views/WebhookAddressView.vue`
+- Create: `SkillForge_Vue/src/features/notifications/components/WebhookFormModal.vue`
 
 **Interfaces:**
 - Produces: WebhookAddressView page, WebhookFormModal component
@@ -10,7 +10,7 @@
 
 - [ ] **Step 1: Create WebhookFormModal component**
 
-Create `WHartTest_Vue/src/features/notifications/components/WebhookFormModal.vue`:
+Create `SkillForge_Vue/src/features/notifications/components/WebhookFormModal.vue`:
 
 ```vue
 <template>
@@ -123,7 +123,7 @@ defineExpose({ open });
 
 - [ ] **Step 2: Create WebhookAddressView page**
 
-Create `WHartTest_Vue/src/features/notifications/views/WebhookAddressView.vue`:
+Create `SkillForge_Vue/src/features/notifications/views/WebhookAddressView.vue`:
 
 ```vue
 <template>
@@ -272,7 +272,7 @@ onMounted(() => {
 - [ ] **Step 3: Build to verify no errors**
 
 ```bash
-cd WHartTest_Vue && npm run build
+cd SkillForge_Vue && npm run build
 ```
 
 Expected: Build succeeds with no TypeScript errors in the new files.
@@ -280,5 +280,5 @@ Expected: Build succeeds with no TypeScript errors in the new files.
 - [ ] **Step 4: Commit**
 
 ```bash
-cd WHartTest_Vue && git add src/features/notifications/ && git commit -m "feat: add webhook address management page and form modal"
+cd SkillForge_Vue && git add src/features/notifications/ && git commit -m "feat: add webhook address management page and form modal"
 ```

@@ -177,7 +177,7 @@ print("TEXT_EMBEDDING_OK", dim)
 
 from PIL import Image
 
-image_path = "/tmp/wharttest-qwen3vl-smoke.png"
+image_path = "/tmp/skillforge-qwen3vl-smoke.png"
 Image.new("RGB", (32, 32), (255, 0, 0)).save(image_path)
 emb_img = post_json(
     "/v1/embeddings",

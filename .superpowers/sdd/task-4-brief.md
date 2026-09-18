@@ -1,9 +1,9 @@
 ## Task 4: Variables system + push service + tests
 
 **Files:**
-- Create: `WHartTest_Django/notifications/variables.py`
-- Modify: `WHartTest_Django/notifications/services.py`
-- Modify: `WHartTest_Django/notifications/tests.py`
+- Create: `SkillForge_Django/notifications/variables.py`
+- Modify: `SkillForge_Django/notifications/services.py`
+- Modify: `SkillForge_Django/notifications/tests.py`
 
 **Interfaces:**
 - Produces: `VARIABLES` list, `build_context()`, `render_content()`, `build_feishu_card()`, `send_task_notification()`
@@ -13,7 +13,7 @@
 
 - [ ] **Step 1: Write the failing test**
 
-Append to `WHartTest_Django/notifications/tests.py`:
+Append to `SkillForge_Django/notifications/tests.py`:
 
 ```python
 from notifications.variables import VARIABLES, build_context, render_content
@@ -258,14 +258,14 @@ class SendTaskNotificationTest(TestCase):
 - [ ] **Step 2: Run test to verify it fails**
 
 ```bash
-cd WHartTest_Django && python manage.py test notifications -v 2
+cd SkillForge_Django && python manage.py test notifications -v 2
 ```
 
 Expected: `ImportError: cannot import name 'VARIABLES'` (variables.py not yet created).
 
 - [ ] **Step 3: Write minimal implementation**
 
-Create `WHartTest_Django/notifications/variables.py`:
+Create `SkillForge_Django/notifications/variables.py`:
 
 ```python
 """变量注册表与上下文构建"""
@@ -434,7 +434,7 @@ def _fill_test_suite_context(context, task):
         context['task_url'] = f'/task-center?task={task.id}'
 ```
 
-Replace `WHartTest_Django/notifications/services.py` with the full implementation:
+Replace `SkillForge_Django/notifications/services.py` with the full implementation:
 
 ```python
 """推送服务：变量渲染 + 飞书卡片构建 + HTTP 发送"""
@@ -524,7 +524,7 @@ def send_task_notification(task, execution, module_result):
 - [ ] **Step 4: Run test to verify it passes**
 
 ```bash
-cd WHartTest_Django && python manage.py test notifications -v 2
+cd SkillForge_Django && python manage.py test notifications -v 2
 ```
 
 Expected: All tests pass.
@@ -532,5 +532,5 @@ Expected: All tests pass.
 - [ ] **Step 5: Commit**
 
 ```bash
-cd WHartTest_Django && git add notifications/ && git commit -m "feat: add variables system, feishu card builder, and push service"
+cd SkillForge_Django && git add notifications/ && git commit -m "feat: add variables system, feishu card builder, and push service"
 ```

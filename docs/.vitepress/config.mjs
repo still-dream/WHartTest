@@ -7,7 +7,7 @@ export default defineConfig({
   lastUpdated: true,
   cleanUrls: true,
   ignoreDeadLinks: true,
-  base: process.env.DEPLOY_TYPE === 'baota' ? '/docs/' : '/WHartTest/',
+  base: process.env.DEPLOY_TYPE === 'baota' ? '/docs/' : '/SkillForge/',
   head: [
     ['meta', { name: 'keywords', content: 'WHartTest, 测试自动化, AI 测试, 知识库, LangChain, LangGraph, MCP, Django, Vue, VitePress' }],
     ['meta', { property: 'og:title', content: 'WHartTest 文档' }],
@@ -38,7 +38,7 @@ export default defineConfig({
   ],
   themeConfig: {
     // https://vitepress.dev/reference/default-theme-config
-    logo: '/img/WHartTest.png',
+    logo: '/img/SkillForge.png',
     
     nav: [
       { text: '首页', link: '/' },

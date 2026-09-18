@@ -46,7 +46,7 @@
 ### 2.1 新建 `notifications` 应用
 
 ```
-WHartTest_Django/notifications/
+SkillForge_Django/notifications/
 ├── models.py          # WebhookAddress + MessageTemplate
 ├── views.py           # 视图集 (WebhookAddressViewSet, MessageTemplateViewSet)
 ├── serializers.py     # 序列化器
@@ -411,7 +411,7 @@ class ScheduledTaskSerializer(serializers.ModelSerializer):
 ### 6.1 新增前端目录结构
 
 ```
-WHartTest_Vue/src/features/notifications/
+SkillForge_Vue/src/features/notifications/
 ├── views/
 │   ├── WebhookAddressView.vue    # 推送地址管理页
 │   └── MessageTemplateView.vue   # 消息模板库页
@@ -503,8 +503,8 @@ APPUI 自动化 (app_ui_automation)  ← 新增
 | 文件 | 改动 |
 |------|------|
 | `notifications/` (新建) | 完整新 app：models, views, serializers, urls, services, variables, admin, apps, migrations |
-| `wharttest_django/settings.py` | INSTALLED_APPS 新增 `notifications` |
-| `wharttest_django/urls.py` | 注册 `api/notifications/` 路由 |
+| `skillforge_django/settings.py` | INSTALLED_APPS 新增 `notifications` |
+| `skillforge_django/urls.py` | 注册 `api/notifications/` 路由 |
 | `task_center/models.py` | ScheduledTask 新增 push_config, webhook_addresses, push_message_content 字段 + PushConfig 枚举 |
 | `task_center/serializers.py` | 新增 app_ui_scripts, app_ui_device, push_config, webhook_addresses, push_message_content 字段 + 校验 |
 | `task_center/tasks.py` | 任务执行完成后调用 `notifications.services.send_task_notification` |

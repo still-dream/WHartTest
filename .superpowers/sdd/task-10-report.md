@@ -40,9 +40,9 @@ Pre-existing errors (all unrelated to this task's changes):
 4. `src/views/OperationLogManagementView.vue(152,54)` - Property 'is_superuser' does not exist on type
 
 ## Files changed
-- `WHartTest_Vue/src/features/task-center/services/taskService.ts` (modified)
-- `WHartTest_Vue/src/features/task-center/components/TaskFormModal.vue` (modified)
-- `WHartTest_Vue/src/router/index.ts` (modified)
+- `SkillForge_Vue/src/features/task-center/services/taskService.ts` (modified)
+- `SkillForge_Vue/src/features/task-center/components/TaskFormModal.vue` (modified)
+- `SkillForge_Vue/src/router/index.ts` (modified)
 
 ## Commit
 - SHA: `b4b0188`

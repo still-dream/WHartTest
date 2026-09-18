@@ -26,7 +26,7 @@
 
 ## Global Constraints
 
-1. **测试命令**：后端 `python manage.py test accounts -v 2`（cwd：`c:\app\WHartTest\WHartTest_Django`）；前端 `npx vue-tsc -b`（cwd：`c:\app\WHartTest\WHartTest_Vue`）。
+1. **测试命令**：后端 `python manage.py test accounts -v 2`（cwd：`c:\app\SkillForge\SkillForge_Django`）；前端 `npx vue-tsc -b`（cwd：`c:\app\SkillForge\SkillForge_Vue`）。
 2. **后端失败状态码约定**（与设计文档的差异说明）：飞书认证类失败（state 无效 / token 交换失败 / 无邮箱）一律返回 **400** 而非 401。原因：前端 `request.ts` 拦截器对所有非 `/token/` URL 的 401 触发 token 刷新流程，登录前的 401 会引发无意义的刷新与重定向，吞掉错误提示；400 不触发刷新，回调页能正常展示错误。数据库未就绪仍返回 503。
 3. **响应格式**：`FeishuLoginView` 成功返回 `{access, refresh, user}`，命中 `renderers.py` 67-71 行的 token 专门分支（统一响应 message=「Token 获取成功」）。
 4. **views.py 需新增 import**（已核实现有导入不含这些）：`from django.conf import settings`、`from rest_framework_simplejwt.tokens import RefreshToken`、`from .feishu import ...`。
@@ -41,9 +41,9 @@
 
 **Files:**
 
-- Modify: `WHartTest_Django\wharttest_django\settings.py`（752-756 行现有 FEISHU 区块）
-- Modify: `WHartTest_Django\.env.example`（文件末尾，Qdrant 区块之后）
-- Modify: `WHartTest_Django\.env`（若存在；本地运行配置，不在 git 内）
+- Modify: `SkillForge_Django\skillforge_django\settings.py`（752-756 行现有 FEISHU 区块）
+- Modify: `SkillForge_Django\.env.example`（文件末尾，Qdrant 区块之后）
+- Modify: `SkillForge_Django\.env`（若存在；本地运行配置，不在 git 内）
 
 **Step 1: 修改 settings.py**
 
@@ -76,7 +76,7 @@ FEISHU_REDIRECT_URI=http://localhost:5173/login/feishu/callback
 
 **Step 4: 验证配置生效**
 
-运行（cwd：`WHartTest_Django`）：
+运行（cwd：`SkillForge_Django`）：
 
 ```
 python manage.py shell -c "from django.conf import settings; print(settings.FEISHU_REDIRECT_URI)"
@@ -87,7 +87,7 @@ python manage.py shell -c "from django.conf import settings; print(settings.FEIS
 **Step 5: Commit**
 
 ```
-git add WHartTest_Django/wharttest_django/settings.py WHartTest_Django/.env.example
+git add SkillForge_Django/skillforge_django/settings.py SkillForge_Django/.env.example
 git commit -m "feat: 新增飞书 OAuth 登录回调地址配置"
 ```
 
@@ -97,8 +97,8 @@ git commit -m "feat: 新增飞书 OAuth 登录回调地址配置"
 
 **Files:**
 
-- Modify: `WHartTest_Django\accounts\tests.py`（顶部 import 区 + 文件末尾追加测试类）
-- Create: `WHartTest_Django\accounts\feishu.py`
+- Modify: `SkillForge_Django\accounts\tests.py`（顶部 import 区 + 文件末尾追加测试类）
+- Create: `SkillForge_Django\accounts\feishu.py`
 
 **Interfaces:**
 
@@ -239,7 +239,7 @@ python manage.py test accounts.tests.FeishuServiceTests -v 2
 
 **Step 3: 实现 accounts/feishu.py**
 
-新建 `WHartTest_Django\accounts\feishu.py`：
+新建 `SkillForge_Django\accounts\feishu.py`：
 
 ```python
 """飞书 OAuth 登录服务层。
@@ -380,7 +380,7 @@ python manage.py test accounts.tests.FeishuServiceTests -v 2
 **Step 5: Commit**
 
 ```
-git add WHartTest_Django/accounts/feishu.py WHartTest_Django/accounts/tests.py
+git add SkillForge_Django/accounts/feishu.py SkillForge_Django/accounts/tests.py
 git commit -m "feat: 新增飞书 OAuth 服务层（授权地址/state 签名/令牌交换/用户信息）"
 ```
 
@@ -390,9 +390,9 @@ git commit -m "feat: 新增飞书 OAuth 服务层（授权地址/state 签名/�
 
 **Files:**
 
-- Modify: `WHartTest_Django\accounts\views.py`（新增 import + 文件末尾追加视图）
-- Modify: `WHartTest_Django\accounts\urls.py`（`me/` 路由之后插两条）
-- Modify: `WHartTest_Django\accounts\tests.py`（末尾追加视图测试类）
+- Modify: `SkillForge_Django\accounts\views.py`（新增 import + 文件末尾追加视图）
+- Modify: `SkillForge_Django\accounts\urls.py`（`me/` 路由之后插两条）
+- Modify: `SkillForge_Django\accounts\tests.py`（末尾追加视图测试类）
 
 **Interfaces:**
 
@@ -608,7 +608,7 @@ python manage.py test accounts.tests.FeishuLoginViewTests accounts.tests.FeishuA
 
 **Step 3: 实现 views.py**
 
-在 `accounts\views.py` 导入区新增（第 12 行 `from wharttest_django.permissions import ...` 之后、现有 `rest_framework_simplejwt.views` 导入块附近）：
+在 `accounts\views.py` 导入区新增（第 12 行 `from skillforge_django.permissions import ...` 之后、现有 `rest_framework_simplejwt.views` 导入块附近）：
 
 ```python
 from django.conf import settings
@@ -749,7 +749,7 @@ python manage.py test accounts -v 2
 **Step 6: Commit**
 
 ```
-git add WHartTest_Django/accounts/views.py WHartTest_Django/accounts/urls.py WHartTest_Django/accounts/tests.py
+git add SkillForge_Django/accounts/views.py SkillForge_Django/accounts/urls.py SkillForge_Django/accounts/tests.py
 git commit -m "feat: 新增飞书登录视图与路由（邮箱匹配登录/自动建号）"
 ```
 
@@ -759,7 +759,7 @@ git commit -m "feat: 新增飞书登录视图与路由（邮箱匹配登录/自�
 
 **Files:**
 
-- Modify: `WHartTest_Vue\src\services\authService.ts`（末尾追加两个函数 + 接口定义）
+- Modify: `SkillForge_Vue\src\services\authService.ts`（末尾追加两个函数 + 接口定义）
 
 **Interfaces:**
 
@@ -899,12 +899,12 @@ export const feishuLogin = async (code: string, state: string): Promise<AuthServ
 npx vue-tsc -b
 ```
 
-cwd：`WHartTest_Vue`。预期：无类型错误（exit 0）。本函数暂无调用方，type-check 通过即可。
+cwd：`SkillForge_Vue`。预期：无类型错误（exit 0）。本函数暂无调用方，type-check 通过即可。
 
 **Step 3: Commit**
 
 ```
-git add WHartTest_Vue/src/services/authService.ts
+git add SkillForge_Vue/src/services/authService.ts
 git commit -m "feat: authService 新增飞书授权地址与飞书登录接口"
 ```
 
@@ -914,7 +914,7 @@ git commit -m "feat: authService 新增飞书授权地址与飞书登录接口"
 
 **Files:**
 
-- Modify: `WHartTest_Vue\src\store\authStore.ts`（导入区 + actions 内追加）
+- Modify: `SkillForge_Vue\src\store\authStore.ts`（导入区 + actions 内追加）
 
 **Interfaces:**
 
@@ -1009,7 +1009,7 @@ npx vue-tsc -b
 **Step 4: Commit**
 
 ```
-git add WHartTest_Vue/src/store/authStore.ts
+git add SkillForge_Vue/src/store/authStore.ts
 git commit -m "feat: authStore 新增飞书登录 action"
 ```
 
@@ -1019,7 +1019,7 @@ git commit -m "feat: authStore 新增飞书登录 action"
 
 **Files:**
 
-- Modify: `WHartTest_Vue\src\views\LoginView.vue`（模板 / script / style 三处）
+- Modify: `SkillForge_Vue\src\views\LoginView.vue`（模板 / script / style 三处）
 
 **Interfaces:**
 
@@ -1171,7 +1171,7 @@ npx vue-tsc -b
 **Step 5: Commit**
 
 ```
-git add WHartTest_Vue/src/views/LoginView.vue
+git add SkillForge_Vue/src/views/LoginView.vue
 git commit -m "feat: 登录页新增飞书登录入口"
 ```
 
@@ -1181,8 +1181,8 @@ git commit -m "feat: 登录页新增飞书登录入口"
 
 **Files:**
 
-- Create: `WHartTest_Vue\src\views\FeishuCallbackView.vue`
-- Modify: `WHartTest_Vue\src\router\index.ts`（import + 路由定义 + publicRoutes）
+- Create: `SkillForge_Vue\src\views\FeishuCallbackView.vue`
+- Modify: `SkillForge_Vue\src\router\index.ts`（import + 路由定义 + publicRoutes）
 
 **Interfaces:**
 
@@ -1408,7 +1408,7 @@ npx vue-tsc -b
 **Step 4: Commit**
 
 ```
-git add WHartTest_Vue/src/views/FeishuCallbackView.vue WHartTest_Vue/src/router/index.ts
+git add SkillForge_Vue/src/views/FeishuCallbackView.vue SkillForge_Vue/src/router/index.ts
 git commit -m "feat: 新增飞书登录回调页与路由"
 ```
 
@@ -1422,7 +1422,7 @@ git commit -m "feat: 新增飞书登录回调页与路由"
 
 **Step 1: 后端全量测试**
 
-cwd `WHartTest_Django`：
+cwd `SkillForge_Django`：
 
 ```
 python manage.py test accounts -v 2
@@ -1432,7 +1432,7 @@ python manage.py test accounts -v 2
 
 **Step 2: 前端构建验证**
 
-cwd `WHartTest_Vue`：
+cwd `SkillForge_Vue`：
 
 ```
 npm run build

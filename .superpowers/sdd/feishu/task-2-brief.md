@@ -2,8 +2,8 @@
 
 **Files:**
 
-- Modify: `WHartTest_Django\accounts\tests.py`（顶部 import 区 + 文件末尾追加测试类）
-- Create: `WHartTest_Django\accounts\feishu.py`
+- Modify: `SkillForge_Django\accounts\tests.py`（顶部 import 区 + 文件末尾追加测试类）
+- Create: `SkillForge_Django\accounts\feishu.py`
 
 **Interfaces:**
 
@@ -144,7 +144,7 @@ python manage.py test accounts.tests.FeishuServiceTests -v 2
 
 **Step 3: 实现 accounts/feishu.py**
 
-新建 `WHartTest_Django\accounts\feishu.py`：
+新建 `SkillForge_Django\accounts\feishu.py`：
 
 ```python
 """飞书 OAuth 登录服务层。
@@ -285,7 +285,7 @@ python manage.py test accounts.tests.FeishuServiceTests -v 2
 **Step 5: Commit**
 
 ```
-git add WHartTest_Django/accounts/feishu.py WHartTest_Django/accounts/tests.py
+git add SkillForge_Django/accounts/feishu.py SkillForge_Django/accounts/tests.py
 git commit -m "feat: 新增飞书 OAuth 服务层（授权地址/state 签名/令牌交换/用户信息）"
 ```
 

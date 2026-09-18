@@ -1,12 +1,12 @@
 ﻿6b86779 feat: 新增飞书登录视图与路由（邮箱匹配登录/自动建号）
- WHartTest_Django/accounts/tests.py | 170 ++++++++++++++++++++++++++++++++++++-
- WHartTest_Django/accounts/urls.py  |   5 +-
- WHartTest_Django/accounts/views.py | 106 +++++++++++++++++++++++
+ SkillForge_Django/accounts/tests.py | 170 ++++++++++++++++++++++++++++++++++++-
+ SkillForge_Django/accounts/urls.py  |   5 +-
+ SkillForge_Django/accounts/views.py | 106 +++++++++++++++++++++++
  3 files changed, 278 insertions(+), 3 deletions(-)
-diff --git a/WHartTest_Django/accounts/tests.py b/WHartTest_Django/accounts/tests.py
+diff --git a/SkillForge_Django/accounts/tests.py b/SkillForge_Django/accounts/tests.py
 index 6b1c885..0ae3425 100644
---- a/WHartTest_Django/accounts/tests.py
-+++ b/WHartTest_Django/accounts/tests.py
+--- a/SkillForge_Django/accounts/tests.py
++++ b/SkillForge_Django/accounts/tests.py
 @@ -1,29 +1,33 @@
  import time
  from unittest.mock import patch
@@ -216,10 +216,10 @@ index 6b1c885..0ae3425 100644
 +
 +        self.assertEqual(response.status_code, 503)
 +        self.assertIn('未配置', response.data['detail'])
-diff --git a/WHartTest_Django/accounts/urls.py b/WHartTest_Django/accounts/urls.py
+diff --git a/SkillForge_Django/accounts/urls.py b/SkillForge_Django/accounts/urls.py
 index 8fdf1e7..bb62dad 100644
---- a/WHartTest_Django/accounts/urls.py
-+++ b/WHartTest_Django/accounts/urls.py
+--- a/SkillForge_Django/accounts/urls.py
++++ b/SkillForge_Django/accounts/urls.py
 @@ -1,27 +1,30 @@
  # 导入 include/path 以挂载路由器与显式端点。
  from django.urls import include, path
@@ -252,10 +252,10 @@ index 8fdf1e7..bb62dad 100644
      # 挂载操作日志路由（GET/列表、统计、清理旧日志等）。
      path('', include('accounts.operation_logs.urls')),
  ]
-diff --git a/WHartTest_Django/accounts/views.py b/WHartTest_Django/accounts/views.py
+diff --git a/SkillForge_Django/accounts/views.py b/SkillForge_Django/accounts/views.py
 index b5a5a00..9be3232 100644
---- a/WHartTest_Django/accounts/views.py
-+++ b/WHartTest_Django/accounts/views.py
+--- a/SkillForge_Django/accounts/views.py
++++ b/SkillForge_Django/accounts/views.py
 @@ -4,39 +4,49 @@ from django.shortcuts import get_object_or_404
  from django.db.utils import OperationalError
  from django.db.models import Q
@@ -265,7 +265,7 @@ index b5a5a00..9be3232 100644
  from rest_framework.permissions import AllowAny, IsAuthenticated, IsAdminUser
  from rest_framework.response import Response
  from rest_framework.views import APIView
- from wharttest_django.permissions import HasModelPermission, permission_required
+ from skillforge_django.permissions import HasModelPermission, permission_required
  
 +from django.conf import settings
 +from rest_framework_simplejwt.tokens import RefreshToken

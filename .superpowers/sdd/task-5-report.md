@@ -48,11 +48,11 @@ Ran 6 tests in 3.143s - OK
 
 | File | Action |
 |------|--------|
-| `WHartTest_Django/task_center/models.py` | Modified: added PushConfig enum, 3 push fields, fixed get_schedule_display_text DAILY branch |
-| `WHartTest_Django/task_center/serializers.py` | Modified: added imports, 3 serializer fields, Meta.fields, validation logic |
-| `WHartTest_Django/task_center/migrations/0009_scheduledtask_push_config_and_more.py` | Created: migration for 3 new fields |
-| `WHartTest_Django/task_center/tests/__init__.py` | Created: empty init for tests package |
-| `WHartTest_Django/task_center/tests/test_push_serializer.py` | Created: 6 test cases |
+| `SkillForge_Django/task_center/models.py` | Modified: added PushConfig enum, 3 push fields, fixed get_schedule_display_text DAILY branch |
+| `SkillForge_Django/task_center/serializers.py` | Modified: added imports, 3 serializer fields, Meta.fields, validation logic |
+| `SkillForge_Django/task_center/migrations/0009_scheduledtask_push_config_and_more.py` | Created: migration for 3 new fields |
+| `SkillForge_Django/task_center/tests/__init__.py` | Created: empty init for tests package |
+| `SkillForge_Django/task_center/tests/test_push_serializer.py` | Created: 6 test cases |
 
 ## Self-review findings
 

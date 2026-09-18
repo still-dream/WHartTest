@@ -207,7 +207,7 @@ Project
 
 ### 4.1 路由注册
 
-在 `wharttest_django/urls.py` 中新增：
+在 `skillforge_django/urls.py` 中新增：
 ```python
 path("api/app-ui-automation/", include("app_ui_automation.urls")),
 ```
@@ -560,7 +560,7 @@ if task.module == ScheduledTask.TaskModule.APP_UI_AUTOMATION:
 ### 7.1 目录结构
 
 ```
-WHartTest_Vue/src/features/app-ui-automation/
+SkillForge_Vue/src/features/app-ui-automation/
   ├── api/
   │   └── index.ts          # API 服务
   ├── types/

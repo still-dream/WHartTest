@@ -14,11 +14,11 @@ chmod +x "$0" 2>/dev/null || true
 set -e
 
 # 配置
-APP_DIR="/opt/wharttest"
+APP_DIR="/opt/skillforge"
 BRANCH="${DEPLOY_BRANCH:-master}"
 COMPOSE_FILE="docker-compose.yml"
 # 优先用当前用户可写的日志位置，避免 /var/log 权限问题
-LOG_FILE="${LOG_FILE:-$HOME/.wharttest-deploy.log}"
+LOG_FILE="${LOG_FILE:-$HOME/.skillforge-deploy.log}"
 
 # 参数解析
 DO_BUILD=1
@@ -36,7 +36,7 @@ for arg in "$@"; do
             echo "  --no-build  只拉代码、重启，不重新构建镜像"
             echo "  --logs      部署完成后查看日志"
             echo "  --clean     清理悬空镜像"
-            echo "  --bg        后台运行，日志写入 /tmp/wharttest-deploy.log"
+            echo "  --bg        后台运行，日志写入 /tmp/skillforge-deploy.log"
             exit 0
             ;;
     esac
@@ -44,8 +44,8 @@ done
 
 # 后台模式：nohup 启动后立即退出
 if [ "$BG_MODE" = "1" ]; then
-    LOG=/tmp/wharttest-deploy.log
-    PIDFILE=/tmp/wharttest-deploy.pid
+    LOG=/tmp/skillforge-deploy.log
+    PIDFILE=/tmp/skillforge-deploy.pid
     nohup "$0" "${@/--bg/}" > "$LOG" 2>&1 &
     echo $! > "$PIDFILE"
     echo "✓ 后台启动成功"

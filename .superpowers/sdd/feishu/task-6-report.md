@@ -2,7 +2,7 @@
 
 ## 实现内容
 
-按简报逐字修改 `WHartTest_Vue\src\views\LoginView.vue` 三处：
+按简报逐字修改 `SkillForge_Vue\src\views\LoginView.vue` 三处：
 
 1. **模板**：原 `.login-launcher` 按钮（含 `ref="launcherButtonRef"`）原样包进新增的 `.launcher-row` 容器（仅缩进变化，内容零改动），其后并列新增飞书登录 launcher：
    - `class="login-launcher feishu-launcher"`，`:disabled="feishuLoading"`，`@click="handleFeishuLogin"`
@@ -17,7 +17,7 @@
 
 ## 验证
 
-- `npx vue-tsc -b`（cwd：`c:\app\WHartTest\WHartTest_Vue`）退出码 1，错误列表与改动前基线**完全一致**，仅 4 个历史遗留错误：
+- `npx vue-tsc -b`（cwd：`c:\app\SkillForge\SkillForge_Vue`）退出码 1，错误列表与改动前基线**完全一致**，仅 4 个历史遗留错误：
   - TestTaskExecutionDetail.vue(80,5) TS2322
   - TestTaskExecutionHistory.vue(274,5) TS2322
   - TaskFormModal.vue(99,17) TS2367
@@ -27,7 +27,7 @@
 
 ## 变更文件
 
-- `WHartTest_Vue/src/views/LoginView.vue`（唯一变更文件，+104 / -25，删除行均为被包裹按钮的重新缩进）
+- `SkillForge_Vue/src/views/LoginView.vue`（唯一变更文件，+104 / -25，删除行均为被包裹按钮的重新缩进）
 
 ## Commit
 

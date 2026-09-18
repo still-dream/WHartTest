@@ -6,7 +6,7 @@
 
 **Step 1: 后端全量测试**
 
-cwd `WHartTest_Django`：
+cwd `SkillForge_Django`：
 
 ```
 python manage.py test accounts -v 2
@@ -16,7 +16,7 @@ python manage.py test accounts -v 2
 
 **Step 2: 前端构建验证**
 
-cwd `WHartTest_Vue`：
+cwd `SkillForge_Vue`：
 
 ```
 npm run build

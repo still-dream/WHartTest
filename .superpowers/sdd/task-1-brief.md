@@ -1,13 +1,13 @@
 ## Task 1: Create notifications app + WebhookAddress model + tests
 
 **Files:**
-- Create: `WHartTest_Django/notifications/__init__.py`
-- Create: `WHartTest_Django/notifications/apps.py`
-- Create: `WHartTest_Django/notifications/models.py`
-- Create: `WHartTest_Django/notifications/admin.py`
-- Create: `WHartTest_Django/notifications/migrations/__init__.py`
-- Create: `WHartTest_Django/notifications/tests.py`
-- Modify: `WHartTest_Django/wharttest_django/settings.py`
+- Create: `SkillForge_Django/notifications/__init__.py`
+- Create: `SkillForge_Django/notifications/apps.py`
+- Create: `SkillForge_Django/notifications/models.py`
+- Create: `SkillForge_Django/notifications/admin.py`
+- Create: `SkillForge_Django/notifications/migrations/__init__.py`
+- Create: `SkillForge_Django/notifications/tests.py`
+- Modify: `SkillForge_Django/skillforge_django/settings.py`
 
 **Interfaces:**
 - Produces: `notifications` Django app, `WebhookAddress` model
@@ -16,8 +16,8 @@
 - [ ] **Step 1: Create app directory structure**
 
 Create the following empty files:
-- `WHartTest_Django/notifications/__init__.py` (empty)
-- `WHartTest_Django/notifications/migrations/__init__.py` (empty)
+- `SkillForge_Django/notifications/__init__.py` (empty)
+- `SkillForge_Django/notifications/migrations/__init__.py` (empty)
 
 - [ ] **Step 2: Create apps.py**
 
@@ -33,7 +33,7 @@ class NotificationsConfig(AppConfig):
 
 - [ ] **Step 3: Register app in INSTALLED_APPS**
 
-In `WHartTest_Django/wharttest_django/settings.py`, add `'notifications'` after `'task_center'` (line ~136):
+In `SkillForge_Django/skillforge_django/settings.py`, add `'notifications'` after `'task_center'` (line ~136):
 
 ```python
     'task_center', # 任务中心应用
@@ -43,7 +43,7 @@ In `WHartTest_Django/wharttest_django/settings.py`, add `'notifications'` after 
 
 - [ ] **Step 4: Write the failing test**
 
-Create `WHartTest_Django/notifications/tests.py`:
+Create `SkillForge_Django/notifications/tests.py`:
 
 ```python
 from django.test import TestCase
@@ -109,14 +109,14 @@ class WebhookAddressModelTest(TestCase):
 - [ ] **Step 5: Run test to verify it fails**
 
 ```bash
-cd WHartTest_Django && python manage.py test notifications -v 2
+cd SkillForge_Django && python manage.py test notifications -v 2
 ```
 
 Expected: `ModuleNotFoundError: No module named 'notifications.models'` (or similar import error).
 
 - [ ] **Step 6: Write minimal implementation**
 
-Create `WHartTest_Django/notifications/models.py`:
+Create `SkillForge_Django/notifications/models.py`:
 
 ```python
 from django.db import models
@@ -151,7 +151,7 @@ class WebhookAddress(models.Model):
         return self.name
 ```
 
-Create `WHartTest_Django/notifications/admin.py`:
+Create `SkillForge_Django/notifications/admin.py`:
 
 ```python
 from django.contrib import admin
@@ -169,7 +169,7 @@ class WebhookAddressAdmin(admin.ModelAdmin):
 - [ ] **Step 7: Run makemigrations + migrate**
 
 ```bash
-cd WHartTest_Django && python manage.py makemigrations notifications && python manage.py migrate
+cd SkillForge_Django && python manage.py makemigrations notifications && python manage.py migrate
 ```
 
 Expected: Migration `0001_initial` created, tables applied.
@@ -177,7 +177,7 @@ Expected: Migration `0001_initial` created, tables applied.
 - [ ] **Step 8: Run test to verify it passes**
 
 ```bash
-cd WHartTest_Django && python manage.py test notifications -v 2
+cd SkillForge_Django && python manage.py test notifications -v 2
 ```
 
 Expected: All 5 tests pass.
@@ -185,5 +185,5 @@ Expected: All 5 tests pass.
 - [ ] **Step 9: Commit**
 
 ```bash
-cd WHartTest_Django && git add notifications/ wharttest_django/settings.py && git commit -m "feat: add notifications app with WebhookAddress model"
+cd SkillForge_Django && git add notifications/ skillforge_django/settings.py && git commit -m "feat: add notifications app with WebhookAddress model"
 ```

@@ -1,8 +1,8 @@
 ## Task 7: Frontend notifications service + types
 
 **Files:**
-- Create: `WHartTest_Vue/src/features/notifications/types/index.ts`
-- Create: `WHartTest_Vue/src/features/notifications/services/notificationService.ts`
+- Create: `SkillForge_Vue/src/features/notifications/types/index.ts`
+- Create: `SkillForge_Vue/src/features/notifications/services/notificationService.ts`
 
 **Interfaces:**
 - Produces: TypeScript types and API service functions for notifications
@@ -10,7 +10,7 @@
 
 - [ ] **Step 1: Create types**
 
-Create `WHartTest_Vue/src/features/notifications/types/index.ts`:
+Create `SkillForge_Vue/src/features/notifications/types/index.ts`:
 
 ```typescript
 // 推送平台类型
@@ -107,7 +107,7 @@ export const NOTIFICATION_VARIABLES: NotificationVariable[] = [
 
 - [ ] **Step 2: Create service**
 
-Create `WHartTest_Vue/src/features/notifications/services/notificationService.ts`:
+Create `SkillForge_Vue/src/features/notifications/services/notificationService.ts`:
 
 ```typescript
 import request from '@/utils/request';
@@ -177,7 +177,7 @@ export async function deleteMessageTemplate(id: number): Promise<void> {
 - [ ] **Step 3: Build to verify no errors**
 
 ```bash
-cd WHartTest_Vue && npm run build
+cd SkillForge_Vue && npm run build
 ```
 
 Expected: Build succeeds with no TypeScript errors.
@@ -185,5 +185,5 @@ Expected: Build succeeds with no TypeScript errors.
 - [ ] **Step 4: Commit**
 
 ```bash
-cd WHartTest_Vue && git add src/features/notifications/ && git commit -m "feat: add notifications service and types"
+cd SkillForge_Vue && git add src/features/notifications/ && git commit -m "feat: add notifications service and types"
 ```

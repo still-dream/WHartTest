@@ -6,10 +6,10 @@ WHartTest 是 AI 驱动的智能测试用例生成平台，采用前后端分离
 
 | 子项目 | 技术栈 | 说明 |
 |---|---|---|
-| `WHartTest_Django` | Django 5.2 + DRF + Celery + LangChain/LangGraph | 后端 API 服务 |
-| `WHartTest_Vue` | Vue 3 + TypeScript + Vite + Arco Design Vue | 前端 SPA |
-| `WHartTest_Actuator` | Python + Playwright + WebSocket | UI 自动化执行器 |
-| `WHartTest_MCP` | Python + FastMCP | MCP 工具服务 |
+| `SkillForge_Django` | Django 5.2 + DRF + Celery + LangChain/LangGraph | 后端 API 服务 |
+| `SkillForge_Vue` | Vue 3 + TypeScript + Vite + Arco Design Vue | 前端 SPA |
+| `SkillForge_Actuator` | Python + Playwright + WebSocket | UI 自动化执行器 |
+| `SkillForge_MCP` | Python + FastMCP | MCP 工具服务 |
 
 ## 运行环境
 
@@ -18,10 +18,10 @@ WHartTest 是 AI 驱动的智能测试用例生成平台，采用前后端分离
 - PostgreSQL（生产端口 8919）、Redis（Broker 端口 8911）、Qdrant（向量存储）、Daphne（ASGI）
 - 时区：`Asia/Shanghai`
 
-## 后端规范（WHartTest_Django）
+## 后端规范（SkillForge_Django）
 
 ### 视图与路由
-- 所有 ViewSet 继承 `wharttest_django.viewsets.BaseModelViewSet`（封装 `IsAuthenticated` + `HasModelPermission`）
+- 所有 ViewSet 继承 `skillforge_django.viewsets.BaseModelViewSet`（封装 `IsAuthenticated` + `HasModelPermission`）
 - 顶级资源通过 `DefaultRouter` 注册（如 `projects`），项目下嵌套资源通过 `drf-nested-routers` 的 `NestedDefaultRouter`（如 `projects/{pk}/testcases`）
 - 认证支持 JWT（`Authorization: Bearer <token>`）和 API Key（`Authorization: Api-Key <key>`）
 
@@ -59,7 +59,7 @@ WHartTest 是 AI 驱动的智能测试用例生成平台，采用前后端分离
 - Broker/Backend：Redis
 - Beat 调度器：`django_celery_beat.schedulers:DatabaseScheduler`
 - 任务路由：`task_center.tasks.*` → 队列 `task_center`；其他 → 默认队列 `celery`
-- Worker 启动：`uv run celery -A wharttest_django worker --loglevel=info -Q celery,task_center -B`
+- Worker 启动：`uv run celery -A skillforge_django worker --loglevel=info -Q celery,task_center -B`
 
 ### 知识库核心服务（`knowledge/services.py`）
 - `CustomAPIEmbeddings`：OpenAI 兼容嵌入 API 封装，支持 `embed_image()` 多模态嵌入
@@ -72,7 +72,7 @@ WHartTest 是 AI 驱动的智能测试用例生成平台，采用前后端分离
 - 项目隔离：模型通常关联 `project` 外键，ViewSet 的 `get_queryset()` 按 `project_id` 过滤
 - Migration 文件需明确命名，如 `0014_add_document_image.py`
 
-## 前端规范（WHartTest_Vue）
+## 前端规范（SkillForge_Vue）
 
 ### 技术栈
 - Vue 3 + Composition API（`<script setup lang="ts">`）
@@ -118,14 +118,14 @@ src/
 
 ```bash
 # 后端
-cd WHartTest_Django
+cd SkillForge_Django
 uv run python manage.py runserver           # 启动开发服务器
 uv run python manage.py makemigrations      # 生成迁移
 uv run python manage.py migrate             # 执行迁移
-uv run celery -A wharttest_django worker --loglevel=info -Q celery,task_center -B  # Celery Worker + Beat
+uv run celery -A skillforge_django worker --loglevel=info -Q celery,task_center -B  # Celery Worker + Beat
 
 # 前端
-cd WHartTest_Vue
+cd SkillForge_Vue
 npm install                                  # 安装依赖
 npm run dev                                  # 启动开发服务器
 npm run build                                # 生产构建

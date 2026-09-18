@@ -8,23 +8,23 @@
 
 | 子项目 | 技术栈 | 说明 |
 |---|---|---|
-| `WHartTest_Django` | Django 5.2 + DRF + Celery + LangChain/LangGraph + Channels | 后端 API 服务 |
-| `WHartTest_Vue` | Vue 3 + TypeScript + Vite + Arco Design Vue + TailwindCSS | 前端 SPA |
-| `WHartTest_Actuator` | Python + Playwright (async) + WebSocket | UI 自动化执行器 |
-| `WHartTest_MCP` | Python + FastMCP | MCP 工具服务 |
-| `WHartTest_Skills` | 多技术栈（Python/Node.js） | 可扩展 Agent 技能库 |
+| `SkillForge_Django` | Django 5.2 + DRF + Celery + LangChain/LangGraph + Channels | 后端 API 服务 |
+| `SkillForge_Vue` | Vue 3 + TypeScript + Vite + Arco Design Vue + TailwindCSS | 前端 SPA |
+| `SkillForge_Actuator` | Python + Playwright (async) + WebSocket | UI 自动化执行器 |
+| `SkillForge_MCP` | Python + FastMCP | MCP 工具服务 |
+| `SkillForge_Skills` | 多技术栈（Python/Node.js） | 可扩展 Agent 技能库 |
 | `docx-editor` | Django + Vue 3 + ONLYOFFICE | 在线文档编辑器 |
 
 **依赖关系：**
 ```
-WHartTest_Vue (前端 SPA)
+SkillForge_Vue (前端 SPA)
   ↓ REST API + WebSocket
-WHartTest_Django (后端核心)
+SkillForge_Django (后端核心)
   ├── ↔ Redis (Celery Broker / Cache)
   ├── → PostgreSQL (关系数据)
   ├── → Qdrant (向量存储)
-  ├── ↔ WHartTest_MCP (MCP 工具，streamable-http)
-  ├── ↔ WHartTest_Actuator (WebSocket 双向通信)
+  ├── ↔ SkillForge_MCP (MCP 工具，streamable-http)
+  ├── ↔ SkillForge_Actuator (WebSocket 双向通信)
   ├── ↔ docx-editor (iframe 嵌入)
   └── → 外部 LLM API (OpenAI/Azure/Ollama/Xinference)
 ```

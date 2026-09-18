@@ -56,10 +56,10 @@ Ran 46 tests in 26.600s — OK
 All 46 notifications tests pass with no regressions.
 
 ## Files changed
-1. `WHartTest_Django/task_center/tasks.py` — APPUI branch replacement + push integration in 3 paths
-2. `WHartTest_Django/accounts/serializers.py` — Notifications menu mapping in 7 methods
-3. `WHartTest_Django/notifications/migrations/0003_initial_system_template.py` — New data migration (created)
-4. `WHartTest_Django/notifications/tests.py` — 3 new test classes + 2 existing test fixes
+1. `SkillForge_Django/task_center/tasks.py` — APPUI branch replacement + push integration in 3 paths
+2. `SkillForge_Django/accounts/serializers.py` — Notifications menu mapping in 7 methods
+3. `SkillForge_Django/notifications/migrations/0003_initial_system_template.py` — New data migration (created)
+4. `SkillForge_Django/notifications/tests.py` — 3 new test classes + 2 existing test fixes
 
 ## Self-review findings
 1. **Migration user creation**: The brief specified `if not creator: return` but this doesn't work in test databases where migrations run before any users exist. Changed to create a system user with unusable password. This is safe for production (system user can't log in) and necessary for tests.

@@ -1,6 +1,6 @@
 {
   "include": [
-    "WHartTest_Django"
+    "SkillForge_Django"
   ],
   "exclude": [
     "**/__pycache__",

@@ -27,54 +27,54 @@
 
 | File | Responsibility |
 |------|---------------|
-| `WHartTest_Django/app_ui_automation/__init__.py` | App init |
-| `WHartTest_Django/app_ui_automation/apps.py` | AppConfig |
-| `WHartTest_Django/app_ui_automation/models.py` | All data models |
-| `WHartTest_Django/app_ui_automation/serializers.py` | DRF serializers |
-| `WHartTest_Django/app_ui_automation/views.py` | DRF ViewSets |
-| `WHartTest_Django/app_ui_automation/urls.py` | URL routing |
-| `WHartTest_Django/app_ui_automation/executor.py` | Execution engine |
-| `WHartTest_Django/app_ui_automation/tasks.py` | Celery async tasks |
-| `WHartTest_Django/app_ui_automation/tests.py` | Unit tests |
-| `WHartTest_Django/app_ui_automation/admin.py` | Django admin |
-| `WHartTest_Django/app_ui_automation/migrations/` | DB migrations |
+| `SkillForge_Django/app_ui_automation/__init__.py` | App init |
+| `SkillForge_Django/app_ui_automation/apps.py` | AppConfig |
+| `SkillForge_Django/app_ui_automation/models.py` | All data models |
+| `SkillForge_Django/app_ui_automation/serializers.py` | DRF serializers |
+| `SkillForge_Django/app_ui_automation/views.py` | DRF ViewSets |
+| `SkillForge_Django/app_ui_automation/urls.py` | URL routing |
+| `SkillForge_Django/app_ui_automation/executor.py` | Execution engine |
+| `SkillForge_Django/app_ui_automation/tasks.py` | Celery async tasks |
+| `SkillForge_Django/app_ui_automation/tests.py` | Unit tests |
+| `SkillForge_Django/app_ui_automation/admin.py` | Django admin |
+| `SkillForge_Django/app_ui_automation/migrations/` | DB migrations |
 
 ### Modified Files
 
 | File | Change |
 |------|--------|
-| `WHartTest_Django/wharttest_django/settings.py` | Add app + Airtest config |
-| `WHartTest_Django/wharttest_django/urls.py` | Add URL include |
-| `WHartTest_Django/task_center/models.py` | Add TaskModule enum + FK fields |
-| `WHartTest_Django/task_center/tasks.py` | Add APPUI execution branch |
-| `WHartTest_Django/requirements.txt` | Add airtest dependency |
-| `WHartTest_Vue/src/router/index.ts` | Add route |
+| `SkillForge_Django/skillforge_django/settings.py` | Add app + Airtest config |
+| `SkillForge_Django/skillforge_django/urls.py` | Add URL include |
+| `SkillForge_Django/task_center/models.py` | Add TaskModule enum + FK fields |
+| `SkillForge_Django/task_center/tasks.py` | Add APPUI execution branch |
+| `SkillForge_Django/requirements.txt` | Add airtest dependency |
+| `SkillForge_Vue/src/router/index.ts` | Add route |
 
 ### Frontend (Vue)
 
 | File | Responsibility |
 |------|---------------|
-| `WHartTest_Vue/src/features/app-ui-automation/api/index.ts` | API service |
-| `WHartTest_Vue/src/features/app-ui-automation/types/index.ts` | TypeScript types |
-| `WHartTest_Vue/src/features/app-ui-automation/views/AppUiAutomationView.vue` | Main view |
-| `WHartTest_Vue/src/features/app-ui-automation/views/ModuleTree.vue` | Module tree |
-| `WHartTest_Vue/src/features/app-ui-automation/views/ScriptList.vue` | Script list + upload |
-| `WHartTest_Vue/src/features/app-ui-automation/views/DeviceList.vue` | Device management |
-| `WHartTest_Vue/src/features/app-ui-automation/views/ExecutionRecordList.vue` | Execution records |
-| `WHartTest_Vue/src/features/app-ui-automation/views/BatchRecordList.vue` | Batch records |
-| `WHartTest_Vue/src/features/app-ui-automation/index.ts` | Module exports |
+| `SkillForge_Vue/src/features/app-ui-automation/api/index.ts` | API service |
+| `SkillForge_Vue/src/features/app-ui-automation/types/index.ts` | TypeScript types |
+| `SkillForge_Vue/src/features/app-ui-automation/views/AppUiAutomationView.vue` | Main view |
+| `SkillForge_Vue/src/features/app-ui-automation/views/ModuleTree.vue` | Module tree |
+| `SkillForge_Vue/src/features/app-ui-automation/views/ScriptList.vue` | Script list + upload |
+| `SkillForge_Vue/src/features/app-ui-automation/views/DeviceList.vue` | Device management |
+| `SkillForge_Vue/src/features/app-ui-automation/views/ExecutionRecordList.vue` | Execution records |
+| `SkillForge_Vue/src/features/app-ui-automation/views/BatchRecordList.vue` | Batch records |
+| `SkillForge_Vue/src/features/app-ui-automation/index.ts` | Module exports |
 
 ---
 
 ## Task 1: Django App Scaffolding + AppUiModule Model
 
 **Files:**
-- Create: `WHartTest_Django/app_ui_automation/__init__.py`
-- Create: `WHartTest_Django/app_ui_automation/apps.py`
-- Create: `WHartTest_Django/app_ui_automation/models.py`
-- Create: `WHartTest_Django/app_ui_automation/migrations/__init__.py`
-- Create: `WHartTest_Django/app_ui_automation/tests.py`
-- Modify: `WHartTest_Django/wharttest_django/settings.py`
+- Create: `SkillForge_Django/app_ui_automation/__init__.py`
+- Create: `SkillForge_Django/app_ui_automation/apps.py`
+- Create: `SkillForge_Django/app_ui_automation/models.py`
+- Create: `SkillForge_Django/app_ui_automation/migrations/__init__.py`
+- Create: `SkillForge_Django/app_ui_automation/tests.py`
+- Modify: `SkillForge_Django/skillforge_django/settings.py`
 
 **Interfaces:**
 - Produces: `AppUiModule` model (project, name, parent, level, creator, created_at, updated_at)
@@ -82,8 +82,8 @@
 - [ ] **Step 1: Create app directory structure**
 
 Create files:
-- `WHartTest_Django/app_ui_automation/__init__.py` (empty)
-- `WHartTest_Django/app_ui_automation/migrations/__init__.py` (empty)
+- `SkillForge_Django/app_ui_automation/__init__.py` (empty)
+- `SkillForge_Django/app_ui_automation/migrations/__init__.py` (empty)
 
 - [ ] **Step 2: Create apps.py**
 
@@ -98,7 +98,7 @@ class AppUiAutomationConfig(AppConfig):
 
 - [ ] **Step 3: Register app in settings.py**
 
-Add `"app_ui_automation"` to `INSTALLED_APPS` in `WHartTest_Django/wharttest_django/settings.py` after `"ui_automation"`:
+Add `"app_ui_automation"` to `INSTALLED_APPS` in `SkillForge_Django/skillforge_django/settings.py` after `"ui_automation"`:
 
 ```python
     "ui_automation",  # UI 自动化应用。
@@ -107,7 +107,7 @@ Add `"app_ui_automation"` to `INSTALLED_APPS` in `WHartTest_Django/wharttest_dja
 
 - [ ] **Step 4: Write AppUiModule model**
 
-In `WHartTest_Django/app_ui_automation/models.py`:
+In `SkillForge_Django/app_ui_automation/models.py`:
 
 ```python
 # -*- coding: utf-8 -*-
@@ -163,7 +163,7 @@ class AppUiModule(models.Model):
 
 - [ ] **Step 5: Write tests**
 
-In `WHartTest_Django/app_ui_automation/tests.py`:
+In `SkillForge_Django/app_ui_automation/tests.py`:
 
 ```python
 from django.test import TestCase
@@ -207,7 +207,7 @@ class AppUiModuleModelTest(TestCase):
 - [ ] **Step 6: Run migration and test**
 
 ```bash
-cd WHartTest_Django
+cd SkillForge_Django
 python manage.py makemigrations app_ui_automation
 python manage.py migrate
 python manage.py test app_ui_automation.tests.AppUiModuleModelTest
@@ -218,8 +218,8 @@ Expected: All tests PASS
 - [ ] **Step 7: Commit**
 
 ```bash
-git add WHartTest_Django/app_ui_automation/
-git add WHartTest_Django/wharttest_django/settings.py
+git add SkillForge_Django/app_ui_automation/
+git add SkillForge_Django/skillforge_django/settings.py
 git commit -m "feat: scaffold app_ui_automation Django app with AppUiModule model"
 ```
 
@@ -228,8 +228,8 @@ git commit -m "feat: scaffold app_ui_automation Django app with AppUiModule mode
 ## Task 2: AppUiScript Model + Upload Logic
 
 **Files:**
-- Modify: `WHartTest_Django/app_ui_automation/models.py`
-- Modify: `WHartTest_Django/app_ui_automation/tests.py`
+- Modify: `SkillForge_Django/app_ui_automation/models.py`
+- Modify: `SkillForge_Django/app_ui_automation/tests.py`
 
 **Interfaces:**
 - Consumes: `AppUiModule` from Task 1
@@ -237,7 +237,7 @@ git commit -m "feat: scaffold app_ui_automation Django app with AppUiModule mode
 
 - [ ] **Step 1: Add AppUiScript model**
 
-Append to `WHartTest_Django/app_ui_automation/models.py` (add `import os` and `from django.conf import settings` to imports):
+Append to `SkillForge_Django/app_ui_automation/models.py` (add `import os` and `from django.conf import settings` to imports):
 
 ```python
 import os
@@ -301,7 +301,7 @@ class AppUiScript(models.Model):
 
 - [ ] **Step 2: Write tests**
 
-Append to `WHartTest_Django/app_ui_automation/tests.py`:
+Append to `SkillForge_Django/app_ui_automation/tests.py`:
 
 ```python
 import io
@@ -340,7 +340,7 @@ class AppUiScriptModelTest(TestCase):
 - [ ] **Step 3: Run migration and test**
 
 ```bash
-cd WHartTest_Django
+cd SkillForge_Django
 python manage.py makemigrations app_ui_automation
 python manage.py migrate
 python manage.py test app_ui_automation.tests.AppUiScriptModelTest
@@ -351,7 +351,7 @@ Expected: PASS
 - [ ] **Step 4: Commit**
 
 ```bash
-git add WHartTest_Django/app_ui_automation/
+git add SkillForge_Django/app_ui_automation/
 git commit -m "feat: add AppUiScript model with .air zip upload support"
 ```
 
@@ -360,15 +360,15 @@ git commit -m "feat: add AppUiScript model with .air zip upload support"
 ## Task 3: AppUiDevice Model
 
 **Files:**
-- Modify: `WHartTest_Django/app_ui_automation/models.py`
-- Modify: `WHartTest_Django/app_ui_automation/tests.py`
+- Modify: `SkillForge_Django/app_ui_automation/models.py`
+- Modify: `SkillForge_Django/app_ui_automation/tests.py`
 
 **Interfaces:**
 - Produces: `AppUiDevice` model (connection_type, device_uri, status)
 
 - [ ] **Step 1: Add AppUiDevice model**
 
-Append to `WHartTest_Django/app_ui_automation/models.py`:
+Append to `SkillForge_Django/app_ui_automation/models.py`:
 
 ```python
 class AppUiDevice(models.Model):
@@ -414,7 +414,7 @@ class AppUiDevice(models.Model):
 
 - [ ] **Step 2: Write tests**
 
-Append to `WHartTest_Django/app_ui_automation/tests.py`:
+Append to `SkillForge_Django/app_ui_automation/tests.py`:
 
 ```python
 from app_ui_automation.models import AppUiDevice
@@ -439,7 +439,7 @@ class AppUiDeviceModelTest(TestCase):
 - [ ] **Step 3: Run migration and test**
 
 ```bash
-cd WHartTest_Django
+cd SkillForge_Django
 python manage.py makemigrations app_ui_automation
 python manage.py migrate
 python manage.py test app_ui_automation.tests.AppUiDeviceModelTest
@@ -450,7 +450,7 @@ Expected: PASS
 - [ ] **Step 4: Commit**
 
 ```bash
-git add WHartTest_Django/app_ui_automation/
+git add SkillForge_Django/app_ui_automation/
 git commit -m "feat: add AppUiDevice model with multi-connection-type support"
 ```
 
@@ -459,8 +459,8 @@ git commit -m "feat: add AppUiDevice model with multi-connection-type support"
 ## Task 4: Execution Record + Batch Record Models
 
 **Files:**
-- Modify: `WHartTest_Django/app_ui_automation/models.py`
-- Modify: `WHartTest_Django/app_ui_automation/tests.py`
+- Modify: `SkillForge_Django/app_ui_automation/models.py`
+- Modify: `SkillForge_Django/app_ui_automation/tests.py`
 
 **Interfaces:**
 - Consumes: `AppUiScript` (Task 2), `AppUiDevice` (Task 3)
@@ -468,7 +468,7 @@ git commit -m "feat: add AppUiDevice model with multi-connection-type support"
 
 - [ ] **Step 1: Add batch + execution record models**
 
-Append to `WHartTest_Django/app_ui_automation/models.py`:
+Append to `SkillForge_Django/app_ui_automation/models.py`:
 
 ```python
 class AppUiBatchExecutionRecord(models.Model):
@@ -562,7 +562,7 @@ class AppUiExecutionRecord(models.Model):
 
 - [ ] **Step 2: Write tests**
 
-Append to `WHartTest_Django/app_ui_automation/tests.py`:
+Append to `SkillForge_Django/app_ui_automation/tests.py`:
 
 ```python
 from app_ui_automation.models import AppUiExecutionRecord, AppUiBatchExecutionRecord
@@ -598,7 +598,7 @@ class AppUiExecutionRecordModelTest(TestCase):
 - [ ] **Step 3: Run migration and test**
 
 ```bash
-cd WHartTest_Django
+cd SkillForge_Django
 python manage.py makemigrations app_ui_automation
 python manage.py migrate
 python manage.py test app_ui_automation.tests.AppUiExecutionRecordModelTest
@@ -609,7 +609,7 @@ Expected: PASS
 - [ ] **Step 4: Commit**
 
 ```bash
-git add WHartTest_Django/app_ui_automation/
+git add SkillForge_Django/app_ui_automation/
 git commit -m "feat: add AppUiExecutionRecord and AppUiBatchExecutionRecord models"
 ```
 
@@ -618,11 +618,11 @@ git commit -m "feat: add AppUiExecutionRecord and AppUiBatchExecutionRecord mode
 ## Task 5: Serializers + ViewSets + URLs
 
 **Files:**
-- Create: `WHartTest_Django/app_ui_automation/serializers.py`
-- Create: `WHartTest_Django/app_ui_automation/views.py`
-- Create: `WHartTest_Django/app_ui_automation/urls.py`
-- Create: `WHartTest_Django/app_ui_automation/admin.py`
-- Modify: `WHartTest_Django/wharttest_django/urls.py`
+- Create: `SkillForge_Django/app_ui_automation/serializers.py`
+- Create: `SkillForge_Django/app_ui_automation/views.py`
+- Create: `SkillForge_Django/app_ui_automation/urls.py`
+- Create: `SkillForge_Django/app_ui_automation/admin.py`
+- Modify: `SkillForge_Django/skillforge_django/urls.py`
 
 **Interfaces:**
 - Consumes: All models from Tasks 1-4, `execute_app_ui_script` task from Task 7
@@ -632,11 +632,11 @@ git commit -m "feat: add AppUiExecutionRecord and AppUiBatchExecutionRecord mode
 
 - [ ] **Step 1: Create serializers.py**
 
-Full code for `WHartTest_Django/app_ui_automation/serializers.py` - see design spec section 4.2 for serializer field definitions. Follow `ui_automation/serializers.py` patterns.
+Full code for `SkillForge_Django/app_ui_automation/serializers.py` - see design spec section 4.2 for serializer field definitions. Follow `ui_automation/serializers.py` patterns.
 
 - [ ] **Step 2: Create views.py**
 
-Full code for `WHartTest_Django/app_ui_automation/views.py` - includes:
+Full code for `SkillForge_Django/app_ui_automation/views.py` - includes:
 - `AppUiModuleViewSet` (CRUD + tree action, follows `UiModuleViewSet`)
 - `AppUiScriptViewSet` (CRUD + preview/execute actions, includes `_extract_and_parse()` method)
 - `AppUiDeviceViewSet` (CRUD + check action)
@@ -681,7 +681,7 @@ admin.site.register(AppUiBatchExecutionRecord)
 
 - [ ] **Step 5: Register URLs in main urls.py**
 
-In `WHartTest_Django/wharttest_django/urls.py`, add after the ui-automation include:
+In `SkillForge_Django/skillforge_django/urls.py`, add after the ui-automation include:
 
 ```python
     path("api/app-ui-automation/", include("app_ui_automation.urls")),
@@ -690,7 +690,7 @@ In `WHartTest_Django/wharttest_django/urls.py`, add after the ui-automation incl
 - [ ] **Step 6: Run server and verify**
 
 ```bash
-cd WHartTest_Django
+cd SkillForge_Django
 python manage.py runserver
 curl http://localhost:8000/api/app-ui-automation/modules/
 ```
@@ -700,8 +700,8 @@ Expected: 200 OK
 - [ ] **Step 7: Commit**
 
 ```bash
-git add WHartTest_Django/app_ui_automation/
-git add WHartTest_Django/wharttest_django/urls.py
+git add SkillForge_Django/app_ui_automation/
+git add SkillForge_Django/skillforge_django/urls.py
 git commit -m "feat: add serializers, views, URLs for app_ui_automation API"
 ```
 
@@ -710,7 +710,7 @@ git commit -m "feat: add serializers, views, URLs for app_ui_automation API"
 ## Task 6: Execution Engine (executor.py)
 
 **Files:**
-- Create: `WHartTest_Django/app_ui_automation/executor.py`
+- Create: `SkillForge_Django/app_ui_automation/executor.py`
 
 **Interfaces:**
 - Consumes: `AppUiScript`, `AppUiDevice`, `AppUiExecutionRecord` models; `run_all.py` `pack_html()` function
@@ -718,7 +718,7 @@ git commit -m "feat: add serializers, views, URLs for app_ui_automation API"
 
 - [ ] **Step 1: Create executor.py**
 
-Create `WHartTest_Django/app_ui_automation/executor.py` with the `AppUiScriptExecutor` class implementing the three-step pipeline:
+Create `SkillForge_Django/app_ui_automation/executor.py` with the `AppUiScriptExecutor` class implementing the three-step pipeline:
 
 1. `_run_script_with_airtest()` - uses `from airtest.core.api import connect_device, set_logdir` then `exec()` the script with `__file__` set correctly for Template image paths
 2. `_generate_report()` - calls `subprocess.run([AIRTEST_IDE_PATH, "reporter", ...])` then `_apply_custom_template()` to inject CSS from `log_template.html`
@@ -730,7 +730,7 @@ See design spec section 5 for complete code.
 - [ ] **Step 2: Verify import**
 
 ```bash
-cd WHartTest_Django
+cd SkillForge_Django
 python -c "from app_ui_automation.executor import AppUiScriptExecutor; print('OK')"
 ```
 
@@ -739,7 +739,7 @@ Expected: `OK`
 - [ ] **Step 3: Commit**
 
 ```bash
-git add WHartTest_Django/app_ui_automation/executor.py
+git add SkillForge_Django/app_ui_automation/executor.py
 git commit -m "feat: add execution engine with airtest+reporter+pack_html pipeline"
 ```
 
@@ -748,7 +748,7 @@ git commit -m "feat: add execution engine with airtest+reporter+pack_html pipeli
 ## Task 7: Celery Tasks
 
 **Files:**
-- Create: `WHartTest_Django/app_ui_automation/tasks.py`
+- Create: `SkillForge_Django/app_ui_automation/tasks.py`
 
 **Interfaces:**
 - Consumes: `AppUiScriptExecutor` from Task 6
@@ -808,14 +808,14 @@ def execute_app_ui_batch(batch_record_id, script_ids, device_id=None):
 - [ ] **Step 2: Verify import**
 
 ```bash
-cd WHartTest_Django
+cd SkillForge_Django
 python -c "from app_ui_automation.tasks import execute_app_ui_script; print('OK')"
 ```
 
 - [ ] **Step 3: Commit**
 
 ```bash
-git add WHartTest_Django/app_ui_automation/tasks.py
+git add SkillForge_Django/app_ui_automation/tasks.py
 git commit -m "feat: add Celery tasks for script and batch execution"
 ```
 
@@ -824,12 +824,12 @@ git commit -m "feat: add Celery tasks for script and batch execution"
 ## Task 8: Settings + Dependencies
 
 **Files:**
-- Modify: `WHartTest_Django/wharttest_django/settings.py`
-- Modify: `WHartTest_Django/requirements.txt`
+- Modify: `SkillForge_Django/skillforge_django/settings.py`
+- Modify: `SkillForge_Django/requirements.txt`
 
 - [ ] **Step 1: Add Airtest config to settings.py**
 
-Append to `WHartTest_Django/wharttest_django/settings.py`:
+Append to `SkillForge_Django/skillforge_django/settings.py`:
 
 ```python
 # AirtestIDE 配置（仅用于报告生成）
@@ -841,7 +841,7 @@ AIRTEST_REPORT_TEMPLATE = os.path.join(BASE_DIR, 'testcases', 'appuitest', 'log_
 
 - [ ] **Step 2: Add airtest to requirements.txt**
 
-Append to `WHartTest_Django/requirements.txt`:
+Append to `SkillForge_Django/requirements.txt`:
 ```
 airtest>=1.3.0
 ```
@@ -849,14 +849,14 @@ airtest>=1.3.0
 - [ ] **Step 3: Install**
 
 ```bash
-cd WHartTest_Django
+cd SkillForge_Django
 pip install airtest>=1.3.0
 ```
 
 - [ ] **Step 4: Commit**
 
 ```bash
-git add WHartTest_Django/wharttest_django/settings.py WHartTest_Django/requirements.txt
+git add SkillForge_Django/skillforge_django/settings.py SkillForge_Django/requirements.txt
 git commit -m "feat: add Airtest configuration and dependency"
 ```
 
@@ -865,12 +865,12 @@ git commit -m "feat: add Airtest configuration and dependency"
 ## Task 9: task_center Integration
 
 **Files:**
-- Modify: `WHartTest_Django/task_center/models.py`
-- Modify: `WHartTest_Django/task_center/tasks.py`
+- Modify: `SkillForge_Django/task_center/models.py`
+- Modify: `SkillForge_Django/task_center/tasks.py`
 
 - [ ] **Step 1: Extend ScheduledTask model**
 
-In `WHartTest_Django/task_center/models.py`:
+In `SkillForge_Django/task_center/models.py`:
 
 1. Add `APP_UI_AUTOMATION = 'app_ui_automation', _('APPUI 自动化')` to `TaskModule`
 2. Add `app_ui_scripts` M2M field and `app_ui_device` FK field to `ScheduledTask`
@@ -878,7 +878,7 @@ In `WHartTest_Django/task_center/models.py`:
 - [ ] **Step 2: Create migration**
 
 ```bash
-cd WHartTest_Django
+cd SkillForge_Django
 python manage.py makemigrations task_center
 python manage.py migrate
 ```
@@ -902,7 +902,7 @@ if task.module == ScheduledTask.TaskModule.APP_UI_AUTOMATION:
 - [ ] **Step 4: Commit**
 
 ```bash
-git add WHartTest_Django/task_center/
+git add SkillForge_Django/task_center/
 git commit -m "feat: integrate APPUI automation into task_center scheduled tasks"
 ```
 
@@ -911,10 +911,10 @@ git commit -m "feat: integrate APPUI automation into task_center scheduled tasks
 ## Task 10: Frontend - API + Types + Router
 
 **Files:**
-- Create: `WHartTest_Vue/src/features/app-ui-automation/api/index.ts`
-- Create: `WHartTest_Vue/src/features/app-ui-automation/types/index.ts`
-- Create: `WHartTest_Vue/src/features/app-ui-automation/index.ts`
-- Modify: `WHartTest_Vue/src/router/index.ts`
+- Create: `SkillForge_Vue/src/features/app-ui-automation/api/index.ts`
+- Create: `SkillForge_Vue/src/features/app-ui-automation/types/index.ts`
+- Create: `SkillForge_Vue/src/features/app-ui-automation/index.ts`
+- Modify: `SkillForge_Vue/src/router/index.ts`
 
 - [ ] **Step 1: Create types/index.ts**
 
@@ -934,7 +934,7 @@ export { default as AppUiAutomationView } from './views/AppUiAutomationView.vue'
 
 - [ ] **Step 4: Add route in router/index.ts**
 
-In `WHartTest_Vue/src/router/index.ts`:
+In `SkillForge_Vue/src/router/index.ts`:
 
 ```typescript
 import AppUiAutomationView from '@/features/app-ui-automation/views/AppUiAutomationView.vue'
@@ -950,8 +950,8 @@ import AppUiAutomationView from '@/features/app-ui-automation/views/AppUiAutomat
 - [ ] **Step 5: Commit**
 
 ```bash
-git add WHartTest_Vue/src/features/app-ui-automation/
-git add WHartTest_Vue/src/router/index.ts
+git add SkillForge_Vue/src/features/app-ui-automation/
+git add SkillForge_Vue/src/router/index.ts
 git commit -m "feat: add frontend API service, types, and router for app-ui-automation"
 ```
 
@@ -960,12 +960,12 @@ git commit -m "feat: add frontend API service, types, and router for app-ui-auto
 ## Task 11: Frontend - Views
 
 **Files:**
-- Create: `WHartTest_Vue/src/features/app-ui-automation/views/AppUiAutomationView.vue`
-- Create: `WHartTest_Vue/src/features/app-ui-automation/views/ModuleTree.vue`
-- Create: `WHartTest_Vue/src/features/app-ui-automation/views/ScriptList.vue`
-- Create: `WHartTest_Vue/src/features/app-ui-automation/views/DeviceList.vue`
-- Create: `WHartTest_Vue/src/features/app-ui-automation/views/ExecutionRecordList.vue`
-- Create: `WHartTest_Vue/src/features/app-ui-automation/views/BatchRecordList.vue`
+- Create: `SkillForge_Vue/src/features/app-ui-automation/views/AppUiAutomationView.vue`
+- Create: `SkillForge_Vue/src/features/app-ui-automation/views/ModuleTree.vue`
+- Create: `SkillForge_Vue/src/features/app-ui-automation/views/ScriptList.vue`
+- Create: `SkillForge_Vue/src/features/app-ui-automation/views/DeviceList.vue`
+- Create: `SkillForge_Vue/src/features/app-ui-automation/views/ExecutionRecordList.vue`
+- Create: `SkillForge_Vue/src/features/app-ui-automation/views/BatchRecordList.vue`
 
 - [ ] **Step 1: Create AppUiAutomationView.vue**
 
@@ -994,6 +994,6 @@ el-table with columns: name, total_scripts, passed/failed, status, trigger_type,
 - [ ] **Step 7: Commit**
 
 ```bash
-git add WHartTest_Vue/src/features/app-ui-automation/views/
+git add SkillForge_Vue/src/features/app-ui-automation/views/
 git commit -m "feat: add frontend views for app-ui-automation module"
 ```

@@ -2,7 +2,7 @@
 
 **Files:**
 
-- Modify: `WHartTest_Vue\src\services\authService.ts`（末尾追加两个函数 + 接口定义）
+- Modify: `SkillForge_Vue\src\services\authService.ts`（末尾追加两个函数 + 接口定义）
 
 **Interfaces:**
 
@@ -142,12 +142,12 @@ export const feishuLogin = async (code: string, state: string): Promise<AuthServ
 npx vue-tsc -b
 ```
 
-cwd：`WHartTest_Vue`。预期：无类型错误（exit 0）。本函数暂无调用方，type-check 通过即可。
+cwd：`SkillForge_Vue`。预期：无类型错误（exit 0）。本函数暂无调用方，type-check 通过即可。
 
 **Step 3: Commit**
 
 ```
-git add WHartTest_Vue/src/services/authService.ts
+git add SkillForge_Vue/src/services/authService.ts
 git commit -m "feat: authService 新增飞书授权地址与飞书登录接口"
 ```
 

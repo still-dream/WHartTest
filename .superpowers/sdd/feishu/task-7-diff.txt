@@ -1,11 +1,11 @@
 ﻿582cb62 feat: 新增飞书登录回调页与路由
- WHartTest_Vue/src/router/index.ts              |   8 +-
- WHartTest_Vue/src/views/FeishuCallbackView.vue | 179 +++++++++++++++++++++++++
+ SkillForge_Vue/src/router/index.ts              |   8 +-
+ SkillForge_Vue/src/views/FeishuCallbackView.vue | 179 +++++++++++++++++++++++++
  2 files changed, 186 insertions(+), 1 deletion(-)
-diff --git a/WHartTest_Vue/src/router/index.ts b/WHartTest_Vue/src/router/index.ts
+diff --git a/SkillForge_Vue/src/router/index.ts b/SkillForge_Vue/src/router/index.ts
 index 78ad48d..6f80059 100644
---- a/WHartTest_Vue/src/router/index.ts
-+++ b/WHartTest_Vue/src/router/index.ts
+--- a/SkillForge_Vue/src/router/index.ts
++++ b/SkillForge_Vue/src/router/index.ts
 @@ -1,14 +1,15 @@
  import { createRouter, createWebHistory, type RouteRecordRaw } from 'vue-router'; // 导入路由创建函数、HTML5 History 模式和路由类型定义。
  import { useAuthStore } from '../store/authStore.ts'; // 导入认证 store 获取函数，用于守卫中读取登录态。
@@ -71,11 +71,11 @@ index 78ad48d..6f80059 100644
      // 已登录但访问登录/注册页，重定向到首页
      console.log('[Router Guard] 已登录，重定向到首页'); // 输出已登录访问公开页的重定向日志。
      next({ name: 'Dashboard' }); // 直接跳到仪表盘，避免重复登录/注册操作。
-diff --git a/WHartTest_Vue/src/views/FeishuCallbackView.vue b/WHartTest_Vue/src/views/FeishuCallbackView.vue
+diff --git a/SkillForge_Vue/src/views/FeishuCallbackView.vue b/SkillForge_Vue/src/views/FeishuCallbackView.vue
 new file mode 100644
 index 0000000..20833c8
 --- /dev/null
-+++ b/WHartTest_Vue/src/views/FeishuCallbackView.vue
++++ b/SkillForge_Vue/src/views/FeishuCallbackView.vue
 @@ -0,0 +1,179 @@
 +<template>
 +  <div class="feishu-callback-page">

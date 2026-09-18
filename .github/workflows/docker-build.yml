@@ -7,9 +7,9 @@ on:
 
 env:
   REGISTRY: ghcr.io
-  IMAGE_BACKEND: ghcr.io/${{ github.repository_owner }}/wharttest-backend
-  IMAGE_FRONTEND: ghcr.io/${{ github.repository_owner }}/wharttest-frontend
-  IMAGE_MCP: ghcr.io/${{ github.repository_owner }}/wharttest-mcp
+  IMAGE_BACKEND: ghcr.io/${{ github.repository_owner }}/skillforge-backend
+  IMAGE_FRONTEND: ghcr.io/${{ github.repository_owner }}/skillforge-frontend
+  IMAGE_MCP: ghcr.io/${{ github.repository_owner }}/skillforge-mcp
 
 jobs:
   build-and-push:
@@ -75,8 +75,8 @@ jobs:
       - name: Build and push backend image
         uses: docker/build-push-action@v5
         with:
-          context: ./WHartTest_Django
-          file: ./WHartTest_Django/Dockerfile
+          context: ./SkillForge_Django
+          file: ./SkillForge_Django/Dockerfile
           push: ${{ github.event_name != 'pull_request' }}
           tags: ${{ steps.meta-backend.outputs.tags }}
           labels: ${{ steps.meta-backend.outputs.labels }}
@@ -86,8 +86,8 @@ jobs:
       - name: Build and push frontend image
         uses: docker/build-push-action@v5
         with:
-          context: ./WHartTest_Vue
-          file: ./WHartTest_Vue/Dockerfile
+          context: ./SkillForge_Vue
+          file: ./SkillForge_Vue/Dockerfile
           push: ${{ github.event_name != 'pull_request' }}
           tags: ${{ steps.meta-frontend.outputs.tags }}
           labels: ${{ steps.meta-frontend.outputs.labels }}
@@ -97,8 +97,8 @@ jobs:
       - name: Build and push MCP image
         uses: docker/build-push-action@v5
         with:
-          context: ./WHartTest_MCP
-          file: ./WHartTest_MCP/Dockerfile
+          context: ./SkillForge_MCP
+          file: ./SkillForge_MCP/Dockerfile
           push: ${{ github.event_name != 'pull_request' }}
           tags: ${{ steps.meta-mcp.outputs.tags }}
           labels: ${{ steps.meta-mcp.outputs.labels }}

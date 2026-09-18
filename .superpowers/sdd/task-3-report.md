@@ -19,7 +19,7 @@
 4. **`notifications/services.py`** — Minimal stub: `build_feishu_card()` returns a basic interactive card JSON (to be expanded in Task 4)
 
 ### Files Modified
-5. **`wharttest_django/urls.py`** — Added `path("api/notifications/", include("notifications.urls"))` after the APPUI automation route
+5. **`skillforge_django/urls.py`** — Added `path("api/notifications/", include("notifications.urls"))` after the APPUI automation route
 6. **`notifications/tests.py`** — Added `APIClient` and `status` imports; appended `WebhookAddressAPITest` (9 tests) and `MessageTemplateAPITest` (8 tests)
 
 ## TDD Evidence
@@ -41,12 +41,12 @@ Ran 27 tests in 30.888s
 All 27 tests pass (10 model + 9 WebhookAddress API + 8 MessageTemplate API).
 
 ## Files Changed
-- `WHartTest_Django/notifications/serializers.py` (new, 35 lines)
-- `WHartTest_Django/notifications/views.py` (new, 98 lines)
-- `WHartTest_Django/notifications/urls.py` (new, 8 lines)
-- `WHartTest_Django/notifications/services.py` (new, 20 lines)
-- `WHartTest_Django/notifications/tests.py` (modified, +159 lines)
-- `WHartTest_Django/wharttest_django/urls.py` (modified, +2 lines)
+- `SkillForge_Django/notifications/serializers.py` (new, 35 lines)
+- `SkillForge_Django/notifications/views.py` (new, 98 lines)
+- `SkillForge_Django/notifications/urls.py` (new, 8 lines)
+- `SkillForge_Django/notifications/services.py` (new, 20 lines)
+- `SkillForge_Django/notifications/tests.py` (modified, +159 lines)
+- `SkillForge_Django/skillforge_django/urls.py` (modified, +2 lines)
 
 Commit: `10f83a0` on branch `feat/task-push-notification`
 
@@ -56,7 +56,7 @@ Commit: `10f83a0` on branch `feat/task-push-notification`
 The task brief's test code uses `resp.data.get('results', resp.data)` which assumes `resp.data` is a dict (paginated response). This project does NOT set `DEFAULT_PAGINATION_CLASS` globally in REST_FRAMEWORK settings, so without explicitly setting `pagination_class`, list endpoints return a `ReturnList` (not a dict), causing `AttributeError: 'ReturnList' object has no attribute 'get'`. All other viewsets in this project (api_database_configs, api_testcases, etc.) explicitly set `pagination_class = StandardPagination`. I followed this established project convention.
 
 ### 2. Changed two DELETE tests from `assertEqual(204)` to `assertIn([200, 204])`
-The project uses a custom `UnifiedResponseRenderer` (`wharttest_django/renderers.py`) that converts HTTP 204 to 200 in its `render()` method (line 45-53). This means `resp.status_code` for DELETE operations is always 200, never 204. All other test files in this project use `self.assertIn(response.status_code, [status.HTTP_200_OK, status.HTTP_204_NO_CONTENT])` for DELETE tests. I followed this established project convention for `test_admin_can_delete` and `test_creator_can_delete_own`.
+The project uses a custom `UnifiedResponseRenderer` (`skillforge_django/renderers.py`) that converts HTTP 204 to 200 in its `render()` method (line 45-53). This means `resp.status_code` for DELETE operations is always 200, never 204. All other test files in this project use `self.assertIn(response.status_code, [status.HTTP_200_OK, status.HTTP_204_NO_CONTENT])` for DELETE tests. I followed this established project convention for `test_admin_can_delete` and `test_creator_can_delete_own`.
 
 ## Self-Review Findings
 

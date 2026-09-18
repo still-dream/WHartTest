@@ -76,7 +76,7 @@
 
 ## ⚖️ 开源合规更新
 
-- 新增第三方组件声明文件：`WHartTest_Django/THIRD_PARTY_NOTICES.md`。
+- 新增第三方组件声明文件：`SkillForge_Django/THIRD_PARTY_NOTICES.md`。
 - 后端 Docker 镜像构建新增许可证文件收集，产物路径为：`/app/third_party_licenses/`。
 - 明确纳入并保留以下组件的许可证/声明：Playwright、Pillow、Chromium headless shell、FFmpeg。
 - Django 依赖清单显式加入 `Pillow>=10.0.0`，避免隐式依赖带来的合规和运维风险。

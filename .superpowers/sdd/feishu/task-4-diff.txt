@@ -1,10 +1,10 @@
 ﻿58adebe feat: authService 新增飞书授权地址与飞书登录接口
- WHartTest_Vue/src/services/authService.ts | 119 ++++++++++++++++++++++++++++++
+ SkillForge_Vue/src/services/authService.ts | 119 ++++++++++++++++++++++++++++++
  1 file changed, 119 insertions(+)
-diff --git a/WHartTest_Vue/src/services/authService.ts b/WHartTest_Vue/src/services/authService.ts
+diff --git a/SkillForge_Vue/src/services/authService.ts b/SkillForge_Vue/src/services/authService.ts
 index ad5a3a7..cb0a12a 100644
---- a/WHartTest_Vue/src/services/authService.ts
-+++ b/WHartTest_Vue/src/services/authService.ts
+--- a/SkillForge_Vue/src/services/authService.ts
++++ b/SkillForge_Vue/src/services/authService.ts
 @@ -208,10 +208,129 @@ export const register = async (username: string, email: string, password: string
          errorMessage = '网络连接超时或服务器无响应。';
        }

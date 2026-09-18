@@ -2,10 +2,10 @@
 
 ## 实现内容
 
-在 `WHartTest_Django\accounts` 模块内完成飞书 OAuth 登录的视图与路由层：
+在 `SkillForge_Django\accounts` 模块内完成飞书 OAuth 登录的视图与路由层：
 
 1. **`accounts\views.py`**
-   - 导入区新增：`from django.conf import settings`、`from rest_framework_simplejwt.tokens import RefreshToken`（置于 `wharttest_django.permissions` 导入之后、`rest_framework_simplejwt.views` 导入块附近）；`.serializers` 导入块之后新增 `from .feishu import (...)` 六项（`FeishuAuthError`、`build_authorize_url`、`build_state`、`exchange_code_for_token`、`get_feishu_user`、`verify_state`）。
+   - 导入区新增：`from django.conf import settings`、`from rest_framework_simplejwt.tokens import RefreshToken`（置于 `skillforge_django.permissions` 导入之后、`rest_framework_simplejwt.views` 导入块附近）；`.serializers` 导入块之后新增 `from .feishu import (...)` 六项（`FeishuAuthError`、`build_authorize_url`、`build_state`、`exchange_code_for_token`、`get_feishu_user`、`verify_state`）。
    - 文件末尾新增：
      - `FeishuAuthorizeUrlView`（GET，AllowAny）：未配置 `FEISHU_APP_ID`/`FEISHU_APP_SECRET` → 503「飞书登录未配置，请联系管理员。」；否则返回 200 `{authorize_url, state}`。
      - `_generate_feishu_username(email)`：取邮箱前缀生成用户名，`username__iexact` 冲突时追加数字后缀（zhangsan → zhangsan1）。
@@ -23,7 +23,7 @@
 
 ### RED（先写测试）
 
-命令（cwd：`WHartTest_Django`）：
+命令（cwd：`SkillForge_Django`）：
 
 ```
 venv\Scripts\python.exe manage.py test accounts.tests.FeishuLoginViewTests accounts.tests.FeishuAuthorizeUrlViewTests -v 2
@@ -33,7 +33,7 @@ venv\Scripts\python.exe manage.py test accounts.tests.FeishuLoginViewTests accou
 
 ```
 ImportError: Failed to import test module: tests
-  File "C:\app\WHartTest\WHartTest_Django\accounts\tests.py", line 20, in <module>
+  File "C:\app\SkillForge\SkillForge_Django\accounts\tests.py", line 20, in <module>
     from accounts.views import (
 ImportError: cannot import name 'FeishuLoginView' from 'accounts.views' (...)
 FAILED (errors=1)
@@ -63,7 +63,7 @@ OK
 
 ## 全量验证
 
-命令（cwd：`WHartTest_Django`）：
+命令（cwd：`SkillForge_Django`）：
 
 ```
 venv\Scripts\python.exe manage.py test accounts -v 2
@@ -78,9 +78,9 @@ venv\Scripts\python.exe manage.py test accounts -v 2
 
 ## 文件变更
 
-- `WHartTest_Django\accounts\views.py`（+106 行：导入 +2 项与 feishu 导入块、2 个视图类、1 个用户名生成函数）
-- `WHartTest_Django\accounts\urls.py`（+2 路由、导入追加）
-- `WHartTest_Django\accounts\tests.py`（+170 行：导入区合并 + 2 个测试类 10 个测试）
+- `SkillForge_Django\accounts\views.py`（+106 行：导入 +2 项与 feishu 导入块、2 个视图类、1 个用户名生成函数）
+- `SkillForge_Django\accounts\urls.py`（+2 路由、导入追加）
+- `SkillForge_Django\accounts\tests.py`（+170 行：导入区合并 + 2 个测试类 10 个测试）
 
 Commit：`6b86779` `feat: 新增飞书登录视图与路由（邮箱匹配登录/自动建号）`（分支 `feat/feishu-login`，仅含上述 3 个文件）。
 

@@ -12,7 +12,7 @@ require_cmd() {
   fi
 }
 
-XINFERENCE_CONTAINER_NAME="${XINFERENCE_CONTAINER_NAME:-wharttest-xinference}"
+XINFERENCE_CONTAINER_NAME="${XINFERENCE_CONTAINER_NAME:-skillforge-xinference}"
 XINFERENCE_IMAGE="${XINFERENCE_IMAGE:-xprobe/xinference:latest-cpu}"
 XINFERENCE_HOST_PORT="${XINFERENCE_HOST_PORT:-8917}"
 XINFERENCE_DATA_VOLUME="${XINFERENCE_DATA_VOLUME:-xinference-data}"
@@ -50,8 +50,8 @@ container_running() {
 
 maybe_connect_network() {
   local network="$XINFERENCE_DOCKER_NETWORK"
-  if [[ -z "$network" ]] && docker inspect wharttest-backend >/dev/null 2>&1; then
-    network="$(docker inspect -f '{{range $k,$v := .NetworkSettings.Networks}}{{println $k}}{{end}}' wharttest-backend 2>/dev/null | head -n 1 || true)"
+  if [[ -z "$network" ]] && docker inspect skillforge-backend >/dev/null 2>&1; then
+    network="$(docker inspect -f '{{range $k,$v := .NetworkSettings.Networks}}{{println $k}}{{end}}' skillforge-backend 2>/dev/null | head -n 1 || true)"
   fi
 
   if [[ -z "$network" ]]; then
@@ -198,7 +198,7 @@ print("TEXT_EMBEDDING_OK", len(emb["data"][0]["embedding"]))
 
 from PIL import Image
 
-image_path = "/tmp/wharttest-qwen3vl-smoke.png"
+image_path = "/tmp/skillforge-qwen3vl-smoke.png"
 Image.new("RGB", (32, 32), (255, 0, 0)).save(image_path)
 emb_img = post_json(
     "/v1/embeddings",
@@ -417,7 +417,7 @@ print("EMBEDDING_OK", dim)
 try:
     from PIL import Image
 
-    image_path = "/tmp/wharttest-qwen3vl-smoke.png"
+    image_path = "/tmp/skillforge-qwen3vl-smoke.png"
     Image.new("RGB", (32, 32), (255, 0, 0)).save(image_path)
     emb_img = post_json(
         "/v1/embeddings",

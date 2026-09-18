@@ -362,7 +362,7 @@ curl -X POST http://localhost:8917/v1/models -d "{\"model_name\": \"bge-m3\", \"
 
 如果 WHartTest 平台部署外网访问，强烈建议修改这个默认的key！！！
 
-修改后记得修改 WHartTest_MCP 目录下的 WHartTest_tools.py 中对应的key。
+修改后记得修改 SkillForge_MCP 目录下的 SkillForge_tools.py 中对应的key。
 
 v1.4.0（包括v1.4.0）之后的版本，还需要修改对应的skills。
 
@@ -392,7 +392,7 @@ mcp概念如果不是很清楚，建议了解一下。
 
 playwright 这个文件有点大，上传会有点慢。耐心的等一会就行。
 
-1、上传WHartTest_Skills目录下的俩个zip文件即可使用。
+1、上传SkillForge_Skills目录下的俩个zip文件即可使用。
 
 
 ![alt text](image-87.png)

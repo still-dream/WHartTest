@@ -2,9 +2,9 @@
 
 **Files:**
 
-- Modify: `WHartTest_Django\accounts\views.py`（新增 import + 文件末尾追加视图）
-- Modify: `WHartTest_Django\accounts\urls.py`（`me/` 路由之后插两条）
-- Modify: `WHartTest_Django\accounts\tests.py`（末尾追加视图测试类）
+- Modify: `SkillForge_Django\accounts\views.py`（新增 import + 文件末尾追加视图）
+- Modify: `SkillForge_Django\accounts\urls.py`（`me/` 路由之后插两条）
+- Modify: `SkillForge_Django\accounts\tests.py`（末尾追加视图测试类）
 
 **Interfaces:**
 
@@ -220,7 +220,7 @@ python manage.py test accounts.tests.FeishuLoginViewTests accounts.tests.FeishuA
 
 **Step 3: 实现 views.py**
 
-在 `accounts\views.py` 导入区新增（第 12 行 `from wharttest_django.permissions import ...` 之后、现有 `rest_framework_simplejwt.views` 导入块附近）：
+在 `accounts\views.py` 导入区新增（第 12 行 `from skillforge_django.permissions import ...` 之后、现有 `rest_framework_simplejwt.views` 导入块附近）：
 
 ```python
 from django.conf import settings
@@ -361,7 +361,7 @@ python manage.py test accounts -v 2
 **Step 6: Commit**
 
 ```
-git add WHartTest_Django/accounts/views.py WHartTest_Django/accounts/urls.py WHartTest_Django/accounts/tests.py
+git add SkillForge_Django/accounts/views.py SkillForge_Django/accounts/urls.py SkillForge_Django/accounts/tests.py
 git commit -m "feat: 新增飞书登录视图与路由（邮箱匹配登录/自动建号）"
 ```
 

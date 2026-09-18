@@ -18,8 +18,8 @@
 - Push executes synchronously within the Celery task (after execution completes, before task returns)
 - Admin = `is_superuser` or `is_staff` (matches existing codebase convention)
 - Backend tests use `django.test.TestCase` and `rest_framework.test.APIClient`
-- Test command: `cd WHartTest_Django && python manage.py test <app_name> -v 2`
-- Frontend build command: `cd WHartTest_Vue && npm run build`
+- Test command: `cd SkillForge_Django && python manage.py test <app_name> -v 2`
+- Frontend build command: `cd SkillForge_Vue && npm run build`
 - Commit messages in English, format: `feat: <description>`
 - Existing migration numbering: task_center latest is `0008`, app_ui_automation latest is `0004`
 - `ScheduledTask.APP_UI_AUTOMATION` module enum and `app_ui_scripts`/`app_ui_device` fields already exist in the model; only the serializer and frontend are missing them
@@ -29,13 +29,13 @@
 ## Task 1: Create notifications app + WebhookAddress model + tests
 
 **Files:**
-- Create: `WHartTest_Django/notifications/__init__.py`
-- Create: `WHartTest_Django/notifications/apps.py`
-- Create: `WHartTest_Django/notifications/models.py`
-- Create: `WHartTest_Django/notifications/admin.py`
-- Create: `WHartTest_Django/notifications/migrations/__init__.py`
-- Create: `WHartTest_Django/notifications/tests.py`
-- Modify: `WHartTest_Django/wharttest_django/settings.py`
+- Create: `SkillForge_Django/notifications/__init__.py`
+- Create: `SkillForge_Django/notifications/apps.py`
+- Create: `SkillForge_Django/notifications/models.py`
+- Create: `SkillForge_Django/notifications/admin.py`
+- Create: `SkillForge_Django/notifications/migrations/__init__.py`
+- Create: `SkillForge_Django/notifications/tests.py`
+- Modify: `SkillForge_Django/skillforge_django/settings.py`
 
 **Interfaces:**
 - Produces: `notifications` Django app, `WebhookAddress` model
@@ -44,8 +44,8 @@
 - [ ] **Step 1: Create app directory structure**
 
 Create the following empty files:
-- `WHartTest_Django/notifications/__init__.py` (empty)
-- `WHartTest_Django/notifications/migrations/__init__.py` (empty)
+- `SkillForge_Django/notifications/__init__.py` (empty)
+- `SkillForge_Django/notifications/migrations/__init__.py` (empty)
 
 - [ ] **Step 2: Create apps.py**
 
@@ -61,7 +61,7 @@ class NotificationsConfig(AppConfig):
 
 - [ ] **Step 3: Register app in INSTALLED_APPS**
 
-In `WHartTest_Django/wharttest_django/settings.py`, add `'notifications'` after `'task_center'` (line ~136):
+In `SkillForge_Django/skillforge_django/settings.py`, add `'notifications'` after `'task_center'` (line ~136):
 
 ```python
     'task_center', # 任务中心应用
@@ -71,7 +71,7 @@ In `WHartTest_Django/wharttest_django/settings.py`, add `'notifications'` after 
 
 - [ ] **Step 4: Write the failing test**
 
-Create `WHartTest_Django/notifications/tests.py`:
+Create `SkillForge_Django/notifications/tests.py`:
 
 ```python
 from django.test import TestCase
@@ -137,14 +137,14 @@ class WebhookAddressModelTest(TestCase):
 - [ ] **Step 5: Run test to verify it fails**
 
 ```bash
-cd WHartTest_Django && python manage.py test notifications -v 2
+cd SkillForge_Django && python manage.py test notifications -v 2
 ```
 
 Expected: `ModuleNotFoundError: No module named 'notifications.models'` (or similar import error).
 
 - [ ] **Step 6: Write minimal implementation**
 
-Create `WHartTest_Django/notifications/models.py`:
+Create `SkillForge_Django/notifications/models.py`:
 
 ```python
 from django.db import models
@@ -179,7 +179,7 @@ class WebhookAddress(models.Model):
         return self.name
 ```
 
-Create `WHartTest_Django/notifications/admin.py`:
+Create `SkillForge_Django/notifications/admin.py`:
 
 ```python
 from django.contrib import admin
@@ -197,7 +197,7 @@ class WebhookAddressAdmin(admin.ModelAdmin):
 - [ ] **Step 7: Run makemigrations + migrate**
 
 ```bash
-cd WHartTest_Django && python manage.py makemigrations notifications && python manage.py migrate
+cd SkillForge_Django && python manage.py makemigrations notifications && python manage.py migrate
 ```
 
 Expected: Migration `0001_initial` created, tables applied.
@@ -205,7 +205,7 @@ Expected: Migration `0001_initial` created, tables applied.
 - [ ] **Step 8: Run test to verify it passes**
 
 ```bash
-cd WHartTest_Django && python manage.py test notifications -v 2
+cd SkillForge_Django && python manage.py test notifications -v 2
 ```
 
 Expected: All 5 tests pass.
@@ -213,7 +213,7 @@ Expected: All 5 tests pass.
 - [ ] **Step 9: Commit**
 
 ```bash
-cd WHartTest_Django && git add notifications/ wharttest_django/settings.py && git commit -m "feat: add notifications app with WebhookAddress model"
+cd SkillForge_Django && git add notifications/ skillforge_django/settings.py && git commit -m "feat: add notifications app with WebhookAddress model"
 ```
 
 ---
@@ -221,9 +221,9 @@ cd WHartTest_Django && git add notifications/ wharttest_django/settings.py && gi
 ## Task 2: MessageTemplate model + tests
 
 **Files:**
-- Modify: `WHartTest_Django/notifications/models.py`
-- Modify: `WHartTest_Django/notifications/admin.py`
-- Modify: `WHartTest_Django/notifications/tests.py`
+- Modify: `SkillForge_Django/notifications/models.py`
+- Modify: `SkillForge_Django/notifications/admin.py`
+- Modify: `SkillForge_Django/notifications/tests.py`
 
 **Interfaces:**
 - Produces: `MessageTemplate` model
@@ -231,7 +231,7 @@ cd WHartTest_Django && git add notifications/ wharttest_django/settings.py && gi
 
 - [ ] **Step 1: Write the failing test**
 
-Append to `WHartTest_Django/notifications/tests.py`:
+Append to `SkillForge_Django/notifications/tests.py`:
 
 ```python
 from .models import WebhookAddress, MessageTemplate
@@ -297,14 +297,14 @@ class MessageTemplateModelTest(TestCase):
 - [ ] **Step 2: Run test to verify it fails**
 
 ```bash
-cd WHartTest_Django && python manage.py test notifications.MessageTemplateModelTest -v 2
+cd SkillForge_Django && python manage.py test notifications.MessageTemplateModelTest -v 2
 ```
 
 Expected: `ImportError: cannot import name 'MessageTemplate'` (model not yet defined).
 
 - [ ] **Step 3: Write minimal implementation**
 
-Append to `WHartTest_Django/notifications/models.py`:
+Append to `SkillForge_Django/notifications/models.py`:
 
 ```python
 class MessageTemplate(models.Model):
@@ -337,7 +337,7 @@ class MessageTemplate(models.Model):
         return self.name
 ```
 
-Append to `WHartTest_Django/notifications/admin.py`:
+Append to `SkillForge_Django/notifications/admin.py`:
 
 ```python
 from .models import WebhookAddress, MessageTemplate
@@ -354,7 +354,7 @@ class MessageTemplateAdmin(admin.ModelAdmin):
 - [ ] **Step 4: Run makemigrations + migrate**
 
 ```bash
-cd WHartTest_Django && python manage.py makemigrations notifications && python manage.py migrate
+cd SkillForge_Django && python manage.py makemigrations notifications && python manage.py migrate
 ```
 
 Expected: Migration `0002_messagetemplate` created.
@@ -362,7 +362,7 @@ Expected: Migration `0002_messagetemplate` created.
 - [ ] **Step 5: Run test to verify it passes**
 
 ```bash
-cd WHartTest_Django && python manage.py test notifications -v 2
+cd SkillForge_Django && python manage.py test notifications -v 2
 ```
 
 Expected: All 10 tests pass (5 WebhookAddress + 5 MessageTemplate).
@@ -370,7 +370,7 @@ Expected: All 10 tests pass (5 WebhookAddress + 5 MessageTemplate).
 - [ ] **Step 6: Commit**
 
 ```bash
-cd WHartTest_Django && git add notifications/ && git commit -m "feat: add MessageTemplate model"
+cd SkillForge_Django && git add notifications/ && git commit -m "feat: add MessageTemplate model"
 ```
 
 ---
@@ -378,12 +378,12 @@ cd WHartTest_Django && git add notifications/ && git commit -m "feat: add Messag
 ## Task 3: Notifications API (serializers + views + urls + tests)
 
 **Files:**
-- Create: `WHartTest_Django/notifications/serializers.py`
-- Create: `WHartTest_Django/notifications/views.py`
-- Create: `WHartTest_Django/notifications/urls.py`
-- Create: `WHartTest_Django/notifications/services.py` (minimal stub, expanded in Task 4)
-- Modify: `WHartTest_Django/wharttest_django/urls.py`
-- Modify: `WHartTest_Django/notifications/tests.py`
+- Create: `SkillForge_Django/notifications/serializers.py`
+- Create: `SkillForge_Django/notifications/views.py`
+- Create: `SkillForge_Django/notifications/urls.py`
+- Create: `SkillForge_Django/notifications/services.py` (minimal stub, expanded in Task 4)
+- Modify: `SkillForge_Django/skillforge_django/urls.py`
+- Modify: `SkillForge_Django/notifications/tests.py`
 
 **Interfaces:**
 - Produces: `WebhookAddressSerializer`, `MessageTemplateSerializer`, `WebhookAddressViewSet`, `MessageTemplateViewSet`, API routes under `api/notifications/`
@@ -391,7 +391,7 @@ cd WHartTest_Django && git add notifications/ && git commit -m "feat: add Messag
 
 - [ ] **Step 1: Write the failing test**
 
-Append to `WHartTest_Django/notifications/tests.py`:
+Append to `SkillForge_Django/notifications/tests.py`:
 
 ```python
 from rest_framework.test import APIClient
@@ -558,14 +558,14 @@ class MessageTemplateAPITest(TestCase):
 - [ ] **Step 2: Run test to verify it fails**
 
 ```bash
-cd WHartTest_Django && python manage.py test notifications.WebhookAddressAPITest notifications.MessageTemplateAPITest -v 2
+cd SkillForge_Django && python manage.py test notifications.WebhookAddressAPITest notifications.MessageTemplateAPITest -v 2
 ```
 
 Expected: URL routing errors / 404s because `notifications.urls` does not exist.
 
 - [ ] **Step 3: Write minimal implementation**
 
-Create `WHartTest_Django/notifications/serializers.py`:
+Create `SkillForge_Django/notifications/serializers.py`:
 
 ```python
 from rest_framework import serializers
@@ -605,7 +605,7 @@ class MessageTemplateSerializer(serializers.ModelSerializer):
         read_only_fields = ['id', 'is_system', 'creator', 'created_at', 'updated_at']
 ```
 
-Create `WHartTest_Django/notifications/views.py`:
+Create `SkillForge_Django/notifications/views.py`:
 
 ```python
 import logging
@@ -705,7 +705,7 @@ class MessageTemplateViewSet(viewsets.ModelViewSet):
         instance.delete()
 ```
 
-Create `WHartTest_Django/notifications/urls.py`:
+Create `SkillForge_Django/notifications/urls.py`:
 
 ```python
 from rest_framework.routers import DefaultRouter
@@ -718,7 +718,7 @@ router.register(r'message-templates', MessageTemplateViewSet, basename='message-
 urlpatterns = router.urls
 ```
 
-Create `WHartTest_Django/notifications/services.py` (minimal stub, expanded in Task 4):
+Create `SkillForge_Django/notifications/services.py` (minimal stub, expanded in Task 4):
 
 ```python
 """推送服务模块 - Task 4 中完善"""
@@ -743,7 +743,7 @@ def build_feishu_card(rendered_content, status, report_url, task_url):
     }
 ```
 
-Register in `WHartTest_Django/wharttest_django/urls.py`. Add after the APPUI automation URL include (after line ~171):
+Register in `SkillForge_Django/skillforge_django/urls.py`. Add after the APPUI automation URL include (after line ~171):
 
 ```python
     # 挂载 APPUI 自动化路由。
@@ -755,7 +755,7 @@ Register in `WHartTest_Django/wharttest_django/urls.py`. Add after the APPUI aut
 - [ ] **Step 4: Run test to verify it passes**
 
 ```bash
-cd WHartTest_Django && python manage.py test notifications -v 2
+cd SkillForge_Django && python manage.py test notifications -v 2
 ```
 
 Expected: All tests pass (model tests + API tests).
@@ -763,7 +763,7 @@ Expected: All tests pass (model tests + API tests).
 - [ ] **Step 5: Commit**
 
 ```bash
-cd WHartTest_Django && git add notifications/ wharttest_django/urls.py && git commit -m "feat: add notifications API with serializers, views, and urls"
+cd SkillForge_Django && git add notifications/ skillforge_django/urls.py && git commit -m "feat: add notifications API with serializers, views, and urls"
 ```
 
 ---
@@ -771,9 +771,9 @@ cd WHartTest_Django && git add notifications/ wharttest_django/urls.py && git co
 ## Task 4: Variables system + push service + tests
 
 **Files:**
-- Create: `WHartTest_Django/notifications/variables.py`
-- Modify: `WHartTest_Django/notifications/services.py`
-- Modify: `WHartTest_Django/notifications/tests.py`
+- Create: `SkillForge_Django/notifications/variables.py`
+- Modify: `SkillForge_Django/notifications/services.py`
+- Modify: `SkillForge_Django/notifications/tests.py`
 
 **Interfaces:**
 - Produces: `VARIABLES` list, `build_context()`, `render_content()`, `build_feishu_card()`, `send_task_notification()`
@@ -781,7 +781,7 @@ cd WHartTest_Django && git add notifications/ wharttest_django/urls.py && git co
 
 - [ ] **Step 1: Write the failing test**
 
-Append to `WHartTest_Django/notifications/tests.py`:
+Append to `SkillForge_Django/notifications/tests.py`:
 
 ```python
 from notifications.variables import VARIABLES, build_context, render_content
@@ -1028,14 +1028,14 @@ class SendTaskNotificationTest(TestCase):
 - [ ] **Step 2: Run test to verify it fails**
 
 ```bash
-cd WHartTest_Django && python manage.py test notifications.VariablesTest notifications.FeishuCardTest notifications.SendTaskNotificationTest -v 2
+cd SkillForge_Django && python manage.py test notifications.VariablesTest notifications.FeishuCardTest notifications.SendTaskNotificationTest -v 2
 ```
 
 Expected: `ImportError: cannot import name 'VARIABLES'` (variables.py not yet created).
 
 - [ ] **Step 3: Write minimal implementation**
 
-Create `WHartTest_Django/notifications/variables.py`:
+Create `SkillForge_Django/notifications/variables.py`:
 
 ```python
 """变量注册表与上下文构建"""
@@ -1204,7 +1204,7 @@ def _fill_test_suite_context(context, task):
         context['task_url'] = f'/task-center?task={task.id}'
 ```
 
-Replace `WHartTest_Django/notifications/services.py` with the full implementation:
+Replace `SkillForge_Django/notifications/services.py` with the full implementation:
 
 ```python
 """推送服务：变量渲染 + 飞书卡片构建 + HTTP 发送"""
@@ -1294,7 +1294,7 @@ def send_task_notification(task, execution, module_result):
 - [ ] **Step 4: Run test to verify it passes**
 
 ```bash
-cd WHartTest_Django && python manage.py test notifications -v 2
+cd SkillForge_Django && python manage.py test notifications -v 2
 ```
 
 Expected: All tests pass.
@@ -1302,7 +1302,7 @@ Expected: All tests pass.
 - [ ] **Step 5: Commit**
 
 ```bash
-cd WHartTest_Django && git add notifications/ && git commit -m "feat: add variables system, feishu card builder, and push service"
+cd SkillForge_Django && git add notifications/ && git commit -m "feat: add variables system, feishu card builder, and push service"
 ```
 
 ---
@@ -1310,10 +1310,10 @@ cd WHartTest_Django && git add notifications/ && git commit -m "feat: add variab
 ## Task 5: ScheduledTask push fields + serializer extensions + tests
 
 **Files:**
-- Modify: `WHartTest_Django/task_center/models.py`
-- Modify: `WHartTest_Django/task_center/serializers.py`
-- Create: `WHartTest_Django/task_center/tests/__init__.py`
-- Create: `WHartTest_Django/task_center/tests/test_push_serializer.py`
+- Modify: `SkillForge_Django/task_center/models.py`
+- Modify: `SkillForge_Django/task_center/serializers.py`
+- Create: `SkillForge_Django/task_center/tests/__init__.py`
+- Create: `SkillForge_Django/task_center/tests/test_push_serializer.py`
 
 **Interfaces:**
 - Produces: `ScheduledTask.PushConfig` enum, `push_config`/`webhook_addresses`/`push_message_content` fields, serializer extensions
@@ -1321,9 +1321,9 @@ cd WHartTest_Django && git add notifications/ && git commit -m "feat: add variab
 
 - [ ] **Step 1: Write the failing test**
 
-Create `WHartTest_Django/task_center/tests/__init__.py` (empty file).
+Create `SkillForge_Django/task_center/tests/__init__.py` (empty file).
 
-Create `WHartTest_Django/task_center/tests/test_push_serializer.py`:
+Create `SkillForge_Django/task_center/tests/test_push_serializer.py`:
 
 ```python
 from django.test import TestCase
@@ -1426,14 +1426,14 @@ class ScheduledTaskPushSerializerTest(TestCase):
 - [ ] **Step 2: Run test to verify it fails**
 
 ```bash
-cd WHartTest_Django && python manage.py test task_center.tests.test_push_serializer -v 2
+cd SkillForge_Django && python manage.py test task_center.tests.test_push_serializer -v 2
 ```
 
 Expected: `AttributeError: 'ScheduledTask' object has no attribute 'push_config'`.
 
 - [ ] **Step 3: Write minimal implementation**
 
-**3a. Add PushConfig enum and fields to `ScheduledTask` in `WHartTest_Django/task_center/models.py`**
+**3a. Add PushConfig enum and fields to `ScheduledTask` in `SkillForge_Django/task_center/models.py`**
 
 Add the `PushConfig` enum inside the `ScheduledTask` class, after the `ExecutionTarget` class (after line ~30):
 
@@ -1464,7 +1464,7 @@ Add the push fields after the `celery_task_id` field (after line ~130, before th
     )
 ```
 
-**3b. Update `WHartTest_Django/task_center/serializers.py`**
+**3b. Update `SkillForge_Django/task_center/serializers.py`**
 
 Replace the imports and `ScheduledTaskSerializer` with the extended version:
 
@@ -1569,7 +1569,7 @@ Add the push validation rules inside the `validate` method, before `return attrs
 - [ ] **Step 4: Run makemigrations + migrate**
 
 ```bash
-cd WHartTest_Django && python manage.py makemigrations task_center && python manage.py migrate
+cd SkillForge_Django && python manage.py makemigrations task_center && python manage.py migrate
 ```
 
 Expected: Migration `0009_scheduledtask_push_config_and_more` created.
@@ -1577,7 +1577,7 @@ Expected: Migration `0009_scheduledtask_push_config_and_more` created.
 - [ ] **Step 5: Run test to verify it passes**
 
 ```bash
-cd WHartTest_Django && python manage.py test task_center.tests.test_push_serializer -v 2
+cd SkillForge_Django && python manage.py test task_center.tests.test_push_serializer -v 2
 ```
 
 Expected: All 6 tests pass.
@@ -1585,7 +1585,7 @@ Expected: All 6 tests pass.
 - [ ] **Step 6: Commit**
 
 ```bash
-cd WHartTest_Django && git add task_center/ && git commit -m "feat: add push config fields and serializer extensions to ScheduledTask"
+cd SkillForge_Django && git add task_center/ && git commit -m "feat: add push config fields and serializer extensions to ScheduledTask"
 ```
 
 ---
@@ -1593,10 +1593,10 @@ cd WHartTest_Django && git add task_center/ && git commit -m "feat: add push con
 ## Task 6: Push integration in tasks.py + system setup
 
 **Files:**
-- Modify: `WHartTest_Django/task_center/tasks.py`
-- Modify: `WHartTest_Django/accounts/serializers.py`
-- Create: `WHartTest_Django/notifications/migrations/0002_initial_system_template.py`
-- Modify: `WHartTest_Django/notifications/tests.py`
+- Modify: `SkillForge_Django/task_center/tasks.py`
+- Modify: `SkillForge_Django/accounts/serializers.py`
+- Create: `SkillForge_Django/notifications/migrations/0002_initial_system_template.py`
+- Modify: `SkillForge_Django/notifications/tests.py`
 
 **Interfaces:**
 - Produces: push integration in Celery task, system template data migration, notifications menu mapping
@@ -1604,7 +1604,7 @@ cd WHartTest_Django && git add task_center/ && git commit -m "feat: add push con
 
 - [ ] **Step 1: Write the failing test**
 
-Append to `WHartTest_Django/notifications/tests.py`:
+Append to `SkillForge_Django/notifications/tests.py`:
 
 ```python
 from types import SimpleNamespace
@@ -1645,7 +1645,7 @@ class AccountsMenuMappingTest(TestCase):
 - [ ] **Step 2: Run test to verify it fails**
 
 ```bash
-cd WHartTest_Django && python manage.py test notifications.SystemTemplateMigrationTest notifications.AccountsMenuMappingTest -v 2
+cd SkillForge_Django && python manage.py test notifications.SystemTemplateMigrationTest notifications.AccountsMenuMappingTest -v 2
 ```
 
 Expected: System template doesn't exist; menu mapping returns wrong value.
@@ -1799,7 +1799,7 @@ In `get_model_en()` model_translations:
 
 **3c. Create system template data migration**
 
-Create `WHartTest_Django/notifications/migrations/0002_initial_system_template.py`:
+Create `SkillForge_Django/notifications/migrations/0002_initial_system_template.py`:
 
 ```python
 from django.db import migrations
@@ -1867,7 +1867,7 @@ class Migration(migrations.Migration):
 - [ ] **Step 4: Run migrate and test to verify it passes**
 
 ```bash
-cd WHartTest_Django && python manage.py migrate && python manage.py test notifications.SystemTemplateMigrationTest notifications.AccountsMenuMappingTest -v 2
+cd SkillForge_Django && python manage.py migrate && python manage.py test notifications.SystemTemplateMigrationTest notifications.AccountsMenuMappingTest -v 2
 ```
 
 Expected: All 3 tests pass.
@@ -1875,7 +1875,7 @@ Expected: All 3 tests pass.
 - [ ] **Step 5: Run full notifications test suite to verify no regressions**
 
 ```bash
-cd WHartTest_Django && python manage.py test notifications -v 2
+cd SkillForge_Django && python manage.py test notifications -v 2
 ```
 
 Expected: All tests pass.
@@ -1883,7 +1883,7 @@ Expected: All tests pass.
 - [ ] **Step 6: Commit**
 
 ```bash
-cd WHartTest_Django && git add task_center/ accounts/ notifications/ && git commit -m "feat: integrate push notifications in tasks.py, add system template migration and menu mapping"
+cd SkillForge_Django && git add task_center/ accounts/ notifications/ && git commit -m "feat: integrate push notifications in tasks.py, add system template migration and menu mapping"
 ```
 
 ---
@@ -1891,8 +1891,8 @@ cd WHartTest_Django && git add task_center/ accounts/ notifications/ && git comm
 ## Task 7: Frontend notifications service + types
 
 **Files:**
-- Create: `WHartTest_Vue/src/features/notifications/types/index.ts`
-- Create: `WHartTest_Vue/src/features/notifications/services/notificationService.ts`
+- Create: `SkillForge_Vue/src/features/notifications/types/index.ts`
+- Create: `SkillForge_Vue/src/features/notifications/services/notificationService.ts`
 
 **Interfaces:**
 - Produces: TypeScript types and API service functions for notifications
@@ -1900,7 +1900,7 @@ cd WHartTest_Django && git add task_center/ accounts/ notifications/ && git comm
 
 - [ ] **Step 1: Create types**
 
-Create `WHartTest_Vue/src/features/notifications/types/index.ts`:
+Create `SkillForge_Vue/src/features/notifications/types/index.ts`:
 
 ```typescript
 // 推送平台类型
@@ -1997,7 +1997,7 @@ export const NOTIFICATION_VARIABLES: NotificationVariable[] = [
 
 - [ ] **Step 2: Create service**
 
-Create `WHartTest_Vue/src/features/notifications/services/notificationService.ts`:
+Create `SkillForge_Vue/src/features/notifications/services/notificationService.ts`:
 
 ```typescript
 import request from '@/utils/request';
@@ -2067,7 +2067,7 @@ export async function deleteMessageTemplate(id: number): Promise<void> {
 - [ ] **Step 3: Build to verify no errors**
 
 ```bash
-cd WHartTest_Vue && npm run build
+cd SkillForge_Vue && npm run build
 ```
 
 Expected: Build succeeds with no TypeScript errors.
@@ -2075,7 +2075,7 @@ Expected: Build succeeds with no TypeScript errors.
 - [ ] **Step 4: Commit**
 
 ```bash
-cd WHartTest_Vue && git add src/features/notifications/ && git commit -m "feat: add notifications service and types"
+cd SkillForge_Vue && git add src/features/notifications/ && git commit -m "feat: add notifications service and types"
 ```
 
 ---
@@ -2083,8 +2083,8 @@ cd WHartTest_Vue && git add src/features/notifications/ && git commit -m "feat: 
 ## Task 8: Frontend WebhookAddress management page
 
 **Files:**
-- Create: `WHartTest_Vue/src/features/notifications/views/WebhookAddressView.vue`
-- Create: `WHartTest_Vue/src/features/notifications/components/WebhookFormModal.vue`
+- Create: `SkillForge_Vue/src/features/notifications/views/WebhookAddressView.vue`
+- Create: `SkillForge_Vue/src/features/notifications/components/WebhookFormModal.vue`
 
 **Interfaces:**
 - Produces: WebhookAddressView page, WebhookFormModal component
@@ -2092,7 +2092,7 @@ cd WHartTest_Vue && git add src/features/notifications/ && git commit -m "feat: 
 
 - [ ] **Step 1: Create WebhookFormModal component**
 
-Create `WHartTest_Vue/src/features/notifications/components/WebhookFormModal.vue`:
+Create `SkillForge_Vue/src/features/notifications/components/WebhookFormModal.vue`:
 
 ```vue
 <template>
@@ -2205,7 +2205,7 @@ defineExpose({ open });
 
 - [ ] **Step 2: Create WebhookAddressView page**
 
-Create `WHartTest_Vue/src/features/notifications/views/WebhookAddressView.vue`:
+Create `SkillForge_Vue/src/features/notifications/views/WebhookAddressView.vue`:
 
 ```vue
 <template>
@@ -2354,7 +2354,7 @@ onMounted(() => {
 - [ ] **Step 3: Build to verify no errors**
 
 ```bash
-cd WHartTest_Vue && npm run build
+cd SkillForge_Vue && npm run build
 ```
 
 Expected: Build succeeds with no TypeScript errors.
@@ -2362,7 +2362,7 @@ Expected: Build succeeds with no TypeScript errors.
 - [ ] **Step 4: Commit**
 
 ```bash
-cd WHartTest_Vue && git add src/features/notifications/ && git commit -m "feat: add webhook address management page and form modal"
+cd SkillForge_Vue && git add src/features/notifications/ && git commit -m "feat: add webhook address management page and form modal"
 ```
 
 ---
@@ -2370,9 +2370,9 @@ cd WHartTest_Vue && git add src/features/notifications/ && git commit -m "feat: 
 ## Task 9: Frontend MessageTemplate page + VariableHintPanel
 
 **Files:**
-- Create: `WHartTest_Vue/src/features/notifications/components/VariableHintPanel.vue`
-- Create: `WHartTest_Vue/src/features/notifications/views/MessageTemplateView.vue`
-- Create: `WHartTest_Vue/src/features/notifications/components/TemplateFormModal.vue`
+- Create: `SkillForge_Vue/src/features/notifications/components/VariableHintPanel.vue`
+- Create: `SkillForge_Vue/src/features/notifications/views/MessageTemplateView.vue`
+- Create: `SkillForge_Vue/src/features/notifications/components/TemplateFormModal.vue`
 
 **Interfaces:**
 - Produces: VariableHintPanel (reusable), MessageTemplateView, TemplateFormModal
@@ -2380,7 +2380,7 @@ cd WHartTest_Vue && git add src/features/notifications/ && git commit -m "feat: 
 
 - [ ] **Step 1: Create VariableHintPanel component**
 
-Create `WHartTest_Vue/src/features/notifications/components/VariableHintPanel.vue`:
+Create `SkillForge_Vue/src/features/notifications/components/VariableHintPanel.vue`:
 
 ```vue
 <template>
@@ -2447,7 +2447,7 @@ const onVarClick = (v: NotificationVariable) => {
 
 - [ ] **Step 2: Create TemplateFormModal component**
 
-Create `WHartTest_Vue/src/features/notifications/components/TemplateFormModal.vue`:
+Create `SkillForge_Vue/src/features/notifications/components/TemplateFormModal.vue`:
 
 ```vue
 <template>
@@ -2589,7 +2589,7 @@ defineExpose({ open });
 
 - [ ] **Step 3: Create MessageTemplateView page**
 
-Create `WHartTest_Vue/src/features/notifications/views/MessageTemplateView.vue`:
+Create `SkillForge_Vue/src/features/notifications/views/MessageTemplateView.vue`:
 
 ```vue
 <template>
@@ -2732,7 +2732,7 @@ onMounted(() => {
 - [ ] **Step 4: Build to verify no errors**
 
 ```bash
-cd WHartTest_Vue && npm run build
+cd SkillForge_Vue && npm run build
 ```
 
 Expected: Build succeeds with no TypeScript errors.
@@ -2740,7 +2740,7 @@ Expected: Build succeeds with no TypeScript errors.
 - [ ] **Step 5: Commit**
 
 ```bash
-cd WHartTest_Vue && git add src/features/notifications/ && git commit -m "feat: add message template page, template form modal, and variable hint panel"
+cd SkillForge_Vue && git add src/features/notifications/ && git commit -m "feat: add message template page, template form modal, and variable hint panel"
 ```
 
 ---
@@ -2748,9 +2748,9 @@ cd WHartTest_Vue && git add src/features/notifications/ && git commit -m "feat: 
 ## Task 10: Frontend TaskFormModal modifications + router + menu
 
 **Files:**
-- Modify: `WHartTest_Vue/src/features/task-center/services/taskService.ts`
-- Modify: `WHartTest_Vue/src/features/task-center/components/TaskFormModal.vue`
-- Modify: `WHartTest_Vue/src/router/index.ts`
+- Modify: `SkillForge_Vue/src/features/task-center/services/taskService.ts`
+- Modify: `SkillForge_Vue/src/features/task-center/components/TaskFormModal.vue`
+- Modify: `SkillForge_Vue/src/router/index.ts`
 
 **Interfaces:**
 - Produces: Extended TaskFormModal with APPUI + push config, new routes
@@ -2758,7 +2758,7 @@ cd WHartTest_Vue && git add src/features/notifications/ && git commit -m "feat: 
 
 - [ ] **Step 1: Update taskService.ts types**
 
-In `WHartTest_Vue/src/features/task-center/services/taskService.ts`, update the `TaskModule` type (line 9):
+In `SkillForge_Vue/src/features/task-center/services/taskService.ts`, update the `TaskModule` type (line 9):
 
 ```typescript
 export type TaskModule = 'ui_automation' | 'test_suite' | 'app_ui_automation';
@@ -2844,7 +2844,7 @@ export interface TaskFormData {
 
 - [ ] **Step 2: Modify TaskFormModal.vue**
 
-In `WHartTest_Vue/src/features/task-center/components/TaskFormModal.vue`, make the following changes:
+In `SkillForge_Vue/src/features/task-center/components/TaskFormModal.vue`, make the following changes:
 
 **2a. Add imports** (after existing imports in the `<script setup>` section):
 
@@ -3215,7 +3215,7 @@ const onAppUiScriptsConfirmed = () => {
 
 - [ ] **Step 3: Add routes in router/index.ts**
 
-In `WHartTest_Vue/src/router/index.ts`, add imports at the top (after the TaskCenterView import):
+In `SkillForge_Vue/src/router/index.ts`, add imports at the top (after the TaskCenterView import):
 
 ```typescript
 import WebhookAddressView from '@/features/notifications/views/WebhookAddressView.vue';
@@ -3241,7 +3241,7 @@ Add routes in the children array (after the `task-center` route, before the clos
 - [ ] **Step 4: Build to verify no errors**
 
 ```bash
-cd WHartTest_Vue && npm run build
+cd SkillForge_Vue && npm run build
 ```
 
 Expected: Build succeeds with no TypeScript errors.
@@ -3249,5 +3249,5 @@ Expected: Build succeeds with no TypeScript errors.
 - [ ] **Step 5: Commit**
 
 ```bash
-cd WHartTest_Vue && git add src/features/ && git commit -m "feat: extend TaskFormModal with APPUI module and push config, add notification routes"
+cd SkillForge_Vue && git add src/features/ && git commit -m "feat: extend TaskFormModal with APPUI module and push config, add notification routes"
 ```

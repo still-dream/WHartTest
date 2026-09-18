@@ -5,22 +5,22 @@ ff7001c feat: 登录页新增飞书登录入口
 6b86779 feat: 新增飞书登录视图与路由（邮箱匹配登录/自动建号）
 fc49fb6 feat: 新增飞书 OAuth 服务层（授权地址/state 签名/令牌交换/用户信息）
 2a3dd7d feat: 新增飞书 OAuth 登录回调地址配置
- WHartTest_Django/.env.example                  |   7 +
- WHartTest_Django/accounts/feishu.py            | 125 +++++++++++
- WHartTest_Django/accounts/tests.py             | 275 ++++++++++++++++++++++++-
- WHartTest_Django/accounts/urls.py              |   5 +-
- WHartTest_Django/accounts/views.py             | 106 ++++++++++
- WHartTest_Django/wharttest_django/settings.py  |   4 +
- WHartTest_Vue/src/router/index.ts              |   8 +-
- WHartTest_Vue/src/services/authService.ts      | 119 +++++++++++
- WHartTest_Vue/src/store/authStore.ts           |  57 +++++
- WHartTest_Vue/src/views/FeishuCallbackView.vue | 179 ++++++++++++++++
- WHartTest_Vue/src/views/LoginView.vue          | 129 +++++++++---
+ SkillForge_Django/.env.example                  |   7 +
+ SkillForge_Django/accounts/feishu.py            | 125 +++++++++++
+ SkillForge_Django/accounts/tests.py             | 275 ++++++++++++++++++++++++-
+ SkillForge_Django/accounts/urls.py              |   5 +-
+ SkillForge_Django/accounts/views.py             | 106 ++++++++++
+ SkillForge_Django/skillforge_django/settings.py  |   4 +
+ SkillForge_Vue/src/router/index.ts              |   8 +-
+ SkillForge_Vue/src/services/authService.ts      | 119 +++++++++++
+ SkillForge_Vue/src/store/authStore.ts           |  57 +++++
+ SkillForge_Vue/src/views/FeishuCallbackView.vue | 179 ++++++++++++++++
+ SkillForge_Vue/src/views/LoginView.vue          | 129 +++++++++---
  11 files changed, 985 insertions(+), 29 deletions(-)
-diff --git a/WHartTest_Django/.env.example b/WHartTest_Django/.env.example
+diff --git a/SkillForge_Django/.env.example b/SkillForge_Django/.env.example
 index fb4911b..ee1a040 100644
---- a/WHartTest_Django/.env.example
-+++ b/WHartTest_Django/.env.example
+--- a/SkillForge_Django/.env.example
++++ b/SkillForge_Django/.env.example
 @@ -96,10 +96,17 @@ DOCX_EDITOR_SERVICE_KEY=
  # 外部可访问的基础 URL，用于生成通知消息中的链接（如飞书消息中的报告链接）
  # 应设置为用户可从浏览器访问的实际地址
@@ -39,11 +39,11 @@ index fb4911b..ee1a040 100644
 +# FEISHU_APP_SECRET=xxx
 +# OAuth 回调地址，必须与飞书开放平台「安全设置-重定向 URL」中登记的地址完全一致
 +FEISHU_REDIRECT_URI=http://localhost:5173/login/feishu/callback
-diff --git a/WHartTest_Django/accounts/feishu.py b/WHartTest_Django/accounts/feishu.py
+diff --git a/SkillForge_Django/accounts/feishu.py b/SkillForge_Django/accounts/feishu.py
 new file mode 100644
 index 0000000..dfbb73b
 --- /dev/null
-+++ b/WHartTest_Django/accounts/feishu.py
++++ b/SkillForge_Django/accounts/feishu.py
 @@ -0,0 +1,125 @@
 +"""飞书 OAuth 登录服务层。
 +
@@ -170,10 +170,10 @@ index 0000000..dfbb73b
 +            f"获取飞书用户信息失败：{data.get('msg') or data}", code=data.get("code")
 +        )
 +    return data.get("data") or {}
-diff --git a/WHartTest_Django/accounts/tests.py b/WHartTest_Django/accounts/tests.py
+diff --git a/SkillForge_Django/accounts/tests.py b/SkillForge_Django/accounts/tests.py
 index 0a4ddac..0ae3425 100644
---- a/WHartTest_Django/accounts/tests.py
-+++ b/WHartTest_Django/accounts/tests.py
+--- a/SkillForge_Django/accounts/tests.py
++++ b/SkillForge_Django/accounts/tests.py
 @@ -1,19 +1,33 @@
 +import time
  from unittest.mock import patch
@@ -478,10 +478,10 @@ index 0a4ddac..0ae3425 100644
 +
 +        self.assertEqual(response.status_code, 503)
 +        self.assertIn('未配置', response.data['detail'])
-diff --git a/WHartTest_Django/accounts/urls.py b/WHartTest_Django/accounts/urls.py
+diff --git a/SkillForge_Django/accounts/urls.py b/SkillForge_Django/accounts/urls.py
 index 8fdf1e7..bb62dad 100644
---- a/WHartTest_Django/accounts/urls.py
-+++ b/WHartTest_Django/accounts/urls.py
+--- a/SkillForge_Django/accounts/urls.py
++++ b/SkillForge_Django/accounts/urls.py
 @@ -1,27 +1,30 @@
  # 导入 include/path 以挂载路由器与显式端点。
  from django.urls import include, path
@@ -514,10 +514,10 @@ index 8fdf1e7..bb62dad 100644
      # 挂载操作日志路由（GET/列表、统计、清理旧日志等）。
      path('', include('accounts.operation_logs.urls')),
  ]
-diff --git a/WHartTest_Django/accounts/views.py b/WHartTest_Django/accounts/views.py
+diff --git a/SkillForge_Django/accounts/views.py b/SkillForge_Django/accounts/views.py
 index b5a5a00..9be3232 100644
---- a/WHartTest_Django/accounts/views.py
-+++ b/WHartTest_Django/accounts/views.py
+--- a/SkillForge_Django/accounts/views.py
++++ b/SkillForge_Django/accounts/views.py
 @@ -4,39 +4,49 @@ from django.shortcuts import get_object_or_404
  from django.db.utils import OperationalError
  from django.db.models import Q
@@ -527,7 +527,7 @@ index b5a5a00..9be3232 100644
  from rest_framework.permissions import AllowAny, IsAuthenticated, IsAdminUser
  from rest_framework.response import Response
  from rest_framework.views import APIView
- from wharttest_django.permissions import HasModelPermission, permission_required
+ from skillforge_django.permissions import HasModelPermission, permission_required
  
 +from django.conf import settings
 +from rest_framework_simplejwt.tokens import RefreshToken
@@ -675,10 +675,10 @@ index b5a5a00..9be3232 100644
 +            },
 +            status=status.HTTP_200_OK,
 +        )
-diff --git a/WHartTest_Django/wharttest_django/settings.py b/WHartTest_Django/wharttest_django/settings.py
+diff --git a/SkillForge_Django/skillforge_django/settings.py b/SkillForge_Django/skillforge_django/settings.py
 index b1b7fb5..7905fe6 100644
---- a/WHartTest_Django/wharttest_django/settings.py
-+++ b/WHartTest_Django/wharttest_django/settings.py
+--- a/SkillForge_Django/skillforge_django/settings.py
++++ b/SkillForge_Django/skillforge_django/settings.py
 @@ -747,10 +747,14 @@ AIRTEST_REPORT_LANG = 'zh'
  # 自定义报告模板路径
  AIRTEST_REPORT_TEMPLATE = os.path.join(
@@ -694,10 +694,10 @@ index b1b7fb5..7905fe6 100644
 +FEISHU_REDIRECT_URI = os.environ.get(
 +    'FEISHU_REDIRECT_URI', 'http://localhost:5173/login/feishu/callback'
 +)
-diff --git a/WHartTest_Vue/src/router/index.ts b/WHartTest_Vue/src/router/index.ts
+diff --git a/SkillForge_Vue/src/router/index.ts b/SkillForge_Vue/src/router/index.ts
 index 78ad48d..6f80059 100644
---- a/WHartTest_Vue/src/router/index.ts
-+++ b/WHartTest_Vue/src/router/index.ts
+--- a/SkillForge_Vue/src/router/index.ts
++++ b/SkillForge_Vue/src/router/index.ts
 @@ -1,14 +1,15 @@
  import { createRouter, createWebHistory, type RouteRecordRaw } from 'vue-router'; // 导入路由创建函数、HTML5 History 模式和路由类型定义。
  import { useAuthStore } from '../store/authStore.ts'; // 导入认证 store 获取函数，用于守卫中读取登录态。
@@ -763,10 +763,10 @@ index 78ad48d..6f80059 100644
      // 已登录但访问登录/注册页，重定向到首页
      console.log('[Router Guard] 已登录，重定向到首页'); // 输出已登录访问公开页的重定向日志。
      next({ name: 'Dashboard' }); // 直接跳到仪表盘，避免重复登录/注册操作。
-diff --git a/WHartTest_Vue/src/services/authService.ts b/WHartTest_Vue/src/services/authService.ts
+diff --git a/SkillForge_Vue/src/services/authService.ts b/SkillForge_Vue/src/services/authService.ts
 index ad5a3a7..cb0a12a 100644
---- a/WHartTest_Vue/src/services/authService.ts
-+++ b/WHartTest_Vue/src/services/authService.ts
+--- a/SkillForge_Vue/src/services/authService.ts
++++ b/SkillForge_Vue/src/services/authService.ts
 @@ -208,10 +208,129 @@ export const register = async (username: string, email: string, password: string
          errorMessage = '网络连接超时或服务器无响应。';
        }
@@ -897,10 +897,10 @@ index ad5a3a7..cb0a12a 100644
 +    return { success: false, error: errorMessage, statusCode };
 +  }
 +};
-diff --git a/WHartTest_Vue/src/store/authStore.ts b/WHartTest_Vue/src/store/authStore.ts
+diff --git a/SkillForge_Vue/src/store/authStore.ts b/SkillForge_Vue/src/store/authStore.ts
 index 630e159..b537bf3 100644
---- a/WHartTest_Vue/src/store/authStore.ts
-+++ b/WHartTest_Vue/src/store/authStore.ts
+--- a/SkillForge_Vue/src/store/authStore.ts
++++ b/SkillForge_Vue/src/store/authStore.ts
 @@ -1,14 +1,15 @@
  import { defineStore } from 'pinia';
  import {
@@ -994,11 +994,11 @@ index 630e159..b537bf3 100644
        // 清理 localStorage
        localStorage.removeItem('auth-isAuthenticated');
        localStorage.removeItem('auth-user');
-diff --git a/WHartTest_Vue/src/views/FeishuCallbackView.vue b/WHartTest_Vue/src/views/FeishuCallbackView.vue
+diff --git a/SkillForge_Vue/src/views/FeishuCallbackView.vue b/SkillForge_Vue/src/views/FeishuCallbackView.vue
 new file mode 100644
 index 0000000..20833c8
 --- /dev/null
-+++ b/WHartTest_Vue/src/views/FeishuCallbackView.vue
++++ b/SkillForge_Vue/src/views/FeishuCallbackView.vue
 @@ -0,0 +1,179 @@
 +<template>
 +  <div class="feishu-callback-page">
@@ -1179,10 +1179,10 @@ index 0000000..20833c8
 +  to { opacity: 1; transform: translateY(0); }
 +}
 +</style>
-diff --git a/WHartTest_Vue/src/views/LoginView.vue b/WHartTest_Vue/src/views/LoginView.vue
+diff --git a/SkillForge_Vue/src/views/LoginView.vue b/SkillForge_Vue/src/views/LoginView.vue
 index 4ee8195..2f137e4 100644
---- a/WHartTest_Vue/src/views/LoginView.vue
-+++ b/WHartTest_Vue/src/views/LoginView.vue
+--- a/SkillForge_Vue/src/views/LoginView.vue
++++ b/SkillForge_Vue/src/views/LoginView.vue
 @@ -5,45 +5,70 @@
      <div class="content-layer">
        <div class="brand-area">

@@ -4,9 +4,9 @@
 
 ## Files
 
-- Modify: `WHartTest_Django\wharttest_django\settings.py`（752-756 行现有 FEISHU 区块）
-- Modify: `WHartTest_Django\.env.example`（文件末尾，Qdrant 区块之后）
-- Modify: `WHartTest_Django\.env`（若存在；本地运行配置，不在 git 内）
+- Modify: `SkillForge_Django\skillforge_django\settings.py`（752-756 行现有 FEISHU 区块）
+- Modify: `SkillForge_Django\.env.example`（文件末尾，Qdrant 区块之后）
+- Modify: `SkillForge_Django\.env`（若存在；本地运行配置，不在 git 内）
 
 ## Step 1: 修改 settings.py
 
@@ -39,7 +39,7 @@ FEISHU_REDIRECT_URI=http://localhost:5173/login/feishu/callback
 
 ## Step 4: 验证配置生效
 
-运行（cwd：`WHartTest_Django`）：
+运行（cwd：`SkillForge_Django`）：
 
 ```
 python manage.py shell -c "from django.conf import settings; print(settings.FEISHU_REDIRECT_URI)"
@@ -50,7 +50,7 @@ python manage.py shell -c "from django.conf import settings; print(settings.FEIS
 ## Step 5: Commit
 
 ```
-git add WHartTest_Django/wharttest_django/settings.py WHartTest_Django/.env.example
+git add SkillForge_Django/skillforge_django/settings.py SkillForge_Django/.env.example
 git commit -m "feat: 新增飞书 OAuth 登录回调地址配置"
 ```
 
@@ -60,5 +60,5 @@ git commit -m "feat: 新增飞书 OAuth 登录回调地址配置"
 
 - commit 格式沿用仓库惯例：`feat: 中文描述`
 - 代码注释一律中文
-- 工作目录：`c:\app\WHartTest`（仓库根）；后端目录：`c:\app\WHartTest\WHartTest_Django`
+- 工作目录：`c:\app\SkillForge`（仓库根）；后端目录：`c:\app\SkillForge\SkillForge_Django`
 - 当前分支：`feat/feishu-login`（已创建，直接在此分支提交）

@@ -2,8 +2,8 @@
 
 **Files:**
 
-- Create: `WHartTest_Vue\src\views\FeishuCallbackView.vue`
-- Modify: `WHartTest_Vue\src\router\index.ts`（import + 路由定义 + publicRoutes）
+- Create: `SkillForge_Vue\src\views\FeishuCallbackView.vue`
+- Modify: `SkillForge_Vue\src\router\index.ts`（import + 路由定义 + publicRoutes）
 
 **Interfaces:**
 
@@ -229,7 +229,7 @@ npx vue-tsc -b
 **Step 4: Commit**
 
 ```
-git add WHartTest_Vue/src/views/FeishuCallbackView.vue WHartTest_Vue/src/router/index.ts
+git add SkillForge_Vue/src/views/FeishuCallbackView.vue SkillForge_Vue/src/router/index.ts
 git commit -m "feat: 新增飞书登录回调页与路由"
 ```
 

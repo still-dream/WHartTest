@@ -37,9 +37,9 @@ OK
 All 43 tests pass (27 pre-existing from Tasks 1-3 + 16 new from Task 4).
 
 ## Files changed
-- **Created**: `WHartTest_Django/notifications/variables.py` (164 lines)
-- **Modified**: `WHartTest_Django/notifications/services.py` (82 lines, replaced stub)
-- **Modified**: `WHartTest_Django/notifications/tests.py` (+239 lines appended)
+- **Created**: `SkillForge_Django/notifications/variables.py` (164 lines)
+- **Modified**: `SkillForge_Django/notifications/services.py` (82 lines, replaced stub)
+- **Modified**: `SkillForge_Django/notifications/tests.py` (+239 lines appended)
 
 ## Commit
 - SHA: `edbe9c1`

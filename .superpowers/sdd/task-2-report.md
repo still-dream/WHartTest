@@ -19,7 +19,7 @@ Meta: `ordering = ['-is_system', '-created_at']` (system templates first, then n
 ## TDD Evidence
 
 ### RED (test written first, verified failing)
-Command: `python manage.py test notifications -v 2` (run from `WHartTest_Django` with venv python)
+Command: `python manage.py test notifications -v 2` (run from `SkillForge_Django` with venv python)
 
 Result — `ImportError` at `notifications/tests.py` line 3 (`from .models import WebhookAddress, MessageTemplate`):
 ```
@@ -55,10 +55,10 @@ Migration applied cleanly during test DB setup: `Applying notifications.0002_mes
 `makemigrations notifications` produced `notifications/migrations/0002_messagetemplate.py` (CreateModel, depends on `0001_initial` + `AUTH_USER_MODEL` swappable dependency, `on_delete=CASCADE` confirmed).
 
 ## Files changed
-- `WHartTest_Django/notifications/models.py` — appended `MessageTemplate` model
-- `WHartTest_Django/notifications/admin.py` — updated import; appended `MessageTemplateAdmin` (list_display, list_filter, search_fields, readonly_fields)
-- `WHartTest_Django/notifications/tests.py` — updated import; appended `MessageTemplateModelTest` (5 tests)
-- `WHartTest_Django/notifications/migrations/0002_messagetemplate.py` — new migration (generated)
+- `SkillForge_Django/notifications/models.py` — appended `MessageTemplate` model
+- `SkillForge_Django/notifications/admin.py` — updated import; appended `MessageTemplateAdmin` (list_display, list_filter, search_fields, readonly_fields)
+- `SkillForge_Django/notifications/tests.py` — updated import; appended `MessageTemplateModelTest` (5 tests)
+- `SkillForge_Django/notifications/migrations/0002_messagetemplate.py` — new migration (generated)
 
 ## Commit
 - `783c2a0` — `feat: add MessageTemplate model` (4 files changed, 132 insertions, 2 deletions)

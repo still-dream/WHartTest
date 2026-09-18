@@ -1,10 +1,10 @@
 ﻿ff7001c feat: 登录页新增飞书登录入口
- WHartTest_Vue/src/views/LoginView.vue | 129 +++++++++++++++++++++++++++-------
+ SkillForge_Vue/src/views/LoginView.vue | 129 +++++++++++++++++++++++++++-------
  1 file changed, 104 insertions(+), 25 deletions(-)
-diff --git a/WHartTest_Vue/src/views/LoginView.vue b/WHartTest_Vue/src/views/LoginView.vue
+diff --git a/SkillForge_Vue/src/views/LoginView.vue b/SkillForge_Vue/src/views/LoginView.vue
 index 4ee8195..2f137e4 100644
---- a/WHartTest_Vue/src/views/LoginView.vue
-+++ b/WHartTest_Vue/src/views/LoginView.vue
+--- a/SkillForge_Vue/src/views/LoginView.vue
++++ b/SkillForge_Vue/src/views/LoginView.vue
 @@ -5,45 +5,70 @@
      <div class="content-layer">
        <div class="brand-area">

@@ -1,12 +1,12 @@
 ## Task 3: Notifications API (serializers + views + urls + tests)
 
 **Files:**
-- Create: `WHartTest_Django/notifications/serializers.py`
-- Create: `WHartTest_Django/notifications/views.py`
-- Create: `WHartTest_Django/notifications/urls.py`
-- Create: `WHartTest_Django/notifications/services.py` (minimal stub, expanded in Task 4)
-- Modify: `WHartTest_Django/wharttest_django/urls.py`
-- Modify: `WHartTest_Django/notifications/tests.py`
+- Create: `SkillForge_Django/notifications/serializers.py`
+- Create: `SkillForge_Django/notifications/views.py`
+- Create: `SkillForge_Django/notifications/urls.py`
+- Create: `SkillForge_Django/notifications/services.py` (minimal stub, expanded in Task 4)
+- Modify: `SkillForge_Django/skillforge_django/urls.py`
+- Modify: `SkillForge_Django/notifications/tests.py`
 
 **Interfaces:**
 - Produces: `WebhookAddressSerializer`, `MessageTemplateSerializer`, `WebhookAddressViewSet`, `MessageTemplateViewSet`, API routes under `api/notifications/`
@@ -14,7 +14,7 @@
 
 - [ ] **Step 1: Write the failing test**
 
-Append to `WHartTest_Django/notifications/tests.py`:
+Append to `SkillForge_Django/notifications/tests.py`:
 
 ```python
 from rest_framework.test import APIClient
@@ -181,14 +181,14 @@ class MessageTemplateAPITest(TestCase):
 - [ ] **Step 2: Run test to verify it fails**
 
 ```bash
-cd WHartTest_Django && python manage.py test notifications -v 2
+cd SkillForge_Django && python manage.py test notifications -v 2
 ```
 
 Expected: URL routing errors / 404s because `notifications.urls` does not exist.
 
 - [ ] **Step 3: Write minimal implementation**
 
-Create `WHartTest_Django/notifications/serializers.py`:
+Create `SkillForge_Django/notifications/serializers.py`:
 
 ```python
 from rest_framework import serializers
@@ -228,7 +228,7 @@ class MessageTemplateSerializer(serializers.ModelSerializer):
         read_only_fields = ['id', 'is_system', 'creator', 'created_at', 'updated_at']
 ```
 
-Create `WHartTest_Django/notifications/views.py`:
+Create `SkillForge_Django/notifications/views.py`:
 
 ```python
 import logging
@@ -328,7 +328,7 @@ class MessageTemplateViewSet(viewsets.ModelViewSet):
         instance.delete()
 ```
 
-Create `WHartTest_Django/notifications/urls.py`:
+Create `SkillForge_Django/notifications/urls.py`:
 
 ```python
 from rest_framework.routers import DefaultRouter
@@ -341,7 +341,7 @@ router.register(r'message-templates', MessageTemplateViewSet, basename='message-
 urlpatterns = router.urls
 ```
 
-Create `WHartTest_Django/notifications/services.py` (minimal stub, expanded in Task 4):
+Create `SkillForge_Django/notifications/services.py` (minimal stub, expanded in Task 4):
 
 ```python
 """推送服务模块 - Task 4 中完善"""
@@ -366,7 +366,7 @@ def build_feishu_card(rendered_content, status, report_url, task_url):
     }
 ```
 
-Register in `WHartTest_Django/wharttest_django/urls.py`. Add after the APPUI automation URL include (after line ~171):
+Register in `SkillForge_Django/skillforge_django/urls.py`. Add after the APPUI automation URL include (after line ~171):
 
 ```python
     # 挂载 APPUI 自动化路由。
@@ -378,7 +378,7 @@ Register in `WHartTest_Django/wharttest_django/urls.py`. Add after the APPUI aut
 - [ ] **Step 4: Run test to verify it passes**
 
 ```bash
-cd WHartTest_Django && python manage.py test notifications -v 2
+cd SkillForge_Django && python manage.py test notifications -v 2
 ```
 
 Expected: All tests pass (model tests + API tests).
@@ -386,5 +386,5 @@ Expected: All tests pass (model tests + API tests).
 - [ ] **Step 5: Commit**
 
 ```bash
-cd WHartTest_Django && git add notifications/ wharttest_django/urls.py && git commit -m "feat: add notifications API with serializers, views, and urls"
+cd SkillForge_Django && git add notifications/ skillforge_django/urls.py && git commit -m "feat: add notifications API with serializers, views, and urls"
 ```

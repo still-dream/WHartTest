@@ -2,7 +2,7 @@
 
 ## 实现内容
 
-按简报逐字转写，修改 `WHartTest_Vue\src\store\authStore.ts`：
+按简报逐字转写，修改 `SkillForge_Vue\src\store\authStore.ts`：
 
 1. **导入区**（第 2-8 行）：authService 导入块按既有 alias 模式追加 `feishuLogin as feishuLoginService`（位于 `register as registerService` 之后、`type AuthServiceLoginResponse` 之前）。
 2. **新增 action** `async loginWithFeishu(code: string, state: string): Promise<boolean>`：位于 `login(...)` 之后、`logout()` 之前，与简报 Step 2 代码逐字一致。逻辑：
@@ -12,7 +12,7 @@
 
 ## 验证
 
-命令：`npx vue-tsc -b`（cwd：`c:\app\WHartTest\WHartTest_Vue`）
+命令：`npx vue-tsc -b`（cwd：`c:\app\SkillForge\SkillForge_Vue`）
 
 结果：退出码 1，错误恰好 4 条，均为任务说明中预告的历史遗留错误，全部位于与本次改动无关的 .vue 文件：
 
@@ -27,7 +27,7 @@
 
 ## 变更文件
 
-- `WHartTest_Vue\src\store\authStore.ts`（+57 行，无删改既有代码）
+- `SkillForge_Vue\src\store\authStore.ts`（+57 行，无删改既有代码）
 
 ## Commit
 

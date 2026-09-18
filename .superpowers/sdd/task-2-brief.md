@@ -1,9 +1,9 @@
 ## Task 2: MessageTemplate model + tests
 
 **Files:**
-- Modify: `WHartTest_Django/notifications/models.py`
-- Modify: `WHartTest_Django/notifications/admin.py`
-- Modify: `WHartTest_Django/notifications/tests.py`
+- Modify: `SkillForge_Django/notifications/models.py`
+- Modify: `SkillForge_Django/notifications/admin.py`
+- Modify: `SkillForge_Django/notifications/tests.py`
 
 **Interfaces:**
 - Produces: `MessageTemplate` model
@@ -11,7 +11,7 @@
 
 - [ ] **Step 1: Write the failing test**
 
-Append to `WHartTest_Django/notifications/tests.py`:
+Append to `SkillForge_Django/notifications/tests.py`:
 
 ```python
 from .models import WebhookAddress, MessageTemplate
@@ -77,14 +77,14 @@ class MessageTemplateModelTest(TestCase):
 - [ ] **Step 2: Run test to verify it fails**
 
 ```bash
-cd WHartTest_Django && python manage.py test notifications.MessageTemplateModelTest -v 2
+cd SkillForge_Django && python manage.py test notifications.MessageTemplateModelTest -v 2
 ```
 
 Expected: `ImportError: cannot import name 'MessageTemplate'` (model not yet defined).
 
 - [ ] **Step 3: Write minimal implementation**
 
-Append to `WHartTest_Django/notifications/models.py`:
+Append to `SkillForge_Django/notifications/models.py`:
 
 ```python
 class MessageTemplate(models.Model):
@@ -117,7 +117,7 @@ class MessageTemplate(models.Model):
         return self.name
 ```
 
-Append to `WHartTest_Django/notifications/admin.py`:
+Append to `SkillForge_Django/notifications/admin.py`:
 
 ```python
 from .models import WebhookAddress, MessageTemplate
@@ -134,7 +134,7 @@ class MessageTemplateAdmin(admin.ModelAdmin):
 - [ ] **Step 4: Run makemigrations + migrate**
 
 ```bash
-cd WHartTest_Django && python manage.py makemigrations notifications && python manage.py migrate
+cd SkillForge_Django && python manage.py makemigrations notifications && python manage.py migrate
 ```
 
 Expected: Migration `0002_messagetemplate` created.
@@ -142,7 +142,7 @@ Expected: Migration `0002_messagetemplate` created.
 - [ ] **Step 5: Run test to verify it passes**
 
 ```bash
-cd WHartTest_Django && python manage.py test notifications -v 2
+cd SkillForge_Django && python manage.py test notifications -v 2
 ```
 
 Expected: All 10 tests pass (5 WebhookAddress + 5 MessageTemplate).
@@ -150,5 +150,5 @@ Expected: All 10 tests pass (5 WebhookAddress + 5 MessageTemplate).
 - [ ] **Step 6: Commit**
 
 ```bash
-cd WHartTest_Django && git add notifications/ && git commit -m "feat: add MessageTemplate model"
+cd SkillForge_Django && git add notifications/ && git commit -m "feat: add MessageTemplate model"
 ```

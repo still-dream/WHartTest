@@ -10,7 +10,7 @@ Created the `notifications` Django app scaffold and the `WebhookAddress` model f
 4. **`notifications/admin.py`**: `WebhookAddressAdmin` with list_display, list_filter, search_fields, readonly_fields.
 5. **`notifications/tests.py`**: 5 test cases (create, str, defaults, ordering, creator SET_NULL on delete).
 6. **`notifications/migrations/0001_initial.py`**: Auto-generated migration for WebhookAddress model.
-7. **`wharttest_django/settings.py`**: Added `'notifications'` after `'task_center'` in INSTALLED_APPS.
+7. **`skillforge_django/settings.py`**: Added `'notifications'` after `'task_center'` in INSTALLED_APPS.
 
 ## What I Tested and Test Results
 
@@ -25,12 +25,12 @@ All 5 tests pass:
 
 ### RED (test fails before implementation)
 
-Command: `cd WHartTest_Django && venv\Scripts\python.exe manage.py test notifications -v 2`
+Command: `cd SkillForge_Django && venv\Scripts\python.exe manage.py test notifications -v 2`
 
 ```
 ImportError: Failed to import test module: notifications.tests
 Traceback (most recent call last):
-  File "C:\app\WHartTest\WHartTest_Django\notifications\tests.py", line 3, in <module>
+  File "C:\app\SkillForge\SkillForge_Django\notifications\tests.py", line 3, in <module>
     from .models import WebhookAddress
 ModuleNotFoundError: No module named 'notifications.models'
 
@@ -40,7 +40,7 @@ FAILED (errors=1)
 
 ### GREEN (test passes after implementation)
 
-Command: `cd WHartTest_Django && venv\Scripts\python.exe manage.py test notifications -v 2`
+Command: `cd SkillForge_Django && venv\Scripts\python.exe manage.py test notifications -v 2`
 
 ```
 Creating test database for alias 'default' ('test_wharttest_dev')...
@@ -63,14 +63,14 @@ Destroying test database for alias 'default' ('test_wharttest_dev')...
 
 ## Files Changed
 
-- `WHartTest_Django/notifications/__init__.py` (new, empty)
-- `WHartTest_Django/notifications/apps.py` (new)
-- `WHartTest_Django/notifications/models.py` (new)
-- `WHartTest_Django/notifications/admin.py` (new)
-- `WHartTest_Django/notifications/tests.py` (new)
-- `WHartTest_Django/notifications/migrations/__init__.py` (new, empty)
-- `WHartTest_Django/notifications/migrations/0001_initial.py` (new, auto-generated)
-- `WHartTest_Django/wharttest_django/settings.py` (modified, +1 line)
+- `SkillForge_Django/notifications/__init__.py` (new, empty)
+- `SkillForge_Django/notifications/apps.py` (new)
+- `SkillForge_Django/notifications/models.py` (new)
+- `SkillForge_Django/notifications/admin.py` (new)
+- `SkillForge_Django/notifications/tests.py` (new)
+- `SkillForge_Django/notifications/migrations/__init__.py` (new, empty)
+- `SkillForge_Django/notifications/migrations/0001_initial.py` (new, auto-generated)
+- `SkillForge_Django/skillforge_django/settings.py` (modified, +1 line)
 
 Commit: `dde559d` - "feat: add notifications app with WebhookAddress model" (8 files, 142 insertions)
 
@@ -84,6 +84,6 @@ Commit: `dde559d` - "feat: add notifications app with WebhookAddress model" (8 f
 
 ## Concerns
 
-1. **Environment: missing venv packages (pre-existing)**. The venv at `WHartTest_Django/venv/` was missing `django-celery-beat` and `pymysql` (both listed in `requirements.txt`). I installed them to make the test runner work. Installing `django-celery-beat==2.8.1` downgraded Django from 6.0.4 to 5.2 (which matches `requirements.txt`'s `Django==5.2` — the venv had an incorrect Django 6.0.4). This is a pre-existing environment inconsistency, not caused by this task.
+1. **Environment: missing venv packages (pre-existing)**. The venv at `SkillForge_Django/venv/` was missing `django-celery-beat` and `pymysql` (both listed in `requirements.txt`). I installed them to make the test runner work. Installing `django-celery-beat==2.8.1` downgraded Django from 6.0.4 to 5.2 (which matches `requirements.txt`'s `Django==5.2` — the venv had an incorrect Django 6.0.4). This is a pre-existing environment inconsistency, not caused by this task.
 
 2. **Dev database unavailable (pre-existing)**. The `migrate` command fails because the PostgreSQL database `wharttest_dev` does not exist at `127.0.0.1:8919`. This does not affect tests — the Django test runner creates and destroys its own `test_wharttest_dev` database successfully.

@@ -2,7 +2,7 @@
 
 **Files:**
 
-- Modify: `WHartTest_Vue\src\store\authStore.ts`（导入区 + actions 内追加）
+- Modify: `SkillForge_Vue\src\store\authStore.ts`（导入区 + actions 内追加）
 
 **Interfaces:**
 
@@ -97,7 +97,7 @@ npx vue-tsc -b
 **Step 4: Commit**
 
 ```
-git add WHartTest_Vue/src/store/authStore.ts
+git add SkillForge_Vue/src/store/authStore.ts
 git commit -m "feat: authStore 新增飞书登录 action"
 ```
 

@@ -6,14 +6,14 @@ DONE_WITH_CONCERNS (build has pre-existing errors unrelated to this task; new fi
 ## What I Implemented
 Created two files for the notifications feature module, with code matching the task brief exactly:
 
-1. `WHartTest_Vue/src/features/notifications/types/index.ts` — TypeScript types and constants:
+1. `SkillForge_Vue/src/features/notifications/types/index.ts` — TypeScript types and constants:
    - `PlatformType` ('feishu') and `PushConfig` union types
    - `WebhookAddress`, `WebhookAddressLimited`, `WebhookAddressFormData` interfaces
    - `MessageTemplate`, `MessageTemplateFormData` interfaces
    - `NotificationVariable` interface and `PaginatedResponse<T>` generic
    - `NOTIFICATION_VARIABLES` constant array (16 template variables)
 
-2. `WHartTest_Vue/src/features/notifications/services/notificationService.ts` — API service functions:
+2. `SkillForge_Vue/src/features/notifications/services/notificationService.ts` — API service functions:
    - Webhook address CRUD: `getWebhookAddresses`, `createWebhookAddress`, `updateWebhookAddress`, `deleteWebhookAddress`, `testWebhookAddress`
    - Message template CRUD: `getMessageTemplates`, `createMessageTemplate`, `updateMessageTemplate`, `deleteMessageTemplate`
    - Uses default import of axios instance from `@/utils/request`, with `BASE_URL = '/notifications'`
@@ -29,8 +29,8 @@ Created two files for the notifications feature module, with code matching the t
 None of these errors reference the new `notifications/` files. The new files compile cleanly with no TypeScript errors.
 
 ## Files Changed
-- Created: `WHartTest_Vue/src/features/notifications/types/index.ts`
-- Created: `WHartTest_Vue/src/features/notifications/services/notificationService.ts`
+- Created: `SkillForge_Vue/src/features/notifications/types/index.ts`
+- Created: `SkillForge_Vue/src/features/notifications/services/notificationService.ts`
 
 ## Commits
 - `038939a` — feat: add notifications service and types (2 files, +152 lines)

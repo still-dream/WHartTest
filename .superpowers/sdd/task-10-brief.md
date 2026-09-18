@@ -1,9 +1,9 @@
 ## Task 10: Frontend TaskFormModal modifications + router + menu
 
 **Files:**
-- Modify: `WHartTest_Vue/src/features/task-center/services/taskService.ts`
-- Modify: `WHartTest_Vue/src/features/task-center/components/TaskFormModal.vue`
-- Modify: `WHartTest_Vue/src/router/index.ts`
+- Modify: `SkillForge_Vue/src/features/task-center/services/taskService.ts`
+- Modify: `SkillForge_Vue/src/features/task-center/components/TaskFormModal.vue`
+- Modify: `SkillForge_Vue/src/router/index.ts`
 
 **Interfaces:**
 - Produces: Extended TaskFormModal with APPUI + push config, new routes
@@ -11,7 +11,7 @@
 
 - [ ] **Step 1: Update taskService.ts types**
 
-In `WHartTest_Vue/src/features/task-center/services/taskService.ts`, update the `TaskModule` type (line 9):
+In `SkillForge_Vue/src/features/task-center/services/taskService.ts`, update the `TaskModule` type (line 9):
 
 ```typescript
 export type TaskModule = 'ui_automation' | 'test_suite' | 'app_ui_automation';
@@ -97,7 +97,7 @@ export interface TaskFormData {
 
 - [ ] **Step 2: Modify TaskFormModal.vue**
 
-In `WHartTest_Vue/src/features/task-center/components/TaskFormModal.vue`, make the following changes:
+In `SkillForge_Vue/src/features/task-center/components/TaskFormModal.vue`, make the following changes:
 
 **2a. Add imports** (after existing imports in the `<script setup>` section):
 
@@ -468,7 +468,7 @@ const onAppUiScriptsConfirmed = () => {
 
 - [ ] **Step 3: Add routes in router/index.ts**
 
-In `WHartTest_Vue/src/router/index.ts`, add imports at the top (after the TaskCenterView import):
+In `SkillForge_Vue/src/router/index.ts`, add imports at the top (after the TaskCenterView import):
 
 ```typescript
 import WebhookAddressView from '@/features/notifications/views/WebhookAddressView.vue';
@@ -494,7 +494,7 @@ Add routes in the children array (after the `task-center` route, before the clos
 - [ ] **Step 4: Build to verify no errors**
 
 ```bash
-cd WHartTest_Vue && npm run build
+cd SkillForge_Vue && npm run build
 ```
 
 Expected: Build succeeds with no TypeScript errors.
@@ -502,5 +502,5 @@ Expected: Build succeeds with no TypeScript errors.
 - [ ] **Step 5: Commit**
 
 ```bash
-cd WHartTest_Vue && git add src/features/ && git commit -m "feat: extend TaskFormModal with APPUI module and push config, add notification routes"
+cd SkillForge_Vue && git add src/features/ && git commit -m "feat: extend TaskFormModal with APPUI module and push config, add notification routes"
 ```

@@ -22,7 +22,7 @@ pip install uv
 #### 2. 克隆项目
 ```bash
 git clone https://github.com/MGdaasLab/WHartTest.git
-cd WHartTest_Django
+cd SkillForge_Django
 ```
 
 #### 3. 创建并激活虚拟环境
@@ -61,12 +61,12 @@ uv run python manage.py init_admin
 #### 7.. 启动服务
 ```bash
 # 开发环境启动
-uv run uvicorn wharttest_django.asgi:application --reload --host 127.0.0.1 --port 8000
+uv run uvicorn skillforge_django.asgi:application --reload --host 127.0.0.1 --port 8000
 ```
 
 #### 8.Celery Beat 服务
 开启两个终端分别运行下面的命令
 ```bash
-uv run celery -A wharttest_django worker --loglevel=info -Q celery,task_center
-uv run celery -A wharttest_django beat --loglevel=info
+uv run celery -A skillforge_django worker --loglevel=info -Q celery,task_center
+uv run celery -A skillforge_django beat --loglevel=info
 ```

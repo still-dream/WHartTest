@@ -1,10 +1,10 @@
 ## Task 6: Push integration in tasks.py + system setup
 
 **Files:**
-- Modify: `WHartTest_Django/task_center/tasks.py`
-- Modify: `WHartTest_Django/accounts/serializers.py`
-- Create: `WHartTest_Django/notifications/migrations/0003_initial_system_template.py`
-- Modify: `WHartTest_Django/notifications/tests.py`
+- Modify: `SkillForge_Django/task_center/tasks.py`
+- Modify: `SkillForge_Django/accounts/serializers.py`
+- Create: `SkillForge_Django/notifications/migrations/0003_initial_system_template.py`
+- Modify: `SkillForge_Django/notifications/tests.py`
 
 **Interfaces:**
 - Produces: push integration in Celery task, system template data migration, notifications menu mapping
@@ -14,7 +14,7 @@
 
 - [ ] **Step 1: Write the failing test**
 
-Append to `WHartTest_Django/notifications/tests.py`:
+Append to `SkillForge_Django/notifications/tests.py`:
 
 ```python
 from types import SimpleNamespace
@@ -55,7 +55,7 @@ class AccountsMenuMappingTest(TestCase):
 - [ ] **Step 2: Run test to verify it fails**
 
 ```bash
-cd WHartTest_Django && python manage.py test notifications.SystemTemplateMigrationTest notifications.AccountsMenuMappingTest -v 2
+cd SkillForge_Django && python manage.py test notifications.SystemTemplateMigrationTest notifications.AccountsMenuMappingTest -v 2
 ```
 
 Expected: System template doesn't exist; menu mapping returns wrong value.
@@ -209,7 +209,7 @@ In `get_model_en()` model_translations:
 
 **3c. Create system template data migration**
 
-Create `WHartTest_Django/notifications/migrations/0003_initial_system_template.py`:
+Create `SkillForge_Django/notifications/migrations/0003_initial_system_template.py`:
 
 ```python
 from django.db import migrations
@@ -277,7 +277,7 @@ class Migration(migrations.Migration):
 - [ ] **Step 4: Run migrate and test to verify it passes**
 
 ```bash
-cd WHartTest_Django && python manage.py migrate && python manage.py test notifications.SystemTemplateMigrationTest notifications.AccountsMenuMappingTest -v 2
+cd SkillForge_Django && python manage.py migrate && python manage.py test notifications.SystemTemplateMigrationTest notifications.AccountsMenuMappingTest -v 2
 ```
 
 Expected: All 3 tests pass.
@@ -285,7 +285,7 @@ Expected: All 3 tests pass.
 - [ ] **Step 5: Run full notifications test suite to verify no regressions**
 
 ```bash
-cd WHartTest_Django && python manage.py test notifications -v 2
+cd SkillForge_Django && python manage.py test notifications -v 2
 ```
 
 Expected: All tests pass.
@@ -293,5 +293,5 @@ Expected: All tests pass.
 - [ ] **Step 6: Commit**
 
 ```bash
-cd WHartTest_Django && git add task_center/ accounts/ notifications/ && git commit -m "feat: integrate push notifications in tasks.py, add system template migration and menu mapping"
+cd SkillForge_Django && git add task_center/ accounts/ notifications/ && git commit -m "feat: integrate push notifications in tasks.py, add system template migration and menu mapping"
 ```

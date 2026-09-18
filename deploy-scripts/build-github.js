@@ -8,7 +8,7 @@ process.env.DEPLOY_TYPE = 'github';
 const { execSync } = require('child_process');
 
 console.log('🏗️  开始构建 GitHub Pages...');
-console.log('📁 base路径: /WHartTest/');
+console.log('📁 base路径: /SkillForge/');
 
 try {
   // 执行VitePress构建

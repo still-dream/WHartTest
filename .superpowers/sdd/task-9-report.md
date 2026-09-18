@@ -38,9 +38,9 @@ Created three Vue 3 + TypeScript + Arco Design components for the notifications 
 
 ## Files Changed
 
-- **Created:** `WHartTest_Vue/src/features/notifications/components/VariableHintPanel.vue`
-- **Created:** `WHartTest_Vue/src/features/notifications/components/TemplateFormModal.vue`
-- **Created:** `WHartTest_Vue/src/features/notifications/views/MessageTemplateView.vue`
+- **Created:** `SkillForge_Vue/src/features/notifications/components/VariableHintPanel.vue`
+- **Created:** `SkillForge_Vue/src/features/notifications/components/TemplateFormModal.vue`
+- **Created:** `SkillForge_Vue/src/features/notifications/views/MessageTemplateView.vue`
 
 ## Commit
 

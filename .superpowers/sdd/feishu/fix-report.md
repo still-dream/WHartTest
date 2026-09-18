@@ -11,7 +11,7 @@
 
 ### I-1 state 增加随机串（防预伪造重放）
 
-**文件：`WHartTest_Django/accounts/feishu.py`**
+**文件：`SkillForge_Django/accounts/feishu.py`**
 
 - `build_state()`：由 `时间戳.HMAC(时间戳)` 改为 **`随机串.时间戳.HMAC(随机串+时间戳)`** 三段格式。
   随机串使用 `secrets.token_urlsafe(16)`（CSPRNG，每次调用唯一）。
@@ -24,10 +24,10 @@
 
 ### I-2 匿名端点限流
 
-**文件：`WHartTest_Django/accounts/views.py`**
+**文件：`SkillForge_Django/accounts/views.py`**
 
 - 新增 `FeishuAuthThrottle(AnonRateThrottle)`，类属性 `rate = "10/min"`（每 IP 每分钟 10 次）。
-- **方案选择依据**：读取 `wharttest_django/settings.py` 后确认 `REST_FRAMEWORK` 中不存在
+- **方案选择依据**：读取 `skillforge_django/settings.py` 后确认 `REST_FRAMEWORK` 中不存在
   `DEFAULT_THROTTLE_CLASSES` / `DEFAULT_THROTTLE_RATES`，项目无 scope 式节流配置模式，
   故采用任务建议的类属性 `rate` 方案（DRF `SimpleRateThrottle.__init__` 优先读取类属性 `rate`，
   完全绕开全局 settings，零影响其他端点）。
@@ -74,7 +74,7 @@
 
 ### I-2 GREEN + 全量回归
 
-命令：`venv\Scripts\python.exe manage.py test accounts`（WHartTest_Django 目录下）
+命令：`venv\Scripts\python.exe manage.py test accounts`（SkillForge_Django 目录下）
 
 ```
 Ran 32 tests in 5.153s
@@ -90,9 +90,9 @@ OK
 
 | 文件 | 变更 |
 | --- | --- |
-| `WHartTest_Django/accounts/feishu.py` | `import secrets`；`sign_state` 载荷泛化；`build_state` 三段随机串格式；`verify_state` 三段解析 + 非空随机串校验 |
-| `WHartTest_Django/accounts/views.py` | `import AnonRateThrottle`；新增 `FeishuAuthThrottle`；两个飞书视图添加 `throttle_classes` |
-| `WHartTest_Django/accounts/tests.py` | 改造 4 个 state 测试 + 新增 3 个（唯一 nonce / 新格式签名 / 篡改 nonce）；两个视图测试类 setUp 清 cache；新增 2 个 429 用例 |
+| `SkillForge_Django/accounts/feishu.py` | `import secrets`；`sign_state` 载荷泛化；`build_state` 三段随机串格式；`verify_state` 三段解析 + 非空随机串校验 |
+| `SkillForge_Django/accounts/views.py` | `import AnonRateThrottle`；新增 `FeishuAuthThrottle`；两个飞书视图添加 `throttle_classes` |
+| `SkillForge_Django/accounts/tests.py` | 改造 4 个 state 测试 + 新增 3 个（唯一 nonce / 新格式签名 / 篡改 nonce）；两个视图测试类 setUp 清 cache；新增 2 个 429 用例 |
 
 统计：3 files changed, 94 insertions(+), 13 deletions(-)
 

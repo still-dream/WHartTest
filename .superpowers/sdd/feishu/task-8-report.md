@@ -8,7 +8,7 @@
 
 ### Step 1: 后端全量测试 — ✅ 通过
 
-命令（cwd `WHartTest_Django`，按环境备忘使用 venv）：
+命令（cwd `SkillForge_Django`，按环境备忘使用 venv）：
 
 ```
 venv\Scripts\python.exe manage.py test accounts -v 2
@@ -25,7 +25,7 @@ venv\Scripts\python.exe manage.py test accounts -v 2
 
 ### Step 2: 前端构建验证 — ⚠️ 部分通过（失败项均为与本功能无关的存量问题）
 
-命令（cwd `WHartTest_Vue`）：
+命令（cwd `SkillForge_Vue`）：
 
 ```
 npm run build

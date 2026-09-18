@@ -4,14 +4,14 @@
 
 Created two Vue 3 + TypeScript + Arco Design components for the notifications feature:
 
-1. **WebhookFormModal.vue** (`WHartTest_Vue/src/features/notifications/components/WebhookFormModal.vue`)
+1. **WebhookFormModal.vue** (`SkillForge_Vue/src/features/notifications/components/WebhookFormModal.vue`)
    - Modal form for creating/editing webhook addresses
    - Fields: name (required), url (required), description (optional), is_active (switch)
    - Exposes `open(addr?)` method via `defineExpose` for parent to trigger add/edit
    - Emits `success` event after successful create/update
    - Handles validation and error messaging
 
-2. **WebhookAddressView.vue** (`WHartTest_Vue/src/features/notifications/views/WebhookAddressView.vue`)
+2. **WebhookAddressView.vue** (`SkillForge_Vue/src/features/notifications/views/WebhookAddressView.vue`)
    - Page with a-table listing webhook addresses (name, platform_type tag, masked URL, status tag, description, actions)
    - Actions: edit, test push, delete (with popconfirm)
    - Loads data on mount via `getWebhookAddresses`
@@ -30,7 +30,7 @@ To resolve this, I added `export type { ... } from '../types'` re-export stateme
 
 ## Build result
 
-Command: `cd WHartTest_Vue && npm run build`
+Command: `cd SkillForge_Vue && npm run build`
 
 Build exits with code 1 due to **4 pre-existing errors in unrelated files** (not from Task 8 work):
 
@@ -45,9 +45,9 @@ Build exits with code 1 due to **4 pre-existing errors in unrelated files** (not
 
 ## Files changed
 
-- **Created:** `WHartTest_Vue/src/features/notifications/components/WebhookFormModal.vue`
-- **Created:** `WHartTest_Vue/src/features/notifications/views/WebhookAddressView.vue`
-- **Modified:** `WHartTest_Vue/src/features/notifications/services/notificationService.ts` (added `export type` re-exports)
+- **Created:** `SkillForge_Vue/src/features/notifications/components/WebhookFormModal.vue`
+- **Created:** `SkillForge_Vue/src/features/notifications/views/WebhookAddressView.vue`
+- **Modified:** `SkillForge_Vue/src/features/notifications/services/notificationService.ts` (added `export type` re-exports)
 
 ## Commit
 

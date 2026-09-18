@@ -2,7 +2,7 @@
 
 ## What I implemented
 
-按简报在 `WHartTest_Vue/src/services/authService.ts` **文件末尾**（原第 217 行后）逐字追加：
+按简报在 `SkillForge_Vue/src/services/authService.ts` **文件末尾**（原第 217 行后）逐字追加：
 
 1. `export interface FeishuAuthorizeUrlResponseData` — `{ authorize_url: string; state: string }`
 2. `export interface FeishuAuthorizeUrlResponse` — `{ success; data?; error?; statusCode? }`
@@ -13,7 +13,7 @@
 
 ## 验证命令与输出摘要
 
-命令：`npx vue-tsc -b`（cwd：`c:\app\WHartTest\WHartTest_Vue`）
+命令：`npx vue-tsc -b`（cwd：`c:\app\SkillForge\SkillForge_Vue`）
 
 结果：exit 1，共 4 个错误，**全部为既有历史错误，与本次改动无关**：
 
@@ -26,7 +26,7 @@
 
 ## Files changed
 
-- `WHartTest_Vue/src/services/authService.ts`（+119 行，纯末尾追加）
+- `SkillForge_Vue/src/services/authService.ts`（+119 行，纯末尾追加）
 
 ## Commit
 

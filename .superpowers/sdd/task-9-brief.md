@@ -1,9 +1,9 @@
 ## Task 9: Frontend MessageTemplate page + VariableHintPanel
 
 **Files:**
-- Create: `WHartTest_Vue/src/features/notifications/components/VariableHintPanel.vue`
-- Create: `WHartTest_Vue/src/features/notifications/views/MessageTemplateView.vue`
-- Create: `WHartTest_Vue/src/features/notifications/components/TemplateFormModal.vue`
+- Create: `SkillForge_Vue/src/features/notifications/components/VariableHintPanel.vue`
+- Create: `SkillForge_Vue/src/features/notifications/views/MessageTemplateView.vue`
+- Create: `SkillForge_Vue/src/features/notifications/components/TemplateFormModal.vue`
 
 **Interfaces:**
 - Produces: VariableHintPanel (reusable), MessageTemplateView, TemplateFormModal
@@ -11,7 +11,7 @@
 
 - [ ] **Step 1: Create VariableHintPanel component**
 
-Create `WHartTest_Vue/src/features/notifications/components/VariableHintPanel.vue`:
+Create `SkillForge_Vue/src/features/notifications/components/VariableHintPanel.vue`:
 
 ```vue
 <template>
@@ -78,7 +78,7 @@ const onVarClick = (v: NotificationVariable) => {
 
 - [ ] **Step 2: Create TemplateFormModal component**
 
-Create `WHartTest_Vue/src/features/notifications/components/TemplateFormModal.vue`:
+Create `SkillForge_Vue/src/features/notifications/components/TemplateFormModal.vue`:
 
 ```vue
 <template>
@@ -220,7 +220,7 @@ defineExpose({ open });
 
 - [ ] **Step 3: Create MessageTemplateView page**
 
-Create `WHartTest_Vue/src/features/notifications/views/MessageTemplateView.vue`:
+Create `SkillForge_Vue/src/features/notifications/views/MessageTemplateView.vue`:
 
 ```vue
 <template>
@@ -363,7 +363,7 @@ onMounted(() => {
 - [ ] **Step 4: Build to verify no errors**
 
 ```bash
-cd WHartTest_Vue && npm run build
+cd SkillForge_Vue && npm run build
 ```
 
 Expected: Build succeeds with no TypeScript errors in the new files.
@@ -371,5 +371,5 @@ Expected: Build succeeds with no TypeScript errors in the new files.
 - [ ] **Step 5: Commit**
 
 ```bash
-cd WHartTest_Vue && git add src/features/notifications/ && git commit -m "feat: add message template page, template form modal, and variable hint panel"
+cd SkillForge_Vue && git add src/features/notifications/ && git commit -m "feat: add message template page, template form modal, and variable hint panel"
 ```
