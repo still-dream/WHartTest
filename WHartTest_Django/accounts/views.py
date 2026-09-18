@@ -8,6 +8,7 @@ from rest_framework.decorators import action
 from rest_framework.filters import SearchFilter
 from rest_framework.permissions import AllowAny, IsAuthenticated, IsAdminUser
 from rest_framework.response import Response
+from rest_framework.throttling import AnonRateThrottle
 from rest_framework.views import APIView
 from wharttest_django.permissions import HasModelPermission, permission_required
 
@@ -921,10 +922,18 @@ class MyTokenObtainPairView(BaseTokenObtainPairView):
             )
 
 
+class FeishuAuthThrottle(AnonRateThrottle):
+    """飞书匿名端点限流：按 IP 每分钟 10 次，防止滥用放大消耗飞书 API 配额。"""
+
+    # 直接使用类属性限速，不依赖全局 REST_FRAMEWORK DEFAULT_THROTTLE_RATES 配置。
+    rate = "10/min"
+
+
 class FeishuAuthorizeUrlView(APIView):
     """返回飞书 OAuth 授权页地址（供前端整页跳转）。"""
 
     permission_classes = [AllowAny]
+    throttle_classes = [FeishuAuthThrottle]
 
     def get(self, request, *args, **kwargs):
         if not getattr(settings, "FEISHU_APP_ID", "") or not getattr(
@@ -958,6 +967,7 @@ class FeishuLoginView(APIView):
     """飞书授权码登录：按邮箱匹配活跃账号，未匹配则自动创建（默认密码 Jt123456）。"""
 
     permission_classes = [AllowAny]
+    throttle_classes = [FeishuAuthThrottle]
 
     def post(self, request, *args, **kwargs):
         code = request.data.get("code")

@@ -3,6 +3,7 @@ from unittest.mock import patch
 from types import SimpleNamespace
 
 from django.contrib.auth.models import User
+from django.core.cache import cache
 from django.db.utils import OperationalError
 from django.test import SimpleTestCase, TestCase, override_settings
 from rest_framework.test import APIRequestFactory
@@ -90,19 +91,56 @@ class FeishuServiceTests(SimpleTestCase):
         )
 
     def test_state_roundtrip_verification(self):
-        self.assertTrue(verify_state(build_state()))
+        state = build_state()
+
+        # state 为「随机串.时间戳.签名」三段结构，且可通过校验。
+        parts = state.split('.')
+        self.assertEqual(len(parts), 3)
+        self.assertTrue(parts[0])
+        self.assertTrue(parts[1].isdigit())
+        self.assertTrue(verify_state(state))
+
+    @patch('accounts.feishu.time.time', return_value=1_700_000_000)
+    def test_build_state_generates_unique_nonce(self, _mock_time):
+        # 同一秒内两次生成的 state 必须不同（随机串防预伪造重放）。
+        self.assertNotEqual(build_state(), build_state())
+
+    def test_verify_state_accepts_nonce_signed_state(self):
+        # 手工按「随机串+时间戳」构造签名，验证签名确实覆盖随机串。
+        nonce = 'fixed-nonce'
+        timestamp = str(int(time.time()))
+        state = f'{nonce}.{timestamp}.{sign_state(f"{nonce}{timestamp}")}'
+
+        self.assertTrue(verify_state(state))
 
     def test_verify_state_rejects_tampered_signature(self):
+        nonce = 'nonce-abc'
         timestamp = str(int(time.time()))
-        self.assertFalse(verify_state(f'{timestamp}.deadbeef'))
+        self.assertFalse(verify_state(f'{nonce}.{timestamp}.deadbeef'))
+
+    def test_verify_state_rejects_tampered_nonce(self):
+        state = build_state()
+        _, timestamp, signature = state.split('.')
+
+        # 随机串被替换后签名不再匹配，必须拒绝。
+        self.assertFalse(verify_state(f'tampered-nonce.{timestamp}.{signature}'))
 
     def test_verify_state_rejects_expired_timestamp(self):
         expired_timestamp = str(int(time.time()) - 601)
-        expired_state = f'{expired_timestamp}.{sign_state(expired_timestamp)}'
+        expired_state = (
+            f'nonce.{expired_timestamp}.{sign_state(f"nonce{expired_timestamp}")}'
+        )
         self.assertFalse(verify_state(expired_state))
 
     def test_verify_state_rejects_malformed_state(self):
+        timestamp = str(int(time.time()))
+        valid_signature = sign_state(f'nonce{timestamp}')
+        # 缺段 / 多段 / 空随机串 / 非数字时间戳 均拒绝。
         self.assertFalse(verify_state('not-a-signed-state'))
+        self.assertFalse(verify_state(f'nonce.{timestamp}'))
+        self.assertFalse(verify_state(f'a.{timestamp}.{valid_signature}.extra'))
+        self.assertFalse(verify_state(f'.{timestamp}.{valid_signature}'))
+        self.assertFalse(verify_state(f'nonce.abc123.{valid_signature}'))
 
     @patch('accounts.feishu.httpx.post')
     def test_exchange_code_for_token_returns_flat_payload(self, mock_post):
@@ -174,6 +212,8 @@ class FeishuServiceTests(SimpleTestCase):
 )
 class FeishuLoginViewTests(TestCase):
     def setUp(self):
+        # DRF 节流基于 locmem cache 按 IP 计数，且 cache 跨测试用例共享，先清空避免互相污染。
+        cache.clear()
         self.factory = APIRequestFactory()
         self.feishu_token_payload = {
             'code': 0, 'access_token': 'u-access', 'refresh_token': 'u-refresh',
@@ -276,6 +316,16 @@ class FeishuLoginViewTests(TestCase):
         self.assertEqual(response.status_code, 400)
         self.assertIn('state', response.data['detail'])
 
+    def test_login_throttled_after_rate_limit(self):
+        # 节流先于业务逻辑执行：无效 state（400）也累计计数，超过阈值后返回 429。
+        for _ in range(10):
+            response = self._post_feishu_login(state='invalid.state')
+            self.assertEqual(response.status_code, 400)
+
+        response = self._post_feishu_login(state='invalid.state')
+
+        self.assertEqual(response.status_code, 429)
+
     def test_missing_code_or_state_rejected(self):
         request = self.factory.post(
             '/api/accounts/feishu/login/', {'code': 'auth-code'}, format='json'
@@ -303,6 +353,8 @@ class FeishuLoginViewTests(TestCase):
 
 class FeishuAuthorizeUrlViewTests(SimpleTestCase):
     def setUp(self):
+        # DRF 节流基于 locmem cache 按 IP 计数，且 cache 跨测试用例共享，先清空避免互相污染。
+        cache.clear()
         self.factory = APIRequestFactory()
 
     @override_settings(FEISHU_APP_ID='cli_test', FEISHU_APP_SECRET='secret_test')
@@ -327,3 +379,20 @@ class FeishuAuthorizeUrlViewTests(SimpleTestCase):
 
         self.assertEqual(response.status_code, 503)
         self.assertIn('未配置', response.data['detail'])
+
+    @override_settings(FEISHU_APP_ID='cli_test', FEISHU_APP_SECRET='secret_test')
+    def test_throttled_after_rate_limit(self):
+        from accounts.views import FeishuAuthorizeUrlView
+
+        # 同一 IP 请求达到 10/min 阈值后返回 429（节流先于业务逻辑执行）。
+        for _ in range(10):
+            response = FeishuAuthorizeUrlView.as_view()(
+                self.factory.get('/api/accounts/feishu/authorize-url/')
+            )
+            self.assertEqual(response.status_code, 200)
+
+        response = FeishuAuthorizeUrlView.as_view()(
+            self.factory.get('/api/accounts/feishu/authorize-url/')
+        )
+
+        self.assertEqual(response.status_code, 429)

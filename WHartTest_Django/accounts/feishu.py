@@ -10,6 +10,7 @@
 import hashlib
 import hmac
 import logging
+import secrets
 import time
 from urllib.parse import urlencode
 
@@ -35,26 +36,27 @@ class FeishuAuthError(Exception):
         self.code = code
 
 
-def sign_state(timestamp: str) -> str:
-    """对时间戳做 HMAC-SHA256 签名（密钥为 Django SECRET_KEY）。"""
+def sign_state(payload: str) -> str:
+    """对 state 载荷（随机串+时间戳）做 HMAC-SHA256 签名（密钥为 Django SECRET_KEY）。"""
     secret = settings.SECRET_KEY.encode("utf-8")
-    return hmac.new(secret, timestamp.encode("utf-8"), hashlib.sha256).hexdigest()
+    return hmac.new(secret, payload.encode("utf-8"), hashlib.sha256).hexdigest()
 
 
 def build_state() -> str:
-    """生成防伪造/防重放的 state：`时间戳.HMAC签名`。"""
+    """生成防伪造/防重放的 state：`随机串.时间戳.HMAC签名(随机串+时间戳)`。"""
+    nonce = secrets.token_urlsafe(16)
     timestamp = str(int(time.time()))
-    return f"{timestamp}.{sign_state(timestamp)}"
+    return f"{nonce}.{timestamp}.{sign_state(f'{nonce}{timestamp}')}"
 
 
 def verify_state(state: str) -> bool:
-    """校验 state 的签名与有效期。"""
-    if not state or state.count(".") != 1:
+    """校验 state 的结构、签名与有效期（TTL 以时间戳为准）。"""
+    if not state or state.count(".") != 2:
         return False
-    timestamp, signature = state.split(".", 1)
-    if not timestamp.isdigit():
+    nonce, timestamp, signature = state.split(".", 2)
+    if not nonce or not timestamp.isdigit():
         return False
-    if not hmac.compare_digest(signature, sign_state(timestamp)):
+    if not hmac.compare_digest(signature, sign_state(f"{nonce}{timestamp}")):
         return False
     return time.time() - int(timestamp) <= STATE_TTL_SECONDS
 
